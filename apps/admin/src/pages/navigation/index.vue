@@ -502,7 +502,7 @@ function targetText(item: NavigationItem) {
               </template>
               <template v-else-if="form.target_type === 'page'">
                 <option v-for="pageItem in targetPages" :key="pageItem.id" :value="pageItem.id">
-                  {{ pageItem.title }}（/{{ pageItem.slug }}）
+                  {{ pageItem.title }}（/custom/{{ pageItem.slug }}）
                 </option>
               </template>
               <template v-else>

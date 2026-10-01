@@ -27,7 +27,6 @@ const DEFAULT_NAV: PublicNavigationNode[] = [
   { label: '友链', target_type: 'url', target_id: null, url: '/links', href: '/links', open_in_new_tab: false, children: [] },
   { label: '日志', target_type: 'url', target_id: null, url: '/journals', href: '/journals', open_in_new_tab: false, children: [] },
   { label: '图库', target_type: 'url', target_id: null, url: '/galleries', href: '/galleries', open_in_new_tab: false, children: [] },
-  { label: '关于', target_type: 'url', target_id: null, url: '/about', href: '/about', open_in_new_tab: false, children: [] },
 ]
 
 const navItems = computed(() => {
