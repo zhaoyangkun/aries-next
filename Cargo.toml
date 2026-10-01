@@ -50,6 +50,14 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["serde", "v7"] }
 
+[profile.dev]
+# 仅保留行号级调试信息（PDB/rlib 体积约为 debug=2 的 1/5~1/10），panic 回溯仍有行号
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# 第三方依赖完全不带调试信息，是本仓库 target 膨胀的主要来源
+debug = false
+
 [profile.release]
 lto = "thin"
 strip = true
