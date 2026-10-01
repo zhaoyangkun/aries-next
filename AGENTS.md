@@ -53,7 +53,7 @@ admin/web ---> OpenAPI Contract ---> server
 
 ## 环境要求与本地启动
 
-- Rust stable ≥ 1.85（`rust-toolchain.toml` 锁定）、Node.js 24+、pnpm 11+（`packageManager: pnpm@11.9.0`）、PostgreSQL 17（自备实例；可选使用 `deploy/` 下的 Docker Compose 编排）。
+- Rust stable ≥ 1.85（CI 固定 latest stable；本地开发保持相近版本即可）、Node.js 24+、pnpm 11+（`packageManager: pnpm@11.9.0`）、PostgreSQL 17（自备实例；可选使用 `deploy/` 下的 Docker Compose 编排）。
 
 ```powershell
 # 1. 配置环境变量（系统环境变量优先于 .env）

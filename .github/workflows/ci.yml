@@ -41,9 +41,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 不指定 toolchain 输入，由 rust-toolchain.toml 锁定版本；附带 fmt / clippy 组件
+      # 仓库不带 rust-toolchain.toml（避免 rustup 按别名重复下载工具链），此处显式指定 stable
       - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2

@@ -96,7 +96,7 @@ graph TB
 - 内存：运行时三容器约 500 MB 以内；但 **Rust 全量编译建议 ≥ 4 GB**（链接阶段吃内存），内存不足会 `cargo` 被 OOM Kill 或链接失败。
 - 磁盘：镜像与 Volume 建议预留 ≥ 10 GB（构建缓存 + `pgdata` + 媒体文件增长）。
 - 80/443 端口未被其他服务占用，且对公网开放（Caddy 签证书用）。
-- 构建工具链无需预装：Rust 与 pnpm 版本分别由 `rust-toolchain.toml` 与根 `packageManager` 字段锁定在多阶段构建内自给。本地开发环境要求（Rust ≥ 1.85、Node.js 24+）见根 `README.md`。
+- 构建工具链无需预装：Rust 直接使用 `rust:bookworm` 镜像预装的 latest stable（仓库不带 `rust-toolchain.toml`，避免 rustup 按别名重复下载工具链卡住构建），pnpm 版本由根 `packageManager` 字段锁定在多阶段构建内自给。本地开发环境要求（Rust ≥ 1.85、Node.js 24+）见根 `README.md`。
 
 ### DNS（先解析，再启动）
 
@@ -130,7 +130,7 @@ Caddy 首次收到请求时才发起 ACME 申请；DNS 未解析或 80 端口不
 
 1. **Builder 阶段**（`rust:bookworm`）：
    - 构建上下文是**仓库根**（`docker-compose.yml` 中 `build.context: ..`），`COPY . .` 把整个 Workspace（`backend/`、`migrations/`、`Cargo.toml`、`Cargo.lock` 等）拷进镜像——`migrations/` 必须在内，因为 Server 启动时要执行 SQLx Migration。
-   - `rust-toolchain.toml` 自动锁定 Toolchain 版本（≥ 1.85），无需在 Dockerfile 里写死 Rust 版本。
+   - Rust 工具链使用镜像预装的 latest stable（不设 `rust-toolchain.toml`：channel=stable 会被 rustup 当成别名再下载一遍，国内网络下构建会卡在 Downloading components）。
    - `cargo build --release -p aries-server` 只编译 Server 及其依赖（不含 migrator），产物约几十 MB 的二进制。
 2. **运行时阶段**（`debian:bookworm-slim`）：
    - 只安装 `ca-certificates`：Server 运行期有出站 HTTPS 需求（AI Provider SSE、SMTP、旧图床媒体下载），slim 镜像默认没有 CA 根证书，缺了会导致一切 TLS 出站失败。
@@ -196,7 +196,7 @@ deploy/scripts/build-admin.sh --api-base https://api.example.com
 - **层缓存与更新构建**：`git pull` 后 `up -d --build`，`COPY . .` 之后的层在源码变化时必然重建，但 Rust 的依赖编译与 Nuxt 的 `pnpm install` 无单独缓存层——依赖没变也会重跑。想加速可在 Dockerfile 中先把 `Cargo.toml`/`Cargo.lock` 或 `pnpm-lock.yaml` 拷入做依赖层（当前未做，属已知取舍）。
 - **Migrator 不在任何镜像里**：数据迁移工具 `aries-migrator` 是独立二进制，在开发机/CI 针对目标库运行（见 `migration-runbook.md`），不要试图在 `server` 容器里跑迁移；其专用环境变量见下文「迁移工具」表。
 - **国内构建加速**：两个 Dockerfile 均内置可选开关 `--build-arg USE_CN_MIRROR=1`——`server.Dockerfile` 切换 crates sparse 索引到 rsproxy 与 Debian 软件源到 USTC，`web.Dockerfile` 切换 corepack 下载源与 npm registry 到 npmmirror；不传该参数则保持官方源，行为不变（生产/CI 构建不受影响）。
-- **版本一致性**：`rust-toolchain.toml` 与根 `packageManager` 字段分别锁定 Rust 与 pnpm 版本，构建机无需预装对应工具链；但本地 `pnpm install` 升级过依赖就必须提交 lockfile，否则 `--frozen-lockfile` 构建失败。
+- **版本一致性**：Rust 使用 `rust:bookworm` 镜像的 latest stable（与 CI 一致），pnpm 版本由根 `packageManager` 字段锁定，构建机无需预装对应工具链；但本地 `pnpm install` 升级过依赖就必须提交 lockfile，否则 `--frozen-lockfile` 构建失败。
 
 ## 环境变量配置（`.env`）
 
