@@ -17,6 +17,7 @@
 ## 2. 当前进度概览
 
 - Backend：Bootstrap、Session、密码重置 Token 流程、文章发布与修订、媒体库（Local / S3）、Markdown 导入、评论与 Dashboard、Audit Log、页面 / 日志 / 图库 / 友链 / 导航、分组设置（appearance / email / integrations / ai）、AI 编辑器助手与评论 AI 风险标记均已实现；公开端点覆盖文章、分类、标签、归档、关键词搜索、站点信息及扩展内容。
+- AI 检索（相关文章推荐 + 站内 AI 问答）：已实现，默认关闭；开启方式见 §9。
 - Admin：文章、页面、日志、图库、友链、导航、分类、标签、媒体库、评论、审计日志、各组设置页面均已接入真实 API；文章编辑保留 Dialog 形态并内置 AI 助手。
 - Public Web：已接入 `/api/public`，页面覆盖首页、文章详情（含评论与访问密码）、分类、标签、归档、搜索、日志、图库、友链、自定义页面，并提供 `sitemap.xml`、`rss.xml`、`robots.txt`。
 - 尚未实现：邮件发送（SMTP 配置可存，投递未接入）、Captcha、多用户管理、Twikoo Adapter、Semantic Search / RAG、社交链接、旧图床 Provider 重写、完整 Legacy 301 映射表、正式迁移 ETL（`aries-migrator` 当前只有只读 Preflight）。
@@ -70,7 +71,7 @@
 | 标签索引 | `/tags` | Tag List |
 | 标签文章 | `/tags/{slug}` | Tag Filter、Pagination |
 | 归档 | `/archives` | 按 Year/Month 聚合文章 |
-| 搜索 | `/search?q=` | Keyword Search；Semantic Mode 待 AI 检索上线 |
+| 搜索 | `/search?q=` | Keyword Search + 关键词高亮；「问 AI」对话式搜索已实现（`smart_search` 默认关闭，见 §9） |
 | 自定义页面 | `/custom/{slug}` | 沿用旧版 xue 主题路由，数据源为 `/api/public/pages/{slug}` |
 | 关于 | `/about` | 静态内容页 |
 | 日志 | `/journals` | 公开短内容 Timeline |
@@ -145,3 +146,16 @@ Legacy Route 必须在 Phase 07 形成完整 `301 Redirect` 表，不能仅依�
 - Phase 完成以 Acceptance Gate 为准，不以页面「看起来完成」为准。
 - 发生范围变化时，先更新对应 Phase 文档，再修改 Migration、API 或 UI。
 - `docs/implementation-plan.md` 保留架构总览；`docs/phases` 负责可交付的执行计划。
+
+## 9. AI 检索（相关文章 + 站内 AI 问答）
+
+默认关闭：不调用任何 Provider、不产生费用。开启步骤（本地 Ollama 免费路线）：
+
+1. 安装 [Ollama](https://ollama.com)，拉取 Embedding 模型：`ollama pull bge-m3`。
+2. 管理端「系统 → AI 设置」：打开 `smart_search` 开关，填写 `embedding_base_url`（如 `http://localhost:11434/v1`）与 `embedding_model`（如 `bge-m3`）；AI 问答复用现有 chat 配置（`base_url` / `model` / `api_key`）。
+3. 开启后，已发布文章由 `article_embed` 后台任务自动切分（按标题、段落级粒度、单块 ≤800 字）并向量化入库（`article_chunks.embedding`，内置 `real[]`，不依赖 pgvector）；重新编辑或取消发布会增量更新 / 清除向量。
+4. 公开站自动出现：文章页「相关阅读」区块（`/api/public/articles/{slug}/related`）与搜索页「问 AI」标签（`/api/public/search/ask`，SSE 流式回答 + 引用文章，匿名限流 5 次/分钟 + 50 次/天）。
+
+Embedding 端点为 OpenAI 兼容 `/embeddings` 协议；任何兼容服务（OpenAI、SiliconFlow、智谱等）均可直接使用。未配置 Embedding 时「问 AI」自动降级为关键词检索摘要回答；开关关闭时两个端点一律 404 `AI_RETRIEVAL_DISABLED`，前端不展示入口。
+
+AI 导读（TL;DR）不受 `smart_search` 开关影响：文章编辑器「导读 → AI 生成」随 `editor_assist` 开关，生成结果存入文章 `ai_brief` 字段，前台文章页标题下方展示。

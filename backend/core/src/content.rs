@@ -100,6 +100,7 @@ pub struct Article {
     pub slug: String,
     pub title: String,
     pub summary: String,
+    pub ai_brief: Option<String>,
     pub cover_url: Option<String>,
     pub markdown_source: String,
     pub rendered_html: String,
@@ -123,6 +124,7 @@ pub struct NewArticle {
     pub slug: String,
     pub title: String,
     pub summary: String,
+    pub ai_brief: Option<String>,
     pub cover_url: Option<String>,
     pub markdown_source: String,
     pub rendered_html: String,
@@ -139,6 +141,7 @@ pub struct ArticleUpdate {
     pub slug: String,
     pub title: String,
     pub summary: String,
+    pub ai_brief: Option<String>,
     pub cover_url: Option<String>,
     pub markdown_source: String,
     pub rendered_html: String,
@@ -328,6 +331,8 @@ pub struct RevisionMetadata {
     pub slug: String,
     #[serde(default)]
     pub summary: String,
+    #[serde(default)]
+    pub ai_brief: Option<String>,
     pub category_id: Option<i64>,
     pub cover_url: Option<String>,
     #[serde(default)]
@@ -701,6 +706,7 @@ mod tests {
             slug: "first-post".to_owned(),
             title: "First post".to_owned(),
             summary: String::new(),
+            ai_brief: None,
             cover_url: None,
             markdown_source: "# First post".to_owned(),
             rendered_html: "<h1>First post</h1>".to_owned(),
@@ -736,6 +742,7 @@ mod tests {
             slug: "first-post".to_owned(),
             title: "First post".to_owned(),
             summary: String::new(),
+            ai_brief: None,
             cover_url: None,
             markdown_source: "# First post".to_owned(),
             rendered_html: "<h1>First post</h1>".to_owned(),

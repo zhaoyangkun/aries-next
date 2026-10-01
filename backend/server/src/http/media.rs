@@ -956,6 +956,7 @@ async fn commit_import(
                 slug: slug.clone(),
                 title: item.title.clone(),
                 summary: item.summary.clone(),
+                ai_brief: None,
                 cover_url: None,
                 markdown_source: item.markdown_source.clone(),
                 rendered_html,

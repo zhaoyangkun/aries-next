@@ -26,6 +26,8 @@ export type PublicPhoto = Schema['PublicPhoto']
 export type PublicLink = Schema['PublicLink']
 export type PublicNavigationNode = Schema['PublicNavigationNode']
 export type PublicSearchSuggestion = Schema['PublicSearchSuggestion']
+export type PublicSearchAskRequest = Schema['PublicSearchAskRequest']
+export type RelatedArticle = Schema['RelatedArticle']
 /** 分类/标签引用：openapi.yaml 中内联于 PublicArticleDetail.category，取其对象形态 */
 export type PublicTaxonomyRef = NonNullable<Schema['PublicArticleDetail']['category']>
 /** 上一篇/下一篇引用：openapi.yaml 中内联于 PublicArticleDetail.previous/next */

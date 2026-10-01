@@ -26,7 +26,7 @@ import {
   type AiStreamUsage,
 } from '@/modules/ai/api/ai'
 
-export type AiAssistFeature = 'rewrite' | 'summary' | 'metadata'
+export type AiAssistFeature = 'rewrite' | 'summary' | 'metadata' | 'tags' | 'brief'
 
 // AI 建议结果：只有用户点击「填入/替换」才由父组件写回表单（Phase 08 原则）。
 export interface AiAssistApplyPayload {
@@ -34,6 +34,7 @@ export interface AiAssistApplyPayload {
   slug?: string
   keywords?: string[]
   description?: string
+  tags?: string[]
 }
 
 const props = defineProps<{
@@ -76,6 +77,16 @@ const featureMeta: Record<AiAssistFeature, { title: string, description: string,
     description: '基于当前标题与正文建议 Slug、关键词与描述；确认「填入表单」后映射到对应字段（描述填入摘要）。',
     applyLabel: '填入表单',
   },
+  tags: {
+    title: '标签推荐',
+    description: '基于当前标题与正文推荐最多 5 个标签；确认后按名称匹配并选中，不存在的标签会自动创建。',
+    applyLabel: '选中这些标签',
+  },
+  brief: {
+    title: 'AI 导读',
+    description: '基于当前标题与正文生成 150 字以内的导读；确认后填入导读字段，可继续手动编辑。',
+    applyLabel: '填入导读字段',
+  },
 }
 
 // metadata 输出是 JSON 文本：服务端 done 前已校验合法性，此处解析做结构化展示。
@@ -96,11 +107,27 @@ const parsedMetadata = computed<AiAssistApplyPayload | null>(() => {
   }
 })
 
+// tags 输出为严格 JSON：{"tags": ["标签1", ...]}；解析失败返回 null，由界面给出错误提示。
+const parsedTags = computed<string[] | null>(() => {
+  if (props.feature !== 'tags' || phase.value !== 'done') return null
+  try {
+    const parsed = JSON.parse(outputText.value.trim()) as Record<string, unknown>
+    if (!Array.isArray(parsed.tags)) return null
+    return parsed.tags.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+  catch {
+    return null
+  }
+})
+
 const canApply = computed(() => {
   if (phase.value !== 'done' || !outputText.value.trim()) return false
   if (props.feature === 'metadata') {
     const parsed = parsedMetadata.value
     return Boolean(parsed && (parsed.slug || parsed.description || parsed.keywords?.length))
+  }
+  if (props.feature === 'tags') {
+    return Boolean(parsedTags.value?.length)
   }
   return true
 })
@@ -180,6 +207,9 @@ function applyResult() {
   if (props.feature === 'metadata') {
     emit('apply', parsedMetadata.value ?? {})
   }
+  else if (props.feature === 'tags') {
+    emit('apply', { tags: parsedTags.value ?? [] })
+  }
   else {
     emit('apply', { text: outputText.value.trim() })
   }
@@ -240,13 +270,19 @@ function handleOpenChange(open: boolean) {
             <dd class="mt-0.5 leading-6">{{ parsedMetadata.description }}</dd>
           </div>
         </dl>
+        <div v-else-if="feature === 'tags' && parsedTags" class="rounded-md border bg-muted/30 p-4">
+          <p class="text-xs font-medium text-muted-foreground">推荐标签</p>
+          <div class="mt-1.5 flex flex-wrap gap-1.5">
+            <Badge v-for="tag in parsedTags" :key="tag" variant="secondary">{{ tag }}</Badge>
+          </div>
+        </div>
         <div
           v-else
           class="min-h-32 whitespace-pre-wrap rounded-md border bg-muted/30 p-4 text-sm leading-6"
           aria-live="polite"
         >{{ outputText }}<span v-if="phase === 'streaming'" class="ml-0.5 inline-block h-4 w-2 animate-pulse bg-primary/70 align-text-bottom" /></div>
 
-        <p v-if="feature === 'metadata' && phase === 'done' && !parsedMetadata" class="text-xs text-muted-foreground">
+        <p v-if="(feature === 'metadata' || feature === 'tags') && phase === 'done' && (feature === 'metadata' ? !parsedMetadata : !parsedTags)" class="text-xs text-muted-foreground">
           未能解析 AI 输出的 JSON，可直接复制原始文本，或点击「重新生成」。
         </p>
         <p v-if="phase === 'cancelled'" class="text-xs text-muted-foreground">

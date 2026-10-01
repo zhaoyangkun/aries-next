@@ -40,6 +40,8 @@ pub fn router() -> Router<AppState> {
         .route("/ai/editor/rewrite", post(editor_rewrite))
         .route("/ai/editor/summary", post(editor_summary))
         .route("/ai/editor/metadata", post(editor_metadata))
+        .route("/ai/editor/tags", post(editor_tags))
+        .route("/ai/editor/brief", post(editor_brief))
         .route("/ai/usage", get(list_ai_usage))
 }
 
@@ -435,6 +437,58 @@ async fn editor_metadata(
         input_len,
         // metadata 要求 Provider 输出 JSON，服务端校验后才发 done。
         true,
+    ))
+}
+
+/// 标签推荐：输出 JSON `{"tags": [...]}`，前端按名称匹配/创建标签。
+async fn editor_tags(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<SummaryRequest>,
+) -> Result<Response, ApiError> {
+    let input_len = request.title.chars().count() + request.content.chars().count();
+    let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;
+    if !settings.features.editor_assist {
+        return Err(AiError::FeatureDisabled.into());
+    }
+    let messages = ai_prompts::editor_tags_messages(&request.title, &request.content);
+    Ok(ai_sse_response(
+        state,
+        AiFeature::EditorTags,
+        settings,
+        AiChatRequest {
+            messages,
+            ..AiChatRequest::default()
+        },
+        current.user.id,
+        input_len,
+        true,
+    ))
+}
+
+/// AI 导读：输出 150 字以内 TL;DR 纯文本，由前端写入文章 ai_brief 字段随文保存。
+async fn editor_brief(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<SummaryRequest>,
+) -> Result<Response, ApiError> {
+    let input_len = request.title.chars().count() + request.content.chars().count();
+    let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;
+    if !settings.features.editor_assist {
+        return Err(AiError::FeatureDisabled.into());
+    }
+    let messages = ai_prompts::ai_brief_messages(&request.title, &request.content);
+    Ok(ai_sse_response(
+        state,
+        AiFeature::AiBrief,
+        settings,
+        AiChatRequest {
+            messages,
+            ..AiChatRequest::default()
+        },
+        current.user.id,
+        input_len,
+        false,
     ))
 }
 

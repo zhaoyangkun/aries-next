@@ -146,7 +146,97 @@ async fn execute(state: &AppState, job: &BackgroundJob) -> Result<(), String> {
         JobKind::ImportMarkdown => Ok(()),
         // 评论通知由 Background Job 异步发送；Phase 05 首版先记录日志，后续接入 Email Adapter。
         JobKind::CommentNotification => comment_notification(state, job).await,
+        // 文章 Embedding：发布/更新/取消发布后由 HTTP 层入队，这里完成切分、向量化与入库。
+        JobKind::ArticleEmbed => article_embed(state, job).await,
     }
+}
+
+/// 单次 embed 调用的最大批大小：限制 Provider 单次请求体积，长文自动分批。
+const EMBED_BATCH_SIZE: usize = 16;
+
+/// 文章 Embedding 任务：开关关闭或 Embedding 未配置时不调 Provider（静默完成）；
+/// 文章未发布时清除已有 chunks（含 ON DELETE CASCADE 之外的取消发布场景）。
+async fn article_embed(state: &AppState, job: &BackgroundJob) -> Result<(), String> {
+    let article_id = job
+        .payload
+        .get("article_id")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| "article_embed payload missing article_id".to_owned())?;
+
+    let settings: aries_core::ai::AiSettings = {
+        let record = state
+            .settings
+            .get_group(aries_core::settings::SettingGroup::Ai)
+            .await
+            .map_err(|error| error.to_string())?;
+        serde_json::from_value(record.payload)
+            .map_err(|error| format!("invalid ai settings payload: {error}"))?
+    };
+    if !settings.features.smart_search {
+        tracing::info!(article_id, "article_embed skipped: smart_search disabled");
+        return Ok(());
+    }
+    if !settings.is_embedding_configured() {
+        tracing::info!(
+            article_id,
+            "article_embed skipped: embedding not configured"
+        );
+        return Ok(());
+    }
+
+    let article = state
+        .content
+        .find_article(article_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let Some(article) = article else {
+        // 文章已删除：chunks 由外键级联清除，任务直接完成。
+        return Ok(());
+    };
+    if article.status != aries_core::content::ArticleStatus::Published {
+        state
+            .chunks
+            .delete_chunks(article_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let chunks = aries_core::chunking::split_markdown(&article.markdown_source);
+    if chunks.is_empty() {
+        state
+            .chunks
+            .delete_chunks(article_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    // 分批向量化，保持与 chunks 顺序一致后整体替换入库。
+    let mut embeddings = Vec::with_capacity(chunks.len());
+    for batch in chunks.chunks(EMBED_BATCH_SIZE) {
+        let texts: Vec<String> = batch.iter().map(|chunk| chunk.to_embed_text()).collect();
+        let mut vectors = state
+            .ai
+            .embed(&settings, &texts)
+            .await
+            .map_err(|error| error.to_string())?;
+        if vectors.len() != texts.len() {
+            return Err(format!(
+                "embedding provider returned {} vectors for {} texts",
+                vectors.len(),
+                texts.len()
+            ));
+        }
+        embeddings.append(&mut vectors);
+    }
+    state
+        .chunks
+        .replace_chunks(article_id, &chunks, &embeddings)
+        .await
+        .map_err(|error| error.to_string())?;
+    tracing::info!(article_id, chunks = chunks.len(), "article embedded");
+    Ok(())
 }
 
 /// 物理清除已软删除且零引用的资产：先在事务内复核引用并删除数据库行，成功后再删存储对象。

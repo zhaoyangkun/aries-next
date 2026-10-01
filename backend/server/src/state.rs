@@ -13,6 +13,7 @@ use aries_core::{
     media::{MediaRepository, MediaStorage, SiteSettingsRepository},
     navigation::NavigationRepository,
     pages::PageRepository,
+    retrieval::ChunkRepository,
     settings::SettingRepository,
 };
 use sqlx::PgPool;
@@ -38,6 +39,7 @@ pub struct AppState {
     pub logs: Arc<dyn LogRepository>,
     pub navigation: Arc<dyn NavigationRepository>,
     pub settings: Arc<dyn SettingRepository>,
+    pub chunks: Arc<dyn ChunkRepository>,
     pub ai: Arc<dyn AiProvider>,
     pub ai_requests: Arc<dyn AiRequestRepository>,
     pub config: Arc<ServerConfig>,

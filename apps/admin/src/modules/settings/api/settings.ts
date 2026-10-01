@@ -75,13 +75,15 @@ export interface IntegrationSettings {
 // AI Provider 协议：anthropic 时 base_url 可省略（Backend 默认 https://api.anthropic.com）。
 export type AiProtocol = 'openai' | 'anthropic'
 
-// AI 功能开关：editor_assist 控制 rewrite/summary/metadata，comment_moderation 控制评论自动审核。
+// AI 功能开关：editor_assist 控制 rewrite/summary/metadata/tags/brief，comment_moderation 控制评论自动审核，
+// smart_search 控制相关文章推荐与站内 AI 问答（依赖 Embedding 配置）。
 export interface AiFeatureToggles {
   editor_assist: boolean
   comment_moderation: boolean
+  smart_search: boolean
 }
 
-// AI 设置的读取视图：api_key 永不回读，只回是否已设置。
+// AI 设置的读取视图：api_key 永不回读，只回是否已设置；embedding 字段非 secret，正常回传。
 export interface AiSettingsView {
   enabled: boolean
   protocol: AiProtocol
@@ -89,9 +91,12 @@ export interface AiSettingsView {
   model: string | null
   api_key_set: boolean
   features: AiFeatureToggles
+  embedding_base_url: string | null
+  embedding_model: string | null
 }
 
-// AI 设置更新入参：api_key 三态——缺省/null 保持不变，空串清除，非空更新。
+// AI 设置更新入参：api_key 三态——缺省/null 保持不变，空串清除，非空更新；
+// embedding_base_url / embedding_model 语义同 base_url：省略或 null 保持不变。
 export interface AiSettingsUpdate {
   enabled: boolean
   protocol: AiProtocol
@@ -99,6 +104,8 @@ export interface AiSettingsUpdate {
   model: string | null
   api_key?: string | null
   features: AiFeatureToggles
+  embedding_base_url?: string | null
+  embedding_model?: string | null
 }
 
 export interface SettingGroupResponse<T> {

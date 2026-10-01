@@ -35,6 +35,7 @@ struct ArticleRow {
     slug: String,
     title: String,
     summary: String,
+    ai_brief: Option<String>,
     cover_url: Option<String>,
     markdown_source: String,
     rendered_html: String,
@@ -63,6 +64,7 @@ impl TryFrom<ArticleRow> for Article {
             slug: row.slug,
             title: row.title,
             summary: row.summary,
+            ai_brief: row.ai_brief,
             cover_url: row.cover_url,
             markdown_source: row.markdown_source,
             rendered_html: row.rendered_html,
@@ -82,7 +84,7 @@ impl TryFrom<ArticleRow> for Article {
 }
 
 const ARTICLE_COLUMNS: &str = "id, author_id, category_id, status, slug::text AS slug, title, \
-    summary, cover_url, markdown_source, rendered_html, seo_keywords, \
+    summary, ai_brief, cover_url, markdown_source, rendered_html, seo_keywords, \
     COALESCE((SELECT array_agg(tag_id ORDER BY tag_id) FROM article_tags \
         WHERE article_id = articles.id), ARRAY[]::bigint[]) AS tag_ids, \
     access_password_hash IS NOT NULL AS password_protected, allow_comments, is_pinned, version, \
@@ -167,9 +169,9 @@ impl ContentRepository for PostgresContentRepository {
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
         validate_category(&mut transaction, article.category_id).await?;
         let query = format!(
-            "INSERT INTO articles (author_id, category_id, slug, title, summary, cover_url, \
+            "INSERT INTO articles (author_id, category_id, slug, title, summary, ai_brief, cover_url, \
              markdown_source, rendered_html, seo_keywords, access_password_hash, allow_comments, \
-             is_pinned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
+             is_pinned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) \
              RETURNING {ARTICLE_COLUMNS}"
         );
         let row = logged_query_as::<ArticleRow>(&query)
@@ -178,6 +180,7 @@ impl ContentRepository for PostgresContentRepository {
             .bind(article.slug)
             .bind(article.title)
             .bind(article.summary)
+            .bind(article.ai_brief)
             .bind(article.cover_url)
             .bind(article.markdown_source)
             .bind(article.rendered_html)
@@ -707,15 +710,15 @@ impl ContentRepository for PostgresContentRepository {
         let set_password = update.access_password_hash.is_some();
         // PostgreSQL 预处理语句的占位符必须从 $1 连续编号，省略密码子句时后续参数前移一位。
         let (password_clause, comments_param, pinned_param) = if set_password {
-            ("access_password_hash = $10, ", "$11", "$12")
+            ("access_password_hash = $11, ", "$12", "$13")
         } else {
-            ("", "$10", "$11")
+            ("", "$11", "$12")
         };
         let query = format!(
             "UPDATE articles SET category_id = $2, slug = $3, title = $4, summary = $5, \
-             cover_url = $6, markdown_source = $7, rendered_html = $8, seo_keywords = $9, \
-             {password_clause}allow_comments = {comments_param}, is_pinned = {pinned_param}, \
-             version = version + 1, updated_at = now() \
+             ai_brief = $10, cover_url = $6, markdown_source = $7, rendered_html = $8, \
+             seo_keywords = $9, {password_clause}allow_comments = {comments_param}, \
+             is_pinned = {pinned_param}, version = version + 1, updated_at = now() \
              WHERE id = $1 RETURNING {ARTICLE_COLUMNS}"
         );
         let statement = logged_query_as::<ArticleRow>(&query)
@@ -724,11 +727,12 @@ impl ContentRepository for PostgresContentRepository {
             .bind(update.slug)
             .bind(update.title)
             .bind(update.summary)
+            .bind(update.ai_brief)
             .bind(update.cover_url)
             .bind(update.markdown_source)
             .bind(update.rendered_html)
             .bind(update.seo_keywords);
-        // 占位符按绑定顺序编号，密码子句存在时才绑定 $10。
+        // 占位符按绑定顺序编号，密码子句存在时才绑定 $11。
         let statement = if set_password {
             statement.bind(update.access_password_hash.flatten())
         } else {
@@ -794,6 +798,7 @@ impl ContentRepository for PostgresContentRepository {
         for statement in [
             "DELETE FROM article_tags WHERE article_id = $1",
             "DELETE FROM article_revisions WHERE article_id = $1",
+            "DELETE FROM article_chunks WHERE article_id = $1",
             "DELETE FROM articles WHERE id = $1",
         ] {
             logged_query(statement)
@@ -874,8 +879,8 @@ impl ContentRepository for PostgresContentRepository {
 
         let query = format!(
             "UPDATE articles SET category_id = $2, slug = $3, title = $4, summary = $5, \
-             cover_url = $6, markdown_source = $7, rendered_html = $8, seo_keywords = $9, \
-             access_password_hash = $10, allow_comments = $11, is_pinned = $12, \
+             ai_brief = $13, cover_url = $6, markdown_source = $7, rendered_html = $8, \
+             seo_keywords = $9, access_password_hash = $10, allow_comments = $11, is_pinned = $12, \
              version = version + 1, updated_at = now() \
              WHERE id = $1 RETURNING {ARTICLE_COLUMNS}"
         );
@@ -885,6 +890,7 @@ impl ContentRepository for PostgresContentRepository {
             .bind(metadata.slug)
             .bind(metadata.title)
             .bind(metadata.summary)
+            .bind(metadata.ai_brief)
             .bind(metadata.cover_url)
             .bind(revision.markdown_source)
             .bind(restore.rendered_html)
@@ -1115,7 +1121,8 @@ async fn record_revision(
         "INSERT INTO article_revisions \
          (article_id, revision_no, markdown_source, metadata_snapshot, operator_id) \
          SELECT id, version, markdown_source, jsonb_build_object( \
-             'title', title, 'slug', slug::text, 'summary', summary, 'category_id', category_id, \
+             'title', title, 'slug', slug::text, 'summary', summary, 'ai_brief', ai_brief, \
+             'category_id', category_id, \
              'cover_url', cover_url, 'seo_keywords', seo_keywords, \
              'access_password_hash', access_password_hash, 'allow_comments', allow_comments, \
              'is_pinned', is_pinned, 'status', status, 'published_at', published_at, \
@@ -1282,6 +1289,7 @@ mod tests {
                 slug: " First_Post ".to_owned(),
                 title: "First post".to_owned(),
                 summary: "Repository integration test".to_owned(),
+                ai_brief: None,
                 cover_url: None,
                 markdown_source: "# First post".to_owned(),
                 rendered_html,
@@ -1326,6 +1334,7 @@ mod tests {
                     slug: article.slug.clone(),
                     title: "First post, revised".to_owned(),
                     summary: article.summary.clone(),
+                    ai_brief: Some("AI 导读草稿".to_owned()),
                     cover_url: None,
                     markdown_source: "# First post\n\nRevised.".to_owned(),
                     rendered_html: ComrakMarkdownRenderer.render("# First post\n\nRevised.")?,
@@ -1341,6 +1350,8 @@ mod tests {
             .await?;
         ensure!(updated.version == 2);
         ensure!(updated.tag_ids == vec![tag_id]);
+        // ai_brief 与 summary 同语义：全量赋值，随 ARTICLE_COLUMNS 读回。
+        ensure!(updated.ai_brief.as_deref() == Some("AI 导读草稿"));
 
         let published = repository
             .transition_article(
@@ -1375,6 +1386,7 @@ mod tests {
                         slug: published.slug.clone(),
                         title: published.title.clone(),
                         summary: published.summary.clone(),
+                        ai_brief: None,
                         cover_url: None,
                         markdown_source: String::new(),
                         rendered_html: String::new(),
@@ -1478,6 +1490,7 @@ mod tests {
                         slug: current.slug.clone(),
                         title: current.title.clone(),
                         summary: current.summary.clone(),
+                        ai_brief: None,
                         cover_url: None,
                         markdown_source: current.markdown_source.clone(),
                         rendered_html: ComrakMarkdownRenderer.render(&current.markdown_source)?,
@@ -1534,6 +1547,7 @@ mod tests {
                 slug: "invalid-tag".to_owned(),
                 title: "Invalid tag".to_owned(),
                 summary: String::new(),
+                ai_brief: None,
                 cover_url: None,
                 markdown_source: String::new(),
                 rendered_html: String::new(),

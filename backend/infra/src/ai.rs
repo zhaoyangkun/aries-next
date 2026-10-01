@@ -244,6 +244,60 @@ impl AiProvider for OpenAiCompatibleProvider {
         ensure_success(&response)?;
         pump_sse(response, &sender, parse_openai_line).await
     }
+
+    async fn embed(
+        &self,
+        settings: &AiSettings,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError> {
+        let base_url = settings
+            .embedding_base_url
+            .as_deref()
+            .unwrap_or_default()
+            .trim_end_matches('/');
+        let body = serde_json::json!({
+            "model": settings.embedding_model.as_deref().unwrap_or_default(),
+            "input": texts,
+        });
+        let response = send_with_retry(
+            self.client
+                .post(format!("{base_url}/embeddings"))
+                .bearer_auth(settings.api_key.as_deref().unwrap_or_default())
+                .json(&body),
+        )
+        .await?;
+        ensure_success(&response)?;
+        let body: serde_json::Value = response.json().await.map_err(map_reqwest)?;
+        parse_embedding_response(&body, texts.len())
+    }
+}
+
+/// 解析 `/embeddings` 响应：`data` 数组每项取 `embedding`，数量须与输入一致（顺序即输入顺序）。
+fn parse_embedding_response(
+    body: &serde_json::Value,
+    expected_len: usize,
+) -> Result<Vec<Vec<f32>>, AiError> {
+    let items = body
+        .get("data")
+        .and_then(serde_json::Value::as_array)
+        .filter(|items| items.len() == expected_len)
+        .ok_or(AiError::InvalidOutput)?;
+    items
+        .iter()
+        .map(|item| {
+            item.get("embedding")
+                .and_then(serde_json::Value::as_array)
+                .ok_or(AiError::InvalidOutput)?
+                .iter()
+                .map(|value| {
+                    value
+                        .as_f64()
+                        .map(|number| number as f32)
+                        .ok_or(AiError::InvalidOutput)
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ============================================================
@@ -410,6 +464,17 @@ impl AiProvider for AnthropicProvider {
         })
         .await
     }
+
+    async fn embed(
+        &self,
+        _settings: &AiSettings,
+        _texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError> {
+        // Embedding 端点为 OpenAI 兼容协议（embedding_base_url），Anthropic 适配器不支持；
+        // DispatchingAiProvider 始终把 embed 路由到 OpenAI 适配器，这里仅是契约兜底。
+        tracing::warn!("anthropic provider does not support embeddings");
+        Err(AiError::ProviderFailed)
+    }
 }
 
 // ============================================================
@@ -456,6 +521,16 @@ impl AiProvider for DispatchingAiProvider {
                 self.anthropic.chat_stream(settings, request, sender).await
             }
         }
+    }
+
+    async fn embed(
+        &self,
+        settings: &AiSettings,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError> {
+        // embedding_base_url 固定为 OpenAI 兼容协议，与 chat 的 protocol 无关，
+        // 因此 embed 始终路由到 OpenAI 适配器（Anthropic 适配器不支持 embed）。
+        self.openai.embed(settings, texts).await
     }
 }
 
@@ -591,6 +666,52 @@ mod tests {
             }
             other => panic!("expected usage, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn embedding_response_parses_vectors_in_input_order() {
+        let body = serde_json::json!({
+            "object": "list",
+            "data": [
+                { "index": 0, "embedding": [0.1, -0.2, 3.0] },
+                { "index": 1, "embedding": [1.5, 0.0, -2.25] }
+            ],
+            "usage": { "prompt_tokens": 8, "total_tokens": 8 }
+        });
+        let vectors = parse_embedding_response(&body, 2).unwrap();
+        assert_eq!(vectors.len(), 2);
+        assert_eq!(vectors[0], vec![0.1_f32, -0.2, 3.0]);
+        assert_eq!(vectors[1], vec![1.5_f32, 0.0, -2.25]);
+    }
+
+    #[test]
+    fn embedding_response_rejects_malformed_payloads() {
+        // 数量与输入不一致。
+        let short = serde_json::json!({ "data": [{ "embedding": [0.1] }] });
+        assert!(matches!(
+            parse_embedding_response(&short, 2),
+            Err(AiError::InvalidOutput)
+        ));
+        // 缺 data / 缺 embedding / 非数值元素。
+        assert!(matches!(
+            parse_embedding_response(&serde_json::json!({}), 0),
+            Err(AiError::InvalidOutput)
+        ));
+        let missing = serde_json::json!({ "data": [{ "index": 0 }] });
+        assert!(matches!(
+            parse_embedding_response(&missing, 1),
+            Err(AiError::InvalidOutput)
+        ));
+        let non_numeric = serde_json::json!({ "data": [{ "embedding": ["x"] }] });
+        assert!(matches!(
+            parse_embedding_response(&non_numeric, 1),
+            Err(AiError::InvalidOutput)
+        ));
+        // f32 极值可无损往返。
+        let extreme = serde_json::json!({ "data": [{ "embedding": [1e-40, 3.4e38] }] });
+        let vectors = parse_embedding_response(&extreme, 1).unwrap();
+        assert_eq!(vectors[0][0], 1e-40_f32);
+        assert_eq!(vectors[0][1], 3.4e38_f32);
     }
 }
 

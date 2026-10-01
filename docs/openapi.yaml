@@ -2433,6 +2433,64 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/editor/tags:
+    post:
+      tags: [Admin AI]
+      operationId: aiEditorTags
+      description: '根据标题与正文推荐文章标签。Provider 被要求输出 JSON（形如 {"tags": ["标签"]}），服务端在 done 前校验累积文本为合法 JSON，不合格以 error（AI_INVALID_OUTPUT）终止；前端按名称匹配现有标签或新建后选中。'
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiArticleContextRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/editor/brief:
+    post:
+      tags: [Admin AI]
+      operationId: aiEditorBrief
+      description: 根据标题与正文生成 150 字以内的 AI 导读（TL;DR）纯文本；事件序列与门禁同 `aiEditorRewrite`；导读由前端写入文章 `ai_brief` 字段随文保存。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiArticleContextRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /api/admin/ai/usage:
     get:
       tags: [Admin AI]
@@ -2449,7 +2507,7 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
         - name: feature
           in: query
-          schema: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation] }
+          schema: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation, editor_tags, ai_brief, search_ask] }
       responses:
         '200':
           description: 用量审计分页。
@@ -2760,6 +2818,69 @@ paths:
                   $ref: '#/components/schemas/PublicSearchSuggestion'
         '400':
           description: 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/search/ask:
+    post:
+      tags: [Public Articles]
+      operationId: searchAsk
+      description: 对话式站内搜索（AI 问答）：检索已发布文章内容块（配置 Embedding 时取向量近邻，否则降级为关键词搜索摘要），由 LLM 流式生成带引用序号的回答。事件序列：`start` → `delta` × N → `sources`（引用文章列表，`done` 之前）→ `usage` → `done`；失败以 `error` 事件终止。`features.smart_search` 未开启或 AI 未启用时返回 404 `AI_RETRIEVAL_DISABLED`；匿名限流 5 次/分钟 + 50 次/天（按客户端指纹）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicSearchAskRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          description: 问题为空或超过 300 字符（`INVALID_AI_INPUT`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: AI 检索未开启（`AI_RETRIEVAL_DISABLED`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/public/articles/{slug}/related:
+    get:
+      tags: [Public Articles]
+      operationId: listRelatedArticles
+      description: 相关文章推荐：以文章标题 + 摘要为查询向量，返回内容相近的其他已发布文章（默认 6 篇，最多 12 篇）。`features.smart_search` 未开启、Embedding 未配置或文章不存在时返回 404；无相近文章返回 200 空数组。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 12, default: 6 }
+      responses:
+        '200':
+          description: 相关文章列表（可能为空数组）。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60']
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RelatedArticle'
+        '404':
+          description: 文章不存在或 AI 检索未开启（`ARTICLE_NOT_FOUND` / `AI_RETRIEVAL_DISABLED`）。
           content:
             application/json:
               schema:
@@ -3708,6 +3829,9 @@ components:
           type: string
           maxLength: 500
           default: ''
+        ai_brief:
+          description: AI 导读（TL;DR），由 `/api/admin/ai/editor/brief` 生成；不超过 500 字符。
+          type: [string, 'null']
         markdown_source:
           type: string
           maxLength: 1000000
@@ -3797,6 +3921,7 @@ components:
         title: { type: string }
         slug: { type: string }
         summary: { type: string }
+        ai_brief: { type: [string, 'null'], description: AI 导读（TL;DR） }
         category_id: { type: [integer, 'null'], format: int64 }
         cover_url: { type: [string, 'null'], format: uri }
         seo_keywords:
@@ -3841,6 +3966,7 @@ components:
         slug: { type: string }
         title: { type: string }
         summary: { type: string }
+        ai_brief: { type: [string, 'null'], description: AI 导读（TL;DR）；更新时字段缺省表示不改动，显式 null 清除 }
         cover_url: { type: [string, 'null'], format: uri }
         markdown_source: { type: string }
         rendered_html: { type: string }
@@ -3916,6 +4042,9 @@ components:
             - updated_at
           properties:
             allow_comments: { type: boolean }
+            ai_brief:
+              description: AI 导读（TL;DR），管理端生成并随文保存；未生成时该字段不出现。
+              type: [string, 'null']
             seo_keywords:
               type: array
               items: { type: string }
@@ -4021,6 +4150,21 @@ components:
       properties:
         slug: { type: string }
         title: { type: string }
+    PublicSearchAskRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 300, description: 访客提问 }
+    RelatedArticle:
+      type: object
+      description: 相关文章条目：仅公开元数据，不含正文与统计。
+      required: [slug, title, cover_url, published_at]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        cover_url: { type: [string, 'null'], format: uri }
+        published_at: { type: [string, 'null'], format: date-time }
     MessageResponse:
       type: object
       required: [message]
@@ -4806,10 +4950,11 @@ components:
       enum: [appearance, email, integrations, ai]
     AiFeatureToggles:
       type: object
-      description: AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata 三个编辑器端点。
+      description: AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata/tags/brief 编辑器端点；`smart_search` 控制相关文章推荐与站内 AI 问答（默认关闭，开启需配置 Embedding 端点）。
       properties:
         editor_assist: { type: boolean, default: false }
         comment_moderation: { type: boolean, default: false }
+        smart_search: { type: boolean, default: false }
     AiSettingsView:
       type: object
       description: AI 设置的读取视图；`api_key` 为 write-only，只回 `api_key_set`。
@@ -4824,6 +4969,8 @@ components:
         model: { type: [string, 'null'] }
         api_key_set: { type: boolean, description: 是否已配置 api_key（永不回传明文） }
         features: { $ref: '#/components/schemas/AiFeatureToggles' }
+        embedding_base_url: { type: [string, 'null'], description: Embedding 端点（OpenAI 兼容 `/embeddings`，Ollama 的 `/v1` 同样兼容）；未配置时 smart_search 相关能力不可用 }
+        embedding_model: { type: [string, 'null'], description: Embedding 模型名，如 `bge-m3` }
     AiRewriteRequest:
       type: object
       additionalProperties: false
@@ -4843,7 +4990,7 @@ components:
       required: [id, feature, operator_user_id, model, status, prompt_tokens, completion_tokens, latency_ms, error_category, created_at]
       properties:
         id: { type: integer, format: int64 }
-        feature: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation] }
+        feature: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation, editor_tags, ai_brief, search_ask] }
         operator_user_id: { type: [integer, 'null'], format: int64, description: null 表示系统触发 }
         model: { type: string }
         status: { type: string, enum: [success, failed, cancelled] }
@@ -4903,6 +5050,8 @@ components:
         model: { type: [string, 'null'] }
         api_key: { type: [string, 'null'] }
         features: { allOf: [{ $ref: '#/components/schemas/AiFeatureToggles' }], nullable: true }
+        embedding_base_url: { type: [string, 'null'] }
+        embedding_model: { type: [string, 'null'] }
     IntegrationSettings:
       type: object
       description: 第三方集成设置；受控 Integration Slot，仅结构化字段。

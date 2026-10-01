@@ -43,6 +43,8 @@ pub fn router() -> Router<AppState> {
         .route("/articles/{slug}/views", post(record_article_view))
         .route("/search", get(search_public_articles))
         .route("/search/suggest", get(search_suggest))
+        .route("/search/ask", post(search_ask))
+        .route("/articles/{slug}/related", get(related_articles))
         .route("/archives", get(list_public_archives))
 }
 
@@ -127,6 +129,9 @@ pub struct PublicArticleDetail {
     title: String,
     /// 摘要由作者显式撰写，视为公开元数据；正文 HTML 才需要解锁。
     summary: String,
+    /// AI 导读（TL;DR）：发布时在管理端生成并随文保存；未生成时不出现该字段。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ai_brief: Option<String>,
     cover_url: Option<String>,
     category: Option<TaxonomyRef>,
     tags: Vec<TaxonomyRef>,
@@ -302,6 +307,7 @@ async fn get_public_article(
         slug: article.slug,
         title: article.title,
         summary: article.summary,
+        ai_brief: article.ai_brief,
         cover_url: article.cover_url,
         is_pinned: article.is_pinned,
         password_protected: article.password_protected,
@@ -318,6 +324,371 @@ async fn get_public_article(
 
 /// 密码文章详情专用缓存策略：private, no-store。
 const CACHE_NO_STORE_PRIVATE: &str = "private, no-store";
+
+// ============================================================
+// AI 检索：相关文章与对话式搜索（features.smart_search 开关，默认关闭）
+// ============================================================
+
+/// 对话式搜索限流：同一客户端 5 次/分钟 + 50 次/天（内存滑动窗口）。
+const ASK_RATE_LIMIT_PER_MINUTE: usize = 5;
+const ASK_RATE_WINDOW: Duration = Duration::from_secs(60);
+const ASK_RATE_LIMIT_PER_DAY: usize = 50;
+const ASK_DAY_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+const ASK_MAX_QUESTION_CHARS: usize = 300;
+const ASK_CHUNK_LIMIT: usize = 8;
+
+#[derive(Debug, Deserialize)]
+struct RelatedParams {
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct RelatedArticleResponse {
+    slug: String,
+    title: String,
+    cover_url: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    published_at: Option<time::OffsetDateTime>,
+}
+
+impl From<aries_core::retrieval::RelatedArticle> for RelatedArticleResponse {
+    fn from(article: aries_core::retrieval::RelatedArticle) -> Self {
+        Self {
+            slug: article.slug,
+            title: article.title,
+            cover_url: article.cover_url,
+            published_at: article.published_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AskRequest {
+    question: String,
+}
+
+/// 对话式搜索引用的来源文章。
+#[derive(Debug, Clone, Serialize)]
+struct AskSource {
+    slug: String,
+    title: String,
+}
+
+/// 加载 AI 设置并做检索门禁：全局未启用或未开 smart_search 一律 404
+/// （开关默认关闭，未开启时不暴露 AI 能力的存在）。
+async fn smart_search_settings(state: &AppState) -> Result<aries_core::ai::AiSettings, ApiError> {
+    let record = state
+        .settings
+        .get_group(aries_core::settings::SettingGroup::Ai)
+        .await?;
+    let settings: aries_core::ai::AiSettings =
+        serde_json::from_value(record.payload).map_err(|_| ApiError::internal())?;
+    if !settings.enabled || !settings.features.smart_search {
+        return Err(ApiError::not_found(
+            "AI_RETRIEVAL_DISABLED",
+            "AI retrieval is not enabled",
+        ));
+    }
+    Ok(settings)
+}
+
+/// 相关文章：以文章标题 + 摘要为查询向量，取相近的已发布文章。
+/// 文章无已发布状态或 AI 检索未开启时返回 404，空结果返回 200 空数组。
+async fn related_articles(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+    Query(params): Query<RelatedParams>,
+) -> Result<Response, ApiError> {
+    let settings = smart_search_settings(&state).await?;
+    if !settings.is_embedding_configured() {
+        return Err(ApiError::not_found(
+            "AI_RETRIEVAL_DISABLED",
+            "AI retrieval is not enabled",
+        ));
+    }
+    let article = state
+        .content
+        .find_published_article_by_slug(&slug)
+        .await?
+        .ok_or_else(|| ApiError::not_found("ARTICLE_NOT_FOUND", "Article was not found"))?;
+    let limit = params.limit.unwrap_or(6).clamp(1, 12);
+
+    let query = format!("{}\n{}", article.title, article.summary);
+    let vectors = state
+        .ai
+        .embed(&settings, &[query])
+        .await
+        .map_err(|_| ApiError::bad_gateway("AI_PROVIDER_FAILED", "AI provider error"))?;
+    let Some(vector) = vectors.into_iter().next() else {
+        return Err(ApiError::bad_gateway(
+            "AI_PROVIDER_FAILED",
+            "AI provider error",
+        ));
+    };
+    let related = state
+        .chunks
+        .nearest_articles(&vector, article.id, limit)
+        .await
+        .map_err(|_| ApiError::internal())?;
+    let body: Vec<RelatedArticleResponse> = related.into_iter().map(Into::into).collect();
+    Ok(json_with_cache(&body, CACHE_ARTICLE))
+}
+
+// ------------------------------------------------------------
+// 对话式搜索（SSE）
+// ------------------------------------------------------------
+
+/// ask 流事件：与编辑器助手同一套事件名（start/delta/usage/done/error），
+/// 额外新增 `sources` 事件（done 之前发出，携带引用文章列表）。
+enum AskOut {
+    Start,
+    Delta(String),
+    Sources(Vec<AskSource>),
+    Usage(aries_core::ai::AiUsage),
+    Done,
+    Error(&'static str),
+}
+
+impl AskOut {
+    fn into_event(self, model: &str) -> axum::response::sse::Event {
+        use axum::response::sse::Event;
+        match self {
+            Self::Start => Event::default().event("start").data(
+                serde_json::json!({
+                    "feature": aries_core::ai::AiFeature::SearchAsk.as_str(),
+                    "model": model,
+                    "prompt_version": aries_core::ai_prompts::PROMPT_VERSION,
+                })
+                .to_string(),
+            ),
+            Self::Delta(text) => Event::default()
+                .event("delta")
+                .data(serde_json::json!({ "text": text }).to_string()),
+            Self::Sources(items) => Event::default()
+                .event("sources")
+                .data(serde_json::json!({ "items": items }).to_string()),
+            Self::Usage(usage) => Event::default()
+                .event("usage")
+                .data(serde_json::to_string(&usage).unwrap_or_default()),
+            Self::Done => Event::default().event("done").data("{}"),
+            Self::Error(code) => Event::default()
+                .event("error")
+                .data(serde_json::json!({ "code": code }).to_string()),
+        }
+    }
+}
+
+async fn search_ask(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AskRequest>,
+) -> Result<Response, ApiError> {
+    let question = request.question.trim().to_owned();
+    if question.is_empty() || question.chars().count() > ASK_MAX_QUESTION_CHARS {
+        return Err(ApiError::bad_request(
+            "INVALID_AI_INPUT",
+            "Question length is invalid",
+        ));
+    }
+    let settings = smart_search_settings(&state).await?;
+    if !settings.is_configured() {
+        return Err(ApiError::not_found(
+            "AI_RETRIEVAL_DISABLED",
+            "AI retrieval is not enabled",
+        ));
+    }
+    // 限流先于 Provider 调用：匿名端点按客户端指纹计数，避免被刷 Token 费用。
+    let fingerprint = client_fingerprint(&headers);
+    for (limit, window) in [
+        (ASK_RATE_LIMIT_PER_MINUTE, ASK_RATE_WINDOW),
+        (ASK_RATE_LIMIT_PER_DAY, ASK_DAY_WINDOW),
+    ] {
+        let decision = state
+            .rate_limiter
+            .check(&format!("ai-ask:{fingerprint}"), limit, window);
+        if !decision.allowed() {
+            return Err(ApiError::rate_limited_retry_after(decision.retry_after()));
+        }
+    }
+
+    // 检索：配置 embedding 时取向量近邻内容块；未配置时降级为关键词搜索命中文章摘要。
+    let (context, sources) = if settings.is_embedding_configured() {
+        let vectors = state
+            .ai
+            .embed(&settings, std::slice::from_ref(&question))
+            .await
+            .map_err(|_| ApiError::bad_gateway("AI_PROVIDER_FAILED", "AI provider error"))?;
+        let Some(vector) = vectors.into_iter().next() else {
+            return Err(ApiError::bad_gateway(
+                "AI_PROVIDER_FAILED",
+                "AI provider error",
+            ));
+        };
+        let chunks = state
+            .chunks
+            .nearest_chunks(&vector, ASK_CHUNK_LIMIT)
+            .await
+            .map_err(|_| ApiError::internal())?;
+        let mut context = String::new();
+        let mut sources: Vec<AskSource> = Vec::new();
+        for (index, chunk) in chunks.iter().enumerate() {
+            context.push_str(&format!(
+                "[{}] 《{}》{}：{}\n\n",
+                index + 1,
+                chunk.article_title,
+                if chunk.heading.is_empty() {
+                    String::new()
+                } else {
+                    format!("（{}）", chunk.heading)
+                },
+                chunk.content,
+            ));
+            if !sources.iter().any(|s| s.slug == chunk.article_slug) {
+                sources.push(AskSource {
+                    slug: chunk.article_slug.clone(),
+                    title: chunk.article_title.clone(),
+                });
+            }
+        }
+        (context, sources)
+    } else {
+        let hits = state
+            .content
+            .search_public_articles(&question, 1, 4)
+            .await?;
+        let mut context = String::new();
+        let mut sources = Vec::new();
+        for (index, hit) in hits.items.iter().enumerate() {
+            context.push_str(&format!(
+                "[{}] 《{}》摘要：{}\n\n",
+                index + 1,
+                hit.article.title,
+                hit.article.summary,
+            ));
+            sources.push(AskSource {
+                slug: hit.article.slug.clone(),
+                title: hit.article.title.clone(),
+            });
+        }
+        (context, sources)
+    };
+
+    let messages = aries_core::ai_prompts::search_ask_messages(&question, &context);
+    let model = settings.model.clone().unwrap_or_default();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<
+        Result<axum::response::sse::Event, std::convert::Infallible>,
+    >(64);
+    tokio::spawn(run_ask_stream(
+        state, settings, messages, sources, model, tx,
+    ));
+    Ok(
+        axum::response::sse::Sse::new(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx)))
+            .into_response(),
+    )
+}
+
+/// 驱动 ask 流：start → delta 转发 → sources → usage/done → 落审计。
+async fn run_ask_stream(
+    state: AppState,
+    settings: aries_core::ai::AiSettings,
+    messages: Vec<aries_core::ai::AiMessage>,
+    sources: Vec<AskSource>,
+    model: String,
+    sender: tokio::sync::mpsc::Sender<Result<axum::response::sse::Event, std::convert::Infallible>>,
+) {
+    let started = std::time::Instant::now();
+    let send = |event: AskOut| {
+        let sender = sender.clone();
+        let model = model.clone();
+        async move { sender.send(Ok(event.into_event(&model))).await.is_ok() }
+    };
+
+    if !send(AskOut::Start).await {
+        return;
+    }
+
+    let (inner_tx, mut inner_rx) = tokio::sync::mpsc::channel::<aries_core::ai::AiStreamEvent>(64);
+    let provider = state.ai.clone();
+    let provider_handle = tokio::spawn(async move {
+        provider
+            .chat_stream(
+                &settings,
+                aries_core::ai::AiChatRequest {
+                    messages,
+                    ..aries_core::ai::AiChatRequest::default()
+                },
+                inner_tx,
+            )
+            .await
+    });
+
+    let mut usage: Option<aries_core::ai::AiUsage> = None;
+    let mut failure: Option<aries_core::ai::AiError> = None;
+    let mut cancelled = false;
+    while let Some(event) = inner_rx.recv().await {
+        let out = match event {
+            aries_core::ai::AiStreamEvent::Delta(delta) => AskOut::Delta(delta),
+            aries_core::ai::AiStreamEvent::Usage(value) => {
+                usage = Some(value);
+                AskOut::Usage(value)
+            }
+            aries_core::ai::AiStreamEvent::Done => break,
+        };
+        if !send(out).await {
+            cancelled = true;
+            provider_handle.abort();
+            break;
+        }
+    }
+    if !cancelled && failure.is_none() {
+        match provider_handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => failure = Some(error),
+            Err(_) => failure = Some(aries_core::ai::AiError::ProviderFailed),
+        }
+    }
+
+    let (status, terminal) = if cancelled {
+        (aries_core::ai::AiRequestStatus::Cancelled, None)
+    } else if let Some(error) = &failure {
+        let code = match error {
+            aries_core::ai::AiError::Timeout => "AI_PROVIDER_TIMEOUT",
+            aries_core::ai::AiError::RateLimited => "AI_RATE_LIMITED",
+            _ => "AI_PROVIDER_FAILED",
+        };
+        (
+            aries_core::ai::AiRequestStatus::Failed,
+            Some(AskOut::Error(code)),
+        )
+    } else {
+        (aries_core::ai::AiRequestStatus::Success, Some(AskOut::Done))
+    };
+    // 来源列表在成功/失败的收尾前统一发出（done 之前），前端据此渲染引用。
+    if !send(AskOut::Sources(sources)).await {
+        return;
+    }
+    if let Some(event) = terminal {
+        let _ = send(event).await;
+    }
+
+    let usage = usage.unwrap_or_default();
+    if let Err(error) = state
+        .ai_requests
+        .record(aries_core::ai::NewAiRequest {
+            feature: aries_core::ai::AiFeature::SearchAsk,
+            operator_user_id: None,
+            model,
+            status,
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            latency_ms: i32::try_from(started.elapsed().as_millis()).unwrap_or(i32::MAX),
+            error_category: failure.as_ref().map(|error| error.category().to_owned()),
+        })
+        .await
+    {
+        tracing::warn!(error = %error, "failed to record ai request");
+    }
+}
 
 fn neighbor_ref(neighbors: &ArticleNeighbors, previous: bool) -> Option<NeighborRef> {
     let neighbor = if previous {

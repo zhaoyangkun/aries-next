@@ -1,6 +1,6 @@
 import { api, type ApiErrorResponse } from '@/shared/api/client'
 
-export type AiFeature = 'editor_rewrite' | 'editor_summary' | 'editor_metadata' | 'comment_moderation'
+export type AiFeature = 'editor_rewrite' | 'editor_summary' | 'editor_metadata' | 'editor_tags' | 'editor_brief' | 'comment_moderation'
 export type AiRequestStatus = 'success' | 'failed' | 'cancelled'
 
 export interface AiUsageItem {
@@ -204,7 +204,7 @@ async function readGateError(response: Response): Promise<AiGateError> {
 // 发起 SSE 编辑器请求（fetch + ReadableStream；axios 不支持 SSE）。
 // Cookie 认证：credentials: 'include'；Origin 由浏览器自动携带，满足 admin Origin 校验。
 export function streamAiEditor(
-  endpoint: 'rewrite' | 'summary' | 'metadata',
+  endpoint: 'rewrite' | 'summary' | 'metadata' | 'tags' | 'brief',
   body: Record<string, string>,
   handlers: AiStreamHandlers,
 ): AiStreamHandle {

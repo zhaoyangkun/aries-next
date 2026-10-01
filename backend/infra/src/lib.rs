@@ -8,6 +8,7 @@ use sqlx::{
 
 pub mod ai;
 pub mod auth;
+pub mod chunks;
 pub mod comments;
 pub mod content;
 pub mod galleries;
@@ -33,6 +34,7 @@ pub use ai::{
     AnthropicProvider, DispatchingAiProvider, OpenAiCompatibleProvider, PostgresAiRequestRepository,
 };
 pub use auth::PostgresAuthRepository;
+pub use chunks::PostgresChunkRepository;
 pub use comments::PostgresCommentRepository;
 pub use content::PostgresContentRepository;
 pub use galleries::PostgresGalleryRepository;

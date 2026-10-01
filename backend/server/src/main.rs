@@ -5,11 +5,11 @@ use std::sync::Arc;
 use anyhow::Context;
 use aries_infra::{
     Argon2PasswordHasher, ComrakMarkdownRenderer, DispatchingAiProvider,
-    PostgresAiRequestRepository, PostgresAuthRepository, PostgresCommentRepository,
-    PostgresContentRepository, PostgresGalleryRepository, PostgresJobRepository,
-    PostgresJournalRepository, PostgresLinkRepository, PostgresLogRepository,
-    PostgresMediaRepository, PostgresNavigationRepository, PostgresPageRepository,
-    PostgresSettingRepository, PostgresSiteSettingsRepository,
+    PostgresAiRequestRepository, PostgresAuthRepository, PostgresChunkRepository,
+    PostgresCommentRepository, PostgresContentRepository, PostgresGalleryRepository,
+    PostgresJobRepository, PostgresJournalRepository, PostgresLinkRepository,
+    PostgresLogRepository, PostgresMediaRepository, PostgresNavigationRepository,
+    PostgresPageRepository, PostgresSettingRepository, PostgresSiteSettingsRepository,
 };
 use aries_server::{build_app, config::ServerConfig, log_store, logging, state::AppState, worker};
 use tracing::info;
@@ -55,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         logs: Arc::new(PostgresLogRepository::new(database.clone())),
         navigation: Arc::new(PostgresNavigationRepository::new(database.clone())),
         settings: Arc::new(PostgresSettingRepository::new(database.clone())),
+        chunks: Arc::new(PostgresChunkRepository::new(database.clone())),
         // Provider 为无状态 HTTP Client；配置（base_url/model/api_key）随每次请求
         // 从 setting_groups 实时读取，settings 更新后下一次请求即生效。
         ai: Arc::new(DispatchingAiProvider::new()),

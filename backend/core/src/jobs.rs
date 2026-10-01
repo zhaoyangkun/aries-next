@@ -13,6 +13,7 @@ pub enum JobKind {
     ImportMarkdown,
     MetadataProbe,
     CommentNotification,
+    ArticleEmbed,
 }
 
 impl JobKind {
@@ -22,6 +23,7 @@ impl JobKind {
             Self::ImportMarkdown => "import_markdown",
             Self::MetadataProbe => "metadata_probe",
             Self::CommentNotification => "comment_notification",
+            Self::ArticleEmbed => "article_embed",
         }
     }
 }
@@ -41,6 +43,7 @@ impl FromStr for JobKind {
             "import_markdown" => Ok(Self::ImportMarkdown),
             "metadata_probe" => Ok(Self::MetadataProbe),
             "comment_notification" => Ok(Self::CommentNotification),
+            "article_embed" => Ok(Self::ArticleEmbed),
             _ => Err(JobError::InvalidKind),
         }
     }

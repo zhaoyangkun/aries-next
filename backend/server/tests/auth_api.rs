@@ -735,6 +735,7 @@ fn test_app_with_hasher(
         settings: Arc::new(aries_infra::PostgresSettingRepository::new(
             database.clone(),
         )),
+        chunks: Arc::new(aries_infra::PostgresChunkRepository::new(database.clone())),
         ai: Arc::new(aries_infra::DispatchingAiProvider::new()),
         ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(database)),
         config: Arc::new(ServerConfig {

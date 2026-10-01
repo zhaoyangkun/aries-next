@@ -10,10 +10,11 @@ import type {
 import { api } from '@/shared/api/client'
 
 // Response DTO 直接派生自 @aries/api-client（由 docs/openapi.yaml 生成），避免与 Backend 漂移。
+// ai_brief 为 Backend 新增字段，api-client 尚未重新生成，先以交叉类型局部扩展，待重新生成后移除。
 export type { ArticleStatus, ArticleStatusCommand }
 export type ArticleCategory = ArticleCategoryResponse
 export type ArticleTag = ArticleTagResponse
-export type AdminArticle = ArticleResponse
+export type AdminArticle = ArticleResponse & { ai_brief?: string | null }
 export type ArticlePage = ArticlePageResponse
 export type ArticleRevision = ArticleRevisionResponse
 
@@ -36,6 +37,8 @@ export interface CreateArticlePayload {
   allow_comments?: boolean
   is_pinned?: boolean
   tag_ids?: number[]
+  // AI 导读：空串按未设置处理，提交 null 清除已保存的导读。
+  ai_brief?: string | null
 }
 
 export const articlesApi = {

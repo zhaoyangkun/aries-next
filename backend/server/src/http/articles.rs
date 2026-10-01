@@ -70,6 +70,7 @@ struct CreateArticleRequest {
     slug: Option<String>,
     #[serde(default)]
     summary: String,
+    ai_brief: Option<String>,
     #[serde(default)]
     markdown_source: String,
     category_id: Option<i64>,
@@ -92,6 +93,9 @@ struct UpdateArticleRequest {
     slug: Option<String>,
     #[serde(default)]
     summary: String,
+    /// 三层语义：缺省不改动、显式 null 清除、字符串设置（同 access_password）。
+    #[serde(default, deserialize_with = "deserialize_nullable_string")]
+    ai_brief: Option<Option<String>>,
     #[serde(default)]
     markdown_source: String,
     category_id: Option<i64>,
@@ -168,6 +172,7 @@ struct ArticleResponse {
     slug: String,
     title: String,
     summary: String,
+    ai_brief: Option<String>,
     cover_url: Option<String>,
     markdown_source: String,
     rendered_html: String,
@@ -195,6 +200,7 @@ impl From<Article> for ArticleResponse {
             slug: article.slug,
             title: article.title,
             summary: article.summary,
+            ai_brief: article.ai_brief,
             cover_url: article.cover_url,
             markdown_source: article.markdown_source,
             rendered_html: article.rendered_html,
@@ -223,6 +229,7 @@ struct RevisionResponse {
     title: String,
     slug: String,
     summary: String,
+    ai_brief: Option<String>,
     category_id: Option<i64>,
     cover_url: Option<String>,
     seo_keywords: Vec<String>,
@@ -243,6 +250,7 @@ impl From<ArticleRevision> for RevisionResponse {
             title: revision.metadata.title,
             slug: revision.metadata.slug,
             summary: revision.metadata.summary,
+            ai_brief: revision.metadata.ai_brief,
             category_id: revision.metadata.category_id,
             cover_url: revision.metadata.cover_url,
             seo_keywords: revision.metadata.seo_keywords,
@@ -337,6 +345,7 @@ async fn create_article(
             slug,
             title,
             summary: request.summary.trim().to_owned(),
+            ai_brief: request.ai_brief,
             cover_url: request.cover_url,
             markdown_source: request.markdown_source,
             rendered_html,
@@ -404,6 +413,10 @@ async fn update_article(
                 slug: request.slug.unwrap_or(existing.slug),
                 title,
                 summary: request.summary.trim().to_owned(),
+                ai_brief: match request.ai_brief {
+                    Some(value) => value,
+                    None => existing.ai_brief.clone(),
+                },
                 cover_url: request.cover_url,
                 markdown_source: request.markdown_source,
                 rendered_html,
@@ -434,7 +447,23 @@ async fn update_article(
         article.cover_url.as_deref(),
     )
     .await;
+    enqueue_article_embed(&state, article.id).await;
     Ok(Json(article.into()))
+}
+
+/// 文章变更后入队 Embedding 任务：worker 内做开关与配置检查，
+/// 未开启 smart_search 时任务静默完成，不入队反而会让开启后缺少存量数据。
+async fn enqueue_article_embed(state: &AppState, article_id: i64) {
+    if let Err(error) = state
+        .jobs
+        .enqueue(aries_core::jobs::NewBackgroundJob::new(
+            aries_core::jobs::JobKind::ArticleEmbed,
+            serde_json::json!({ "article_id": article_id }),
+        ))
+        .await
+    {
+        tracing::warn!(error = %error, article_id, "failed to enqueue article embed job");
+    }
 }
 
 async fn change_status(
@@ -467,6 +496,7 @@ async fn change_status(
             }),
         })
         .await?;
+    enqueue_article_embed(&state, article.id).await;
     Ok(Json(article.into()))
 }
 

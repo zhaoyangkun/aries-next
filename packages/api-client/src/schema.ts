@@ -940,6 +940,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/ai/editor/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 根据标题与正文推荐文章标签。Provider 被要求输出 JSON（形如 {"tags": ["标签"]}），服务端在 done 前校验累积文本为合法 JSON，不合格以 error（AI_INVALID_OUTPUT）终止；前端按名称匹配现有标签或新建后选中。 */
+        post: operations["aiEditorTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/editor/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 根据标题与正文生成 150 字以内的 AI 导读（TL;DR）纯文本；事件序列与门禁同 `aiEditorRewrite`；导读由前端写入文章 `ai_brief` 字段随文保存。 */
+        post: operations["aiEditorBrief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai/usage": {
         parameters: {
             query?: never;
@@ -1153,6 +1187,40 @@ export interface paths {
         };
         /** @description 搜索建议（输入即搜下拉）：标题/摘要包含匹配，标题前缀命中优先，按发布时间倒序取前 `limit` 条，只命中 Published。响应不可缓存。 */
         get: operations["searchSuggest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/search/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 对话式站内搜索（AI 问答）：检索已发布文章内容块（配置 Embedding 时取向量近邻，否则降级为关键词搜索摘要），由 LLM 流式生成带引用序号的回答。事件序列：`start` → `delta` × N → `sources`（引用文章列表，`done` 之前）→ `usage` → `done`；失败以 `error` 事件终止。`features.smart_search` 未开启或 AI 未启用时返回 404 `AI_RETRIEVAL_DISABLED`；匿名限流 5 次/分钟 + 50 次/天（按客户端指纹）。 */
+        post: operations["searchAsk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/articles/{slug}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 相关文章推荐：以文章标题 + 摘要为查询向量，返回内容相近的其他已发布文章（默认 6 篇，最多 12 篇）。`features.smart_search` 未开启、Embedding 未配置或文章不存在时返回 404；无相近文章返回 200 空数组。 */
+        get: operations["listRelatedArticles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1615,6 +1683,8 @@ export interface components {
             slug?: string;
             /** @default  */
             summary: string;
+            /** @description AI 导读（TL;DR），由 `/api/admin/ai/editor/brief` 生成；不超过 500 字符。 */
+            ai_brief?: string | null;
             /** @default  */
             markdown_source: string;
             /** Format: int64 */
@@ -1651,6 +1721,8 @@ export interface components {
             title: string;
             slug: string;
             summary: string;
+            /** @description AI 导读（TL;DR） */
+            ai_brief?: string | null;
             /** Format: int64 */
             category_id: number | null;
             /** Format: uri */
@@ -1677,6 +1749,8 @@ export interface components {
             slug: string;
             title: string;
             summary: string;
+            /** @description AI 导读（TL;DR）；更新时字段缺省表示不改动，显式 null 清除 */
+            ai_brief?: string | null;
             /** Format: uri */
             cover_url: string | null;
             markdown_source: string;
@@ -1723,6 +1797,8 @@ export interface components {
         };
         PublicArticleDetail: components["schemas"]["PublicArticleListItem"] & {
             allow_comments: boolean;
+            /** @description AI 导读（TL;DR），管理端生成并随文保存；未生成时该字段不出现。 */
+            ai_brief?: string | null;
             seo_keywords: string[];
             /** @description 经过 `comrak` Render 和 `ammonia` Sanitization 的 HTML；受密码保护且未解锁时为 `null`。 */
             rendered_html: string | null;
@@ -1811,6 +1887,19 @@ export interface components {
         PublicSearchSuggestion: {
             slug: string;
             title: string;
+        };
+        PublicSearchAskRequest: {
+            /** @description 访客提问 */
+            question: string;
+        };
+        /** @description 相关文章条目：仅公开元数据，不含正文与统计。 */
+        RelatedArticle: {
+            slug: string;
+            title: string;
+            /** Format: uri */
+            cover_url: string | null;
+            /** Format: date-time */
+            published_at: string | null;
         };
         MessageResponse: {
             message: string;
@@ -2454,12 +2543,14 @@ export interface components {
         };
         /** @enum {string} */
         SettingGroupName: "appearance" | "email" | "integrations" | "ai";
-        /** @description AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata 三个编辑器端点。 */
+        /** @description AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata/tags/brief 编辑器端点；`smart_search` 控制相关文章推荐与站内 AI 问答（默认关闭，开启需配置 Embedding 端点）。 */
         AiFeatureToggles: {
             /** @default false */
             editor_assist: boolean;
             /** @default false */
             comment_moderation: boolean;
+            /** @default false */
+            smart_search: boolean;
         };
         /** @description AI 设置的读取视图；`api_key` 为 write-only，只回 `api_key_set`。 */
         AiSettingsView: {
@@ -2477,6 +2568,10 @@ export interface components {
             /** @description 是否已配置 api_key（永不回传明文） */
             api_key_set?: boolean;
             features?: components["schemas"]["AiFeatureToggles"];
+            /** @description Embedding 端点（OpenAI 兼容 `/embeddings`，Ollama 的 `/v1` 同样兼容）；未配置时 smart_search 相关能力不可用 */
+            embedding_base_url?: string | null;
+            /** @description Embedding 模型名，如 `bge-m3` */
+            embedding_model?: string | null;
         };
         AiRewriteRequest: {
             /** @description 选中的 Markdown 片段 */
@@ -2492,7 +2587,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             /** @enum {string} */
-            feature: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation";
+            feature: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation" | "editor_tags" | "ai_brief" | "search_ask";
             /**
              * Format: int64
              * @description null 表示系统触发
@@ -2554,6 +2649,8 @@ export interface components {
             model?: string | null;
             api_key?: string | null;
             features?: components["schemas"]["AiFeatureToggles"] | null;
+            embedding_base_url?: string | null;
+            embedding_model?: string | null;
         };
         /** @description 第三方集成设置；受控 Integration Slot，仅结构化字段。 */
         IntegrationSettings: {
@@ -5346,12 +5443,74 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    aiEditorTags: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
+                Origin: components["parameters"]["Origin"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiArticleContextRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流（`text/event-stream`）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    aiEditorBrief: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
+                Origin: components["parameters"]["Origin"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiArticleContextRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流（`text/event-stream`）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     listAiUsage: {
         parameters: {
             query?: {
                 page?: number;
                 page_size?: number;
-                feature?: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation";
+                feature?: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation" | "editor_tags" | "ai_brief" | "search_ask";
             };
             header?: never;
             path?: never;
@@ -5724,6 +5883,84 @@ export interface operations {
             };
             /** @description 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。 */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    searchAsk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicSearchAskRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流（`text/event-stream`）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description 问题为空或超过 300 字符（`INVALID_AI_INPUT`）。 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI 检索未开启（`AI_RETRIEVAL_DISABLED`）。 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listRelatedArticles: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 相关文章列表（可能为空数组）。 */
+            200: {
+                headers: {
+                    /** @example public, max-age=60 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedArticle"][];
+                };
+            };
+            /** @description 文章不存在或 AI 检索未开启（`ARTICLE_NOT_FOUND` / `AI_RETRIEVAL_DISABLED`）。 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -13,7 +13,7 @@ Aries Next 是博客系统 Aries 的新一代重写实现，采用 Modular Monol
 - Admin：Vue 3、TypeScript、Vite 8、vue-router 5（文件路由）+ vite-plugin-vue-layouts、Pinia 4、Tailwind CSS 4、shadcn-vue（基于 shadcn-vue-admin 模板重建）、Reka UI、`@lucide/vue` 图标
 - Public Web：Nuxt 4（4.5.1）、Vue 3、SSR、Tailwind CSS 4
 - Migration：Rust 工具，MySQL 只读源 + PostgreSQL 目标
-- AI：Provider Adapter、SSE 流式输出（已实现编辑器助手与评论 AI 审核，见 `backend/server/src/http/ai.rs`）；Embedding、RAG 仍在规划阶段
+- AI：Provider Adapter、SSE 流式输出（编辑器助手改写/摘要/元数据/标签推荐/导读、评论 AI 审核，见 `backend/server/src/http/ai.rs`）；Embedding / RAG（相关文章 + 对话式搜索）已实现，默认关闭，后台开启 `smart_search` 并配置 Embedding 端点后启用（见 `docs/blog-feature-map.md` §9）
 
 项目优先级：数据安全、可回滚迁移、SEO、可测试性、长期可维护性。不提前拆分 Microservice。
 

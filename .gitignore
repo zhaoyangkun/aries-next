@@ -10,8 +10,9 @@ node_modules/
 # 只忽略仓库根的服务端日志输出目录；src 下同名源码目录（如 apps/admin/src/pages/logs）不受影响。
 /logs/
 
-# 本地数据目录（媒体上传与 pg_dump 备份），不得入库
-/data/
+# 本地数据目录（媒体上传与 pg_dump 备份），不得入库；任意层级生效
+# （DB 测试会在 backend/server/data/ 下生成媒体与缩略图缓存）。
+data/
 
 # 数据库备份 / 导出文件（含密码哈希等敏感数据）
 *.sql

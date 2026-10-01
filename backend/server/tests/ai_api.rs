@@ -106,6 +106,18 @@ impl AiProvider for FakeAiProvider {
         sender.send(AiStreamEvent::Done).await.unwrap();
         Ok(())
     }
+
+    async fn embed(
+        &self,
+        _settings: &AiSettings,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError> {
+        self.seen_inputs
+            .lock()
+            .unwrap()
+            .extend(texts.iter().cloned());
+        Ok(texts.iter().map(|_| vec![1.0_f32, 0.0, 0.0]).collect())
+    }
 }
 
 /// 解析 SSE 原始字节为 (event, data) 序列。
@@ -535,6 +547,105 @@ async fn comment_moderation_marks_spam_and_falls_back_on_failure() -> anyhow::Re
             .await?;
         ensure!(list.status == StatusCode::OK, "{}", list.body);
         ensure!(list.body["total"].as_i64() == Some(0));
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+#[tokio::test]
+async fn editor_tags_validates_json_and_editor_brief_streams_text() -> anyhow::Result<()> {
+    let provider = Arc::new(FakeAiProvider::new());
+    provider.push_stream(&["{\"tags\": [\"Rust\", \"所有权\"]}"]);
+    provider.push_stream(&["这是导读", "内容。"]);
+    let Some(app) = common::maybe_app_with_ai(Some(provider)).await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+        configure_ai(&app, &owner_cookie, true, false).await?;
+
+        // tags：JSON 合法 → done；事件序列 start → delta → usage → done。
+        let (_status, _headers, bytes) = app
+            .admin_post_raw(
+                "/api/admin/ai/editor/tags",
+                serde_json::json!({ "title": "t", "content": "c" }),
+                &owner_cookie,
+            )
+            .await?;
+        let events = parse_sse(&bytes);
+        let names: Vec<&str> = events.iter().map(|(name, _)| name.as_str()).collect();
+        ensure!(
+            names == vec!["start", "delta", "usage", "done"],
+            "tags events: {names:?}"
+        );
+        ensure!(events[0].1.contains("editor_tags"));
+        ensure!(events[1].1.contains("Rust"));
+
+        // brief：纯文本 → done，无需 JSON 校验。
+        let (_status, _headers, bytes) = app
+            .admin_post_raw(
+                "/api/admin/ai/editor/brief",
+                serde_json::json!({ "title": "t", "content": "c" }),
+                &owner_cookie,
+            )
+            .await?;
+        let events = parse_sse(&bytes);
+        let names: Vec<&str> = events.iter().map(|(name, _)| name.as_str()).collect();
+        ensure!(
+            names == vec!["start", "delta", "delta", "usage", "done"],
+            "brief events: {names:?}"
+        );
+        ensure!(events[0].1.contains("ai_brief"));
+        let (recorded,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM ai_requests \
+             WHERE feature IN ('editor_tags', 'ai_brief') AND status = 'success'",
+        )
+        .fetch_one(&app.state.database)
+        .await?;
+        ensure!(recorded == 2);
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+#[tokio::test]
+async fn editor_tags_rejects_non_json_output() -> anyhow::Result<()> {
+    let provider = Arc::new(FakeAiProvider::new());
+    provider.push_stream(&["Rust, 所有权"]);
+    let Some(app) = common::maybe_app_with_ai(Some(provider)).await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+        configure_ai(&app, &owner_cookie, true, false).await?;
+
+        let (_status, _headers, bytes) = app
+            .admin_post_raw(
+                "/api/admin/ai/editor/tags",
+                serde_json::json!({ "title": "t", "content": "c" }),
+                &owner_cookie,
+            )
+            .await?;
+        let events = parse_sse(&bytes);
+        ensure!(
+            events.last().map(|(name, _)| name.as_str()) == Some("error"),
+            "{events:?}"
+        );
+        let (failed,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM ai_requests \
+             WHERE feature = 'editor_tags' AND status = 'failed' AND error_category = 'invalid_output'",
+        )
+        .fetch_one(&app.state.database)
+        .await?;
+        ensure!(failed == 1);
         Ok(())
     }
     .await;

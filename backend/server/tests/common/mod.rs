@@ -138,6 +138,9 @@ pub async fn maybe_app_with_ai(
             settings: std::sync::Arc::new(aries_infra::PostgresSettingRepository::new(
                 test_pool.clone(),
             )),
+            chunks: std::sync::Arc::new(aries_infra::PostgresChunkRepository::new(
+                test_pool.clone(),
+            )),
             ai: ai_provider
                 .unwrap_or_else(|| std::sync::Arc::new(aries_infra::DispatchingAiProvider::new())),
             ai_requests: std::sync::Arc::new(aries_infra::PostgresAiRequestRepository::new(

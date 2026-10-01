@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod ai_prompts;
 pub mod auth;
+pub mod chunking;
 pub mod comments;
 pub mod content;
 pub mod galleries;
@@ -12,5 +13,6 @@ pub mod logs;
 pub mod media;
 pub mod navigation;
 pub mod pages;
+pub mod retrieval;
 pub mod search;
 pub mod settings;

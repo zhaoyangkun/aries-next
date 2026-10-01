@@ -1,13 +1,25 @@
 <script setup lang="ts">
 import type { PublicArticleDetail } from '~/composables/usePublicApi'
 
+// 后端并行实现中的新契约字段：AI 导读（未生成时为 null）。
+// @aries/api-client 重新生成后此交叉类型应并入 PublicArticleDetail
+type ArticleDetailWithAi = PublicArticleDetail & { ai_brief?: string | null }
+
+// GET /articles/{slug}/related?limit=6 的条目
+interface RelatedArticleItem {
+  slug: string
+  title: string
+  cover_url: string | null
+  published_at: string | null
+}
+
 const route = useRoute()
 const site = await useSite()
 const siteUrl = useSiteUrl()
 
 const slug = computed(() => String(route.params.slug))
 
-const { data: article, status } = await usePublicApi<PublicArticleDetail>(
+const { data: article, status } = await usePublicApi<ArticleDetailWithAi>(
   'article-detail',
   () => `/articles/${slug.value}`,
   {
@@ -16,6 +28,15 @@ const { data: article, status } = await usePublicApi<PublicArticleDetail>(
     forwardCookies: true,
   },
 )
+
+// 相关阅读：功能未开启时后端 404（AI_RETRIEVAL_DISABLED），ignoreError 兜底不渲染区块，
+// 也不能让整页落入 404
+const { data: related } = await usePublicApi<RelatedArticleItem[]>(
+  'article-related',
+  () => `/articles/${slug.value}/related`,
+  { query: { limit: 6 }, watch: [slug], ignoreError: true },
+)
+const relatedArticles = computed(() => related.value ?? [])
 
 const locked = computed(
   () => !!article.value && article.value.password_protected && !article.value.rendered_html,
@@ -136,8 +157,39 @@ useHead(
           class="mt-8 w-full rounded-lg object-cover"
         />
 
+        <!-- AI 导读：后端生成摘要式导读，非空时展示在正文之前 -->
+        <div
+          v-if="article.ai_brief"
+          class="mt-8 border-l-2 border-primary bg-muted/50 px-4 py-3"
+        >
+          <p class="m-0 text-xs font-medium tracking-wide text-muted-foreground">AI 导读</p>
+          <p class="m-0 mt-1.5 text-sm leading-relaxed">{{ article.ai_brief }}</p>
+        </div>
+
         <!-- 后端已完成 comrak 渲染与 ammonia 消毒，可直接输出 -->
         <HighlightedContent :html="article.rendered_html" />
+
+        <!-- 相关阅读：未开启或 Embedding 未配置时后端 404、无相近文章时为空数组，两者都不渲染 -->
+        <section v-if="relatedArticles.length > 0" class="mt-14 border-t pt-10" aria-label="相关阅读">
+          <h2 class="m-0 text-lg font-semibold">相关阅读</h2>
+          <div class="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            <NuxtLink
+              v-for="item in relatedArticles"
+              :key="item.slug"
+              :to="`/articles/${item.slug}`"
+              class="group flex min-w-0 items-center gap-3 no-underline"
+            >
+              <img
+                v-if="item.cover_url"
+                :src="thumbUrl(item.cover_url, 160)"
+                :alt="item.title"
+                loading="lazy"
+                class="h-14 w-20 shrink-0 rounded-md object-cover"
+              />
+              <span class="min-w-0 flex-1 truncate text-sm font-medium text-title transition-colors group-hover:text-primary">{{ item.title }}</span>
+            </NuxtLink>
+          </div>
+        </section>
 
         <nav
           v-if="article.previous || article.next"

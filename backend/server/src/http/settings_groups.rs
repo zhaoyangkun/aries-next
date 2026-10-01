@@ -79,6 +79,8 @@ struct AiSettingsView {
     model: Option<String>,
     api_key_set: bool,
     features: aries_core::ai::AiFeatureToggles,
+    embedding_base_url: Option<String>,
+    embedding_model: Option<String>,
 }
 
 impl From<AiSettings> for AiSettingsView {
@@ -93,6 +95,8 @@ impl From<AiSettings> for AiSettingsView {
                 .as_deref()
                 .is_some_and(|value| !value.is_empty()),
             features: settings.features,
+            embedding_base_url: settings.embedding_base_url,
+            embedding_model: settings.embedding_model,
         }
     }
 }
@@ -115,6 +119,8 @@ struct AiSettingsPatch {
     model: Option<String>,
     api_key: Option<Option<String>>,
     features: Option<aries_core::ai::AiFeatureToggles>,
+    embedding_base_url: Option<String>,
+    embedding_model: Option<String>,
 }
 
 /// 邮件设置更新入参：全部字段可选——`None`（字段缺省或显式 null）表示保持不变，
@@ -250,6 +256,12 @@ async fn update_setting_group(
             }
             if let Some(features) = patch.features {
                 merged.features = features;
+            }
+            if let Some(embedding_base_url) = patch.embedding_base_url {
+                merged.embedding_base_url = Some(embedding_base_url);
+            }
+            if let Some(embedding_model) = patch.embedding_model {
+                merged.embedding_model = Some(embedding_model);
             }
             if let Some(secret) = patch.api_key {
                 merged.api_key = secret.filter(|value| !value.is_empty());

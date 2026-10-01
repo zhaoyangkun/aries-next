@@ -21,6 +21,9 @@ pub enum AiFeature {
     EditorSummary,
     EditorMetadata,
     CommentModeration,
+    EditorTags,
+    AiBrief,
+    SearchAsk,
 }
 
 impl AiFeature {
@@ -30,6 +33,9 @@ impl AiFeature {
             Self::EditorSummary => "editor_summary",
             Self::EditorMetadata => "editor_metadata",
             Self::CommentModeration => "comment_moderation",
+            Self::EditorTags => "editor_tags",
+            Self::AiBrief => "ai_brief",
+            Self::SearchAsk => "search_ask",
         }
     }
 }
@@ -49,6 +55,9 @@ impl FromStr for AiFeature {
             "editor_summary" => Ok(Self::EditorSummary),
             "editor_metadata" => Ok(Self::EditorMetadata),
             "comment_moderation" => Ok(Self::CommentModeration),
+            "editor_tags" => Ok(Self::EditorTags),
+            "ai_brief" => Ok(Self::AiBrief),
+            "search_ask" => Ok(Self::SearchAsk),
             _ => Err(AiError::Validation),
         }
     }
@@ -58,12 +67,14 @@ impl FromStr for AiFeature {
 // 设置（setting_groups 的 ai 分组 payload）
 // ============================================================
 
-/// 功能开关：editor_assist 控制 rewrite/summary/metadata 三个编辑器端点。
+/// 功能开关：editor_assist 控制 rewrite/summary/metadata/tags/brief 编辑器端点；
+/// smart_search 控制相关文章与对话式搜索（AI 检索，默认关闭，开启需配置 embedding）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AiFeatureToggles {
     pub editor_assist: bool,
     pub comment_moderation: bool,
+    pub smart_search: bool,
 }
 
 /// Provider 协议：openai 兼容 `/chat/completions`，anthropic 为 Messages API。
@@ -97,6 +108,10 @@ pub struct AiSettings {
     pub model: Option<String>,
     pub api_key: Option<String>,
     pub features: AiFeatureToggles,
+    /// Embedding 端点（OpenAI 兼容 `/embeddings`，Ollama 的 /v1 同样兼容）；
+    /// 未配置时 smart_search 相关能力自动不可用。
+    pub embedding_base_url: Option<String>,
+    pub embedding_model: Option<String>,
 }
 
 impl AiSettings {
@@ -105,6 +120,19 @@ impl AiSettings {
         self.base_url.as_deref().is_some_and(|v| !v.is_empty())
             && self.model.as_deref().is_some_and(|v| !v.is_empty())
             && self.api_key.as_deref().is_some_and(|v| !v.is_empty())
+    }
+
+    /// Embedding 配置完整性：复用 chat 的 api_key，embedding 地址与模型单独配置。
+    pub fn is_embedding_configured(&self) -> bool {
+        self.api_key.as_deref().is_some_and(|v| !v.is_empty())
+            && self
+                .embedding_base_url
+                .as_deref()
+                .is_some_and(|v| !v.is_empty())
+            && self
+                .embedding_model
+                .as_deref()
+                .is_some_and(|v| !v.is_empty())
     }
 }
 
@@ -178,6 +206,14 @@ pub trait AiProvider: Send + Sync {
         request: AiChatRequest,
         sender: mpsc::Sender<AiStreamEvent>,
     ) -> Result<(), AiError>;
+
+    /// 文本向量化：OpenAI 兼容 `/embeddings`，一次调用传入一批文本，
+    /// 返回与输入等长的向量列表（顺序一致）。
+    async fn embed(
+        &self,
+        settings: &AiSettings,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError>;
 }
 
 // ============================================================

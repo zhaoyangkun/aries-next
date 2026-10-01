@@ -156,6 +156,7 @@ fn snapshot(article: &Article) -> ArticleRevision {
             title: article.title.clone(),
             slug: article.slug.clone(),
             summary: article.summary.clone(),
+            ai_brief: article.ai_brief.clone(),
             category_id: article.category_id,
             cover_url: article.cover_url.clone(),
             seo_keywords: article.seo_keywords.clone(),
@@ -185,6 +186,7 @@ impl ContentRepository for MockContentRepository {
             slug: article.slug.to_lowercase().replace(' ', "-"),
             title: article.title,
             summary: article.summary,
+            ai_brief: article.ai_brief,
             cover_url: article.cover_url,
             markdown_source: article.markdown_source,
             rendered_html: article.rendered_html,
@@ -853,6 +855,7 @@ fn test_app(role: Role) -> Router {
         settings: Arc::new(aries_infra::PostgresSettingRepository::new(
             database.clone(),
         )),
+        chunks: Arc::new(aries_infra::PostgresChunkRepository::new(database.clone())),
         // AI 端点不在本测试覆盖范围内，复用真实 Repository（连接为 lazy，不会实际查询）。
         ai: Arc::new(aries_infra::DispatchingAiProvider::new()),
         ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(database)),

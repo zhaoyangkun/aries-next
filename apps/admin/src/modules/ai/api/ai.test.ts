@@ -155,6 +155,30 @@ describe('streamAiEditor', () => {
     await expect(handle.finished).rejects.toMatchObject({ name: 'AiGateError', code: 'RATE_LIMITED' })
   })
 
+  it('posts to the tags and brief endpoints', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(streamOf(['event: done\ndata: {}\n\n']), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const tagsHandle = streamAiEditor('tags', { title: 't', content: 'c' }, {})
+    await tagsHandle.finished
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/ai/editor/tags', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ title: 't', content: 'c' }),
+    }))
+
+    const briefHandle = streamAiEditor('brief', { title: 't', content: 'c' }, {})
+    await briefHandle.finished
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/ai/editor/brief', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ title: 't', content: 'c' }),
+    }))
+  })
+
   it('cancel aborts the request and rejects the finished promise', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) =>
       new Promise<Response>((resolve, reject) => {

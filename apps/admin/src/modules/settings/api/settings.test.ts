@@ -138,7 +138,7 @@ describe('settingsGroupApi', () => {
         base_url: 'https://api.example.com/v1',
         model: 'gpt-test',
         api_key_set: true,
-        features: { editor_assist: true, comment_moderation: false },
+        features: { editor_assist: true, comment_moderation: false, smart_search: false },
       },
     }
     const get = vi.spyOn(api, 'get').mockResolvedValue({ data: aiResponse })
@@ -148,7 +148,7 @@ describe('settingsGroupApi', () => {
       protocol: 'anthropic' as const,
       base_url: 'https://api.example.com/v1',
       model: 'gpt-test',
-      features: { editor_assist: true, comment_moderation: false },
+      features: { editor_assist: true, comment_moderation: false, smart_search: false },
     }
 
     await expect(settingsGroupApi.getAi()).resolves.toEqual(aiResponse)

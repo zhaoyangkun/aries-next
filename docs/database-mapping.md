@@ -268,9 +268,17 @@ Site 设置（站点名称、URL、分页大小、评论策略等）沿用 `site
 
 | Target Table / Column | 数据来源 | 规则 |
 | --- | --- | --- |
-| `ai_requests` | 运行时生成 | 不迁移；AI 请求审计表，`feature` 限定 `editor_rewrite` / `editor_summary` / `editor_metadata` / `comment_moderation`；`status` 为 `success` / `failed` / `cancelled`；记录 `model`、Token 用量、`latency_ms` 与 `error_category`（失败分类，不存原始错误细节）；`operator_user_id` 可空（系统触发），`ON DELETE SET NULL` |
+| `ai_requests` | 运行时生成 | 不迁移；AI 请求审计表，`feature` 限定 `editor_rewrite` / `editor_summary` / `editor_metadata` / `comment_moderation`（`202609250001` 扩展加入 `editor_tags` / `ai_brief` / `search_ask`）；`status` 为 `success` / `failed` / `cancelled`；记录 `model`、Token 用量、`latency_ms` 与 `error_category`（失败分类，不存原始错误细节）；`operator_user_id` 可空（系统触发），`ON DELETE SET NULL` |
 | `comments.ai_risk` / `ai_reason` / `ai_confidence` | 运行时生成 | 不迁移；AI 审核结论，仅展示与标记，不自动 Approve / Delete；`ai_risk` 限定 `safe` / `suspicious` / `spam` |
 | `setting_groups` 的 `ai` 分组 | 运行时配置 | AI Provider 的 `base_url` / `model` / `api_key` 存于此，不迁移旧版数据 |
+
+`202609250001`（Phase 08 第二批：AI 导读 + 可开关的 AI 检索）：
+
+| Target Table / Column | 数据来源 | 规则 |
+| --- | --- | --- |
+| `articles.ai_brief` | 运行时生成 | AI 导读（TL;DR），管理端生成后随文保存；可空 |
+| `article_chunks` | 运行时生成 | 文章分块与 Embedding 向量（`embedding real[]`，内置数组类型、不依赖 pgvector 扩展，维度不固定以兼容不同模型）；`(article_id, chunk_index)` 唯一；`ON DELETE CASCADE`；取消发布时由 `article_embed` 任务清除；开关 `features.smart_search` 默认关闭 |
+| `background_jobs.kind` | 运行时生成 | 扩展加入 `article_embed`：发布 / 更新 / 取消发布后入队，worker 内检查开关与 Embedding 配置，未开启时静默完成 |
 
 ## 运行日志数据
 

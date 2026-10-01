@@ -80,6 +80,7 @@ const session = useSessionStore()
 const title = ref('')
 const slug = ref('')
 const summary = ref('')
+const aiBrief = ref('')
 const content = ref('')
 const coverUrl = ref('')
 const seoKeywords = ref<string[]>([])
@@ -123,6 +124,7 @@ const editorNotice = ref('')
 const aiDialogOpen = ref(false)
 const aiFeature = ref<AiAssistFeature>('rewrite')
 const aiRequest = ref<Record<string, string>>({})
+const applyingAiTags = ref(false)
 const vditorEl = ref<HTMLElement | null>(null)
 let vditorInstance: Vditor | null = null
 // setValue 等程序化写入不应触发自动保存调度。
@@ -295,7 +297,7 @@ function showEditorNotice(message: string) {
   }, 5000)
 }
 
-// AI 助手：改写需要当前选中文本；摘要/SEO 需要已有正文。入参快照后打开流式面板。
+// AI 助手：改写需要当前选中文本；摘要/SEO/导读/标签需要已有正文。入参快照后打开流式面板。
 function openAiAssist(feature: AiAssistFeature) {
   if (!vditorInstance) return
   if (feature === 'rewrite') {
@@ -321,15 +323,17 @@ function openAiAssist(feature: AiAssistFeature) {
   aiDialogOpen.value = true
 }
 
-// AI 结果只在用户确认后写回：改写走 Vditor 选区替换，摘要/SEO 映射到对应表单字段。
+// AI 结果只在用户确认后写回：改写走 Vditor 选区替换，摘要/SEO 映射到对应表单字段，
+// 导读写入 aiBrief，标签按名称匹配现有列表（不存在的先创建再选中）。
 function handleAiApply(payload: AiAssistApplyPayload) {
   if (aiFeature.value === 'rewrite' && payload.text) {
     vditorInstance?.deleteValue()
     vditorInstance?.insertValue(payload.text)
     return
   }
-  if (aiFeature.value === 'summary' && payload.text) {
-    summary.value = payload.text.trim()
+  if ((aiFeature.value === 'summary' || aiFeature.value === 'brief') && payload.text) {
+    if (aiFeature.value === 'summary') summary.value = payload.text.trim()
+    else aiBrief.value = payload.text.trim()
     return
   }
   if (aiFeature.value === 'metadata') {
@@ -344,6 +348,34 @@ function handleAiApply(payload: AiAssistApplyPayload) {
       }
       seoKeywords.value = merged
     }
+  }
+  if (aiFeature.value === 'tags' && payload.tags?.length) {
+    void applyAiTags(payload.tags)
+  }
+}
+
+// 标签推荐：按名称匹配现有标签，不存在的先创建再选中；重复推荐只处理一次。
+async function applyAiTags(names: string[]) {
+  if (applyingAiTags.value) return
+  applyingAiTags.value = true
+  try {
+    const merged = [...tagIds.value]
+    for (const name of names) {
+      const trimmed = name.trim()
+      if (!trimmed) continue
+      let tag = tags.value.find(item => item.name === trimmed)
+      if (!tag) {
+        tag = await articlesApi.createTag(trimmed)
+        tags.value = [...tags.value, tag]
+      }
+      if (!merged.includes(tag.id)) merged.push(tag.id)
+    }
+    tagIds.value = merged
+    showEditorNotice('AI 推荐标签已选中，未存在的标签已自动创建。')
+  } catch (requestError) {
+    showEditorNotice(getApiError(requestError, '标签创建失败，部分标签未能选中'))
+  } finally {
+    applyingAiTags.value = false
   }
 }
 
@@ -370,6 +402,7 @@ function restoreBackup() {
   title.value = payload.title
   slug.value = payload.slug ?? slug.value
   summary.value = payload.summary
+  aiBrief.value = payload.ai_brief ?? ''
   content.value = payload.markdown_source
   vditorInstance?.setValue(payload.markdown_source)
   coverUrl.value = payload.cover_url ?? ''
@@ -391,6 +424,7 @@ function formSnapshot() {
     title: title.value,
     slug: slug.value,
     summary: summary.value,
+    aiBrief: aiBrief.value,
     content: content.value,
     coverUrl: coverUrl.value,
     seoKeywords: seoKeywords.value,
@@ -407,6 +441,7 @@ function resetEditor() {
   title.value = ''
   slug.value = ''
   summary.value = ''
+  aiBrief.value = ''
   content.value = ''
   coverUrl.value = ''
   seoKeywords.value = []
@@ -448,6 +483,7 @@ function applyArticle(article: AdminArticle) {
   title.value = article.title
   slug.value = article.slug
   summary.value = article.summary
+  aiBrief.value = article.ai_brief ?? ''
   content.value = article.markdown_source
   vditorInstance?.setValue(article.markdown_source)
   coverUrl.value = article.cover_url ?? ''
@@ -559,6 +595,7 @@ function buildPayload(): CreateArticlePayload {
     allow_comments: allowComments.value,
     is_pinned: isPinned.value,
     tag_ids: [...tagIds.value],
+    ai_brief: aiBrief.value.trim() || null,
   }
   // Slug 留空时：新建由 Backend 按标题生成，更新则保持原值，因此只在非空时发送。
   const trimmedSlug = slug.value.trim()
@@ -895,6 +932,29 @@ function formatRevisionTime(value: string) {
             <Textarea id="dialog-article-summary" v-model="summary" class="min-h-28 resize-y bg-background" placeholder="简要说明文章内容" />
           </div>
           <div class="space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <label for="dialog-article-ai-brief" class="text-xs font-medium">导读</label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="h-7 gap-1 px-2 text-xs"
+                :disabled="loadingArticle || saving"
+                @click="openAiAssist('brief')"
+              >
+                <SparklesIcon class="size-3.5" />
+                AI 生成
+              </Button>
+            </div>
+            <Textarea
+              id="dialog-article-ai-brief"
+              v-model="aiBrief"
+              class="min-h-24 resize-y bg-background"
+              placeholder="150 字以内的 AI 导读，生成后可直接编辑"
+            />
+            <p class="text-xs text-muted-foreground">导读用于文章页头部展示，留空则不显示。</p>
+          </div>
+          <div class="space-y-1.5">
             <label for="dialog-article-category" class="text-xs font-medium">分类</label>
             <select
               id="dialog-article-category"
@@ -914,7 +974,20 @@ function formatRevisionTime(value: string) {
             </div>
           </div>
           <div class="space-y-1.5">
-            <span class="text-xs font-medium">标签</span>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-medium">标签</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="h-7 gap-1 px-2 text-xs"
+                :disabled="loadingArticle || saving"
+                @click="openAiAssist('tags')"
+              >
+                <SparklesIcon class="size-3.5" />
+                AI 推荐
+              </Button>
+            </div>
             <div v-if="tags.length" class="flex flex-wrap gap-2">
               <label v-for="tag in tags" :key="tag.id" class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs has-[:checked]:border-primary has-[:checked]:bg-primary/10">
                 <input v-model="tagIds" type="checkbox" class="accent-primary" :value="tag.id" :disabled="saving" />

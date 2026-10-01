@@ -26,6 +26,9 @@ const form = reactive({
   model: '',
   editor_assist: false,
   comment_moderation: false,
+  smart_search: false,
+  embedding_base_url: '',
+  embedding_model: '',
 })
 const apiKeySet = ref(false)
 const newApiKey = ref('')
@@ -49,6 +52,8 @@ const featureMeta: Record<AiFeature, string> = {
   editor_rewrite: '编辑器 · 改写',
   editor_summary: '编辑器 · 摘要',
   editor_metadata: '编辑器 · SEO 建议',
+  editor_tags: '编辑器 · 标签推荐',
+  editor_brief: '编辑器 · AI 导读',
   comment_moderation: '评论自动审核',
 }
 
@@ -80,6 +85,9 @@ onMounted(async () => {
     form.model = record.settings.model ?? ''
     form.editor_assist = record.settings.features.editor_assist
     form.comment_moderation = record.settings.features.comment_moderation
+    form.smart_search = record.settings.features.smart_search
+    form.embedding_base_url = record.settings.embedding_base_url ?? ''
+    form.embedding_model = record.settings.embedding_model ?? ''
   }
   catch (requestError) {
     error.value = getApiError(requestError, 'AI 设置加载失败')
@@ -109,7 +117,11 @@ async function save() {
       features: {
         editor_assist: form.editor_assist,
         comment_moderation: form.comment_moderation,
+        smart_search: form.smart_search,
       },
+      // 省略/null 保持不变：留空提交 null，不清除服务端已保存的值。
+      embedding_base_url: form.embedding_base_url.trim() || null,
+      embedding_model: form.embedding_model.trim() || null,
     })
     version.value = record.version
     apiKeySet.value = record.settings.api_key_set
@@ -239,12 +251,31 @@ function tokenText(item: AiUsageItem) {
               </div>
             </fieldset>
 
+            <fieldset class="grid gap-4 border-t pt-5">
+              <legend class="text-sm font-medium">Embedding 配置（可选）</legend>
+              <p class="text-xs text-muted-foreground">
+                用于相关文章推荐与站内 AI 问答；推荐本地 Ollama（免费）。
+              </p>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="grid gap-2">
+                  <label for="ai-embedding-base-url" class="text-sm font-medium leading-none">Embedding Base URL</label>
+                  <Input id="ai-embedding-base-url" v-model="form.embedding_base_url" type="url" placeholder="http://localhost:11434/v1" :disabled="loading || saving" />
+                  <p class="text-xs text-muted-foreground">留空保持不变；OpenAI 兼容的 Embedding 服务地址。</p>
+                </div>
+                <div class="grid gap-2">
+                  <label for="ai-embedding-model" class="text-sm font-medium leading-none">Embedding Model</label>
+                  <Input id="ai-embedding-model" v-model="form.embedding_model" placeholder="bge-m3" :disabled="loading || saving" />
+                  <p class="text-xs text-muted-foreground">留空保持不变。</p>
+                </div>
+              </div>
+            </fieldset>
+
             <fieldset class="grid gap-3 border-t pt-5">
               <legend class="text-sm font-medium">功能开关</legend>
               <label class="flex cursor-pointer items-center justify-between gap-3 text-sm">
                 <span>
                   编辑器助手
-                  <span class="block text-xs font-normal text-muted-foreground">文章编辑器内的改写 / 摘要 / SEO 建议</span>
+                  <span class="block text-xs font-normal text-muted-foreground">文章编辑器内的改写 / 摘要 / SEO 建议 / 标签推荐 / AI 导读</span>
                 </span>
                 <input v-model="form.editor_assist" type="checkbox" class="peer sr-only" :disabled="loading || saving" />
                 <span class="relative h-5 w-9 shrink-0 rounded-full bg-input transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-background after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-4 peer-disabled:opacity-50" />
@@ -255,6 +286,14 @@ function tokenText(item: AiUsageItem) {
                   <span class="block text-xs font-normal text-muted-foreground">访客评论提交后由 AI 评估风险等级，仅高置信垃圾评论自动标记</span>
                 </span>
                 <input v-model="form.comment_moderation" type="checkbox" class="peer sr-only" :disabled="loading || saving" />
+                <span class="relative h-5 w-9 shrink-0 rounded-full bg-input transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-background after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-4 peer-disabled:opacity-50" />
+              </label>
+              <label class="flex cursor-pointer items-center justify-between gap-3 text-sm">
+                <span>
+                  智能搜索
+                  <span class="block text-xs font-normal text-muted-foreground">开启后启用相关文章推荐与站内 AI 问答；需配置 Embedding 端点，推荐本地 Ollama（免费）</span>
+                </span>
+                <input v-model="form.smart_search" type="checkbox" class="peer sr-only" :disabled="loading || saving" />
                 <span class="relative h-5 w-9 shrink-0 rounded-full bg-input transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-background after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-4 peer-disabled:opacity-50" />
               </label>
             </fieldset>
@@ -291,6 +330,8 @@ function tokenText(item: AiUsageItem) {
             <option value="editor_rewrite">编辑器 · 改写</option>
             <option value="editor_summary">编辑器 · 摘要</option>
             <option value="editor_metadata">编辑器 · SEO 建议</option>
+            <option value="editor_tags">编辑器 · 标签推荐</option>
+            <option value="editor_brief">编辑器 · AI 导读</option>
             <option value="comment_moderation">评论自动审核</option>
           </select>
         </CardHeader>
