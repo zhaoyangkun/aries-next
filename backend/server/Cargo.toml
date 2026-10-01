@@ -36,5 +36,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+# 媒体缩略图 contract 测试：构造测试图片并解码响应断言尺寸。
+image.workspace = true
 # start_paused 异步测试（日志覆盖自动复位的时间推进）。
 tokio = { workspace = true, features = ["test-util"] }

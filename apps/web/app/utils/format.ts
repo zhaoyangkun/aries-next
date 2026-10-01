@@ -27,3 +27,12 @@ export function formatDateParts(
     yearMonth: `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`,
   }
 }
+
+/**
+ * 媒体缩略图 URL：仅本站托管（/api/media/files 前缀）的图片追加 `?w=` 请求按需缩略图；
+ * 外部/CDN 地址（含绝对 URL）无法走本站缩放，原样返回。
+ */
+export function thumbUrl(url: string | null | undefined, width: number): string {
+  if (!url || !url.startsWith('/api/media/files/')) return url ?? ''
+  return `${url}?w=${width}`
+}

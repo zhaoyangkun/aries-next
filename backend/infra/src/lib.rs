@@ -25,6 +25,7 @@ pub mod password;
 pub mod settings;
 pub mod site_settings;
 pub mod storage;
+pub mod thumbnail;
 pub mod upload;
 pub mod where_clause;
 

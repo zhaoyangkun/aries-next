@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, formatDateParts, formatDateShort } from '../../app/utils/format'
+import { formatDate, formatDateParts, formatDateShort, thumbUrl } from '../../app/utils/format'
 
 // 用不带时区的本地时间字符串构造用例，避免 UTC 解析在不同时区下日期偏移导致断言不稳定
 describe('formatDate', () => {
@@ -57,5 +57,23 @@ describe('formatDateParts', () => {
 
   it('should return null for an invalid date string', () => {
     expect(formatDateParts('not-a-date')).toBeNull()
+  })
+})
+
+describe('thumbUrl', () => {
+  it('appends w param to locally hosted media urls', () => {
+    expect(thumbUrl('/api/media/files/2026/10/cover.png', 480)).toBe(
+      '/api/media/files/2026/10/cover.png?w=480',
+    )
+  })
+
+  it('keeps external and absolute urls untouched', () => {
+    expect(thumbUrl('https://cdn.example.com/cover.png', 480)).toBe('https://cdn.example.com/cover.png')
+    expect(thumbUrl('/other/path.png', 480)).toBe('/other/path.png')
+  })
+
+  it('returns empty string for null / undefined', () => {
+    expect(thumbUrl(null, 480)).toBe('')
+    expect(thumbUrl(undefined, 480)).toBe('')
   })
 })

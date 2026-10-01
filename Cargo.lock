@@ -185,6 +185,7 @@ dependencies = [
  "getrandom 0.3.4",
  "hmac",
  "http-body-util",
+ "image",
  "reqwest",
  "serde",
  "serde_json",

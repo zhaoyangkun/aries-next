@@ -1507,7 +1507,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 匿名可缓存的媒体文件端点；Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider Redirect 到公开 URL。Path 做路径穿越校验。 */
+        /** @description 匿名可缓存的媒体文件端点；Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider Redirect 到公开 URL。Path 做路径穿越校验。`?w=<width>` 请求按需缩略图（16–1200，仅 Local Provider 的 jpeg/png/webp，首次生成后落盘缓存且同样 immutable）；缺省、非法值或不支持的类型静默回退原图。 */
         get: operations["getMediaFile"];
         put?: never;
         post?: never;
@@ -6420,7 +6420,10 @@ export interface operations {
     };
     getMediaFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 缩略图目标宽度；等比缩放、不放大。 */
+                w?: number;
+            };
             header?: never;
             path: {
                 path: string;

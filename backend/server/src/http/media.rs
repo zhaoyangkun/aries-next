@@ -1306,9 +1306,12 @@ pub async fn sync_article_media_usages(
 }
 
 /// `GET /api/media/files/{*path}`：本地存储直接发文件，远端存储 Redirect 到公开 URL。
+/// `?w=<width>` 请求缩略图（16–1200）：仅本地存储的 jpeg/png/webp 生效，
+/// 首次请求生成并落盘缓存（见 `aries_infra::thumbnail`）；其余情况静默回退原图。
 pub async fn serve_media_file(
     State(state): State<AppState>,
     Path(path): Path<String>,
+    Query(params): Query<MediaFileParams>,
 ) -> Result<Response, ApiError> {
     // 拒绝路径穿越与绝对路径；对客户端统一表现为 404，不暴露路径细节。
     let not_found = || ApiError::not_found("MEDIA_NOT_FOUND", "Media file was not found");
@@ -1324,6 +1327,38 @@ pub async fn serve_media_file(
         return Ok(Redirect::temporary(&asset.url).into_response());
     }
     let bytes = state.storage.get(&path).await?.ok_or_else(not_found)?;
+    if let Some(width) = aries_infra::thumbnail::parse_width(params.w.as_deref()) {
+        if aries_infra::thumbnail::is_resizable_image(&asset.mime) {
+            let original = bytes.to_vec();
+            let mime = asset.mime.clone();
+            let object_key = path.clone();
+            // 解码/缩放是 CPU 密集操作，放阻塞线程池，避免拖慢 async executor
+            let thumbnail = tokio::task::spawn_blocking(move || {
+                aries_infra::thumbnail::get_or_create(
+                    &aries_infra::thumbnail::cache_root(),
+                    &object_key,
+                    &original,
+                    &mime,
+                    width,
+                )
+            })
+            .await
+            .map_err(ApiError::internal_logged)?
+            .map_err(ApiError::internal_logged)?;
+            // Object Key 不可变且宽度固定，缩略图缓存条目同样不可变，适合长缓存。
+            return Ok((
+                [
+                    (header::CONTENT_TYPE, thumbnail.mime.to_owned()),
+                    (
+                        header::CACHE_CONTROL,
+                        "public, max-age=31536000, immutable".to_owned(),
+                    ),
+                ],
+                thumbnail.bytes,
+            )
+                .into_response());
+        }
+    }
     // Object Key 不可变且内容不变，适合长缓存。
     Ok((
         [
@@ -1336,6 +1371,12 @@ pub async fn serve_media_file(
         bytes,
     )
         .into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MediaFileParams {
+    /// 缩略图目标宽度（16–1200 的整数）；缺省或非法时返回原图。
+    pub w: Option<String>,
 }
 
 #[cfg(test)]
