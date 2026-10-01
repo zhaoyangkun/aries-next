@@ -9,7 +9,12 @@ RUN if [ -n "$USE_CN_MIRROR" ]; then \
     fi
 WORKDIR /build
 COPY . .
-# rust-toolchain.toml channel=stable 与镜像预装一致，无额外 rustup 下载；只构建 Server 及依赖
+# rust-toolchain.toml 的 channel=stable 会让 rustup 按文件名下载一整套 stable 工具链
+# （镜像预装工具链以具体版本号命名，与 "stable" 别名不匹配），国内构建会卡在
+# "Downloading components"（rustc/cargo/rust-std/clippy/rustfmt 共 5 个）。
+# Docker 内直接使用镜像预装的同版本 stable 工具链，删除该文件即可跳过 rustup 联网下载。
+RUN rm -f rust-toolchain.toml
+# 只构建 Server 及依赖
 RUN cargo build --release -p aries-server
 
 FROM debian:bookworm-slim
