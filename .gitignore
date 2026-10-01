@@ -1,0 +1,33 @@
+target/
+node_modules/
+**/.nuxt/
+**/.output/
+**/dist/
+.env
+.env.*
+!.env.example
+*.log
+# 只忽略仓库根的服务端日志输出目录；src 下同名源码目录（如 apps/admin/src/pages/logs）不受影响。
+/logs/
+
+# 本地数据目录（媒体上传与 pg_dump 备份），不得入库
+/data/
+
+# 数据库备份 / 导出文件（含密码哈希等敏感数据）
+*.sql
+
+# Migrator 导出的归档数据（真实业务数据）
+migration-archive-*.jsonl
+
+# 迁移切换运行输出（含真实业务数据归档，不入库）
+/runs/
+
+# 代码索引工具目录
+/.codegraph/
+
+# 误建的 docker 构建参数文件（空文件，见根目录同名文件）
+/--build-arg
+/--provenance=false
+/--push
+/-t
+

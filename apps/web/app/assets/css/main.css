@@ -1,0 +1,732 @@
+@import "tailwindcss";
+@import "@aries/design-tokens/theme.css";
+
+/* 字体文件来自旧版 xue 主题（同一作者项目），woff2 放 public/fonts 下静态服务。
+   noto-sans-sc 为 latin 子集，中文字形按字体栈落到系统 Noto Sans SC / 雅黑 */
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Lato-Light.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Lato-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Lato-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Lato-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans SC";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/noto-sans-sc-v11-latin-300.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans SC";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/noto-sans-sc-v11-latin-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans SC";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/noto-sans-sc-v11-latin-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans SC";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/noto-sans-sc-v11-latin-700.woff2") format("woff2");
+}
+
+@theme inline {
+  --font-sans: "Lato", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-title: var(--title);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+}
+
+/* 公开站专属配色：覆盖 design-tokens 默认色板（admin 仍使用原色板，互不影响）。
+   亮/暗两套对齐旧版 xue 主题：主色红 #f1404b，暗色底 #292a2d、暗色文字 #a9a9b3 */
+:root {
+  --background: #ffffff;
+  --foreground: #363636;
+  --title: #252c41;
+  --card: #ffffff;
+  --card-foreground: #363636;
+  --primary: #f1404b;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f5f9;
+  --secondary-foreground: #252c41;
+  --muted: #f0f5f9;
+  --muted-foreground: #52616a;
+  --accent: rgb(241 64 75 / 0.08);
+  --accent-foreground: #e53a40;
+  --destructive: #e53a40;
+  --border: #e8ecf1;
+  --input: #d7dee6;
+}
+
+.dark {
+  --background: #292a2d;
+  --foreground: #a9a9b3;
+  --title: #d7d7df;
+  --card: #303135;
+  --card-foreground: #a9a9b3;
+  /* 暗色下主色调亮一档，保证红字在深色底上的可读性 */
+  --primary: #f6606b;
+  --primary-foreground: #ffffff;
+  --secondary: #35363a;
+  --secondary-foreground: #d7d7df;
+  --muted: #35363a;
+  --muted-foreground: #8f8f99;
+  --accent: rgb(246 96 107 / 0.14);
+  --accent-foreground: #f67f88;
+  --destructive: #f6606b;
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.14);
+}
+
+/* dark class 挂在 <html> 上（由 useTheme 的 init script 首帧前写入） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+
+  html {
+    min-width: 320px;
+    /* full-bleed 封面用 50vw 计算，裁掉纵向滚动条造成的横向溢出 */
+    overflow-x: clip;
+  }
+
+  body {
+    @apply m-0 min-h-screen overflow-x-clip bg-background font-sans text-foreground antialiased;
+    /* 主题切换时背景与文字颜色平滑过渡 */
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  /* 选中文字与键盘焦点统一为主题红，点缀色克制使用 */
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  /* 标题用更接近 xue 的深色（暗色下为亮灰），正文保持 --foreground */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--title);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+.site-shell {
+  min-height: 100vh;
+}
+
+/* header 常驻透明，滚动后加毛玻璃与细边框（xue 顶栏效果的克制版） */
+.site-header {
+  @apply sticky top-0 z-20 w-full border-b border-transparent transition-colors duration-300;
+}
+
+.site-header.is-scrolled {
+  @apply border-border bg-background/85 backdrop-blur;
+}
+
+.site-header-inner {
+  @apply mx-auto flex min-h-14 w-[min(1040px,calc(100%-2rem))] items-center justify-between gap-2 sm:min-h-16;
+}
+
+.site-name {
+  @apply text-xl font-bold text-title no-underline transition-colors hover:text-primary;
+}
+
+.site-header nav {
+  /* 导航项较多时允许横向滚动，避免移动端撑破布局 */
+  @apply flex items-center gap-1 overflow-x-auto;
+}
+
+.site-header nav a,
+.site-header nav span {
+  @apply rounded-md px-3 py-2 text-sm whitespace-nowrap text-muted-foreground no-underline transition-colors hover:text-primary;
+}
+
+.site-header nav a.router-link-active {
+  @apply font-semibold text-primary;
+}
+
+/* 昼夜切换：两个图标同时渲染，显隐由 html.dark 的 CSS 控制，不经过 Vue 状态，
+   因此 SSR 与 Hydration 输出一致，且 init script 执行后首帧即是正确图标 */
+.theme-toggle {
+  @apply grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-primary;
+}
+
+.theme-toggle .icon-moon {
+  display: none;
+}
+
+.dark .theme-toggle .icon-sun {
+  display: none;
+}
+
+.dark .theme-toggle .icon-moon {
+  display: block;
+}
+
+.site-main {
+  @apply mx-auto w-[min(1040px,calc(100%-2rem))] py-14 sm:py-20;
+}
+
+/* 阅读进度条：吸顶细红线，transform 推进不占布局 */
+.reading-progress {
+  @apply fixed top-0 left-0 z-50 h-0.5 w-full origin-left bg-primary;
+}
+
+/* 首页全屏封面：抵消 site-main 顶部留白并横向满屏，高度为视口减去 header */
+.home-hero {
+  @apply relative -mt-14 flex items-center justify-center overflow-hidden sm:-mt-20;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  height: calc(100vh - 3.5rem);
+  height: calc(100svh - 3.5rem);
+  min-height: 26rem;
+}
+
+@media (min-width: 640px) {
+  .home-hero {
+    height: calc(100vh - 4rem);
+    height: calc(100svh - 4rem);
+  }
+}
+
+.home-hero-bg,
+.home-hero-fallback,
+.home-hero-overlay {
+  @apply absolute inset-0;
+}
+
+.home-hero-bg img {
+  @apply h-full w-full object-cover;
+}
+
+/* 未配置站点封面时的兜底渐变：深灰蓝 → 炭黑的冷调渐变，比纯灰更有质感 */
+.home-hero-fallback {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgb(64 70 86 / 0.55) 0%, transparent 60%),
+    linear-gradient(160deg, #23262e 0%, #1a1c22 52%, #101114 100%);
+}
+
+/* 压暗封面保证白色标题在任何配图上的可读性，两种主题下一致 */
+.home-hero-overlay {
+  background: linear-gradient(rgb(16 16 18 / 0.45), rgb(16 16 18 / 0.55));
+}
+
+.home-hero-content {
+  @apply relative z-10 px-6 text-center text-white;
+}
+
+.home-hero-title {
+  @apply m-0 text-5xl font-bold tracking-tight drop-shadow-md sm:text-6xl lg:text-7xl;
+  color: #ffffff;
+}
+
+.home-hero-slogan {
+  @apply mt-5 text-base tracking-wide text-white/85 sm:text-lg;
+}
+
+/* 下滑箭头：纯 CSS 跳动动画，锚点定位到文章列表，无需 JS */
+.hero-arrow {
+  @apply absolute bottom-10 left-1/2 z-10 -translate-x-1/2 text-white/75 transition-colors hover:text-white;
+  animation: hero-bounce 1.8s ease-in-out infinite;
+}
+
+@keyframes hero-bounce {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, 10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-arrow {
+    animation: none;
+  }
+}
+
+/* 子页半高封面：与首页同款满幅结构，高度收敛到约 40vh */
+.page-hero {
+  @apply relative -mt-14 mb-2 flex items-center justify-center overflow-hidden sm:-mt-20;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  min-height: 32vh;
+}
+
+@media (min-width: 640px) {
+  .page-hero {
+    min-height: 44vh;
+  }
+}
+
+.page-hero-content {
+  @apply relative z-10 px-6 py-16 text-center;
+  color: #ffffff;
+}
+
+.page-hero-label {
+  @apply m-0 text-xs font-medium tracking-[0.3em] text-white/70 uppercase;
+}
+
+.page-hero-title {
+  @apply m-0 mt-2 text-4xl font-bold tracking-tight sm:text-5xl;
+  color: #ffffff;
+}
+
+.page-hero-desc {
+  @apply mx-auto mt-3 max-w-xl text-sm text-white/80;
+}
+
+/* 列表区标题：红色竖条 + 大标题 */
+.list-heading {
+  @apply mt-16 mb-2 flex items-center gap-3 text-2xl font-bold tracking-tight sm:text-3xl;
+}
+
+.list-heading::before {
+  content: "";
+  @apply inline-block h-6 w-1 rounded-full bg-primary;
+}
+
+.page-intro,
+.prose-page {
+  @apply max-w-3xl;
+}
+
+.page-intro h1,
+.prose-page h1 {
+  @apply mt-2 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl;
+}
+
+.section-label {
+  @apply m-0 text-xs font-medium text-primary;
+}
+
+/* 文章列表：细分隔线分隔的条目流，条目的纵向留白由 .post-item 自身承担 */
+.article-list {
+  @apply mt-6 flex flex-col divide-y;
+}
+
+.empty-articles {
+  @apply grid min-h-64 place-items-center text-sm text-muted-foreground;
+}
+
+/* 编辑排版风文章条目：无卡片包裹，靠留白与分隔线分层 */
+.post-item {
+  @apply flex flex-col gap-4 py-8 sm:flex-row sm:gap-8;
+}
+
+.post-item-body {
+  @apply min-w-0 flex-1;
+}
+
+.post-item-date {
+  @apply text-xs text-muted-foreground;
+}
+
+.post-meta {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+.post-chip {
+  @apply rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground no-underline transition-colors hover:border-primary hover:text-primary;
+}
+
+.badge-pinned {
+  @apply rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary;
+}
+
+.badge-locked {
+  @apply rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground;
+}
+
+.post-title {
+  @apply mt-3 text-2xl font-semibold leading-snug tracking-tight;
+}
+
+.post-title a {
+  @apply no-underline transition-colors hover:text-primary;
+}
+
+.post-summary {
+  @apply mt-3 line-clamp-2 text-justify text-sm leading-relaxed text-muted-foreground;
+}
+
+.post-more {
+  @apply mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary no-underline;
+}
+
+.post-more svg {
+  @apply size-4 transition-transform duration-300;
+}
+
+.post-more:hover svg {
+  transform: translateX(3px);
+}
+
+/* 搜索关键词高亮 */
+.search-mark {
+  @apply rounded-sm bg-primary/15 px-0.5 font-medium text-primary;
+}
+
+/* 封面缩略图：条目右侧，圆角加大，hover 缓慢放大 */
+.post-thumb {
+  @apply block min-w-0 overflow-hidden rounded-lg sm:order-last sm:w-52 sm:shrink-0;
+}
+
+.post-thumb img {
+  @apply aspect-[3/2] w-full object-cover transition-transform duration-500 hover:scale-105;
+}
+
+/* 顶栏搜索框：图标 + 可伸缩输入 + 下拉建议 */
+.search-box {
+  @apply relative hidden items-center sm:flex;
+}
+
+.search-box-icon {
+  @apply pointer-events-none absolute left-2.5 text-muted-foreground;
+}
+
+.search-box-input {
+  @apply w-32 rounded-full border bg-transparent py-1.5 pr-12 pl-8 text-sm transition-all outline-none focus:w-56 focus:border-primary;
+}
+
+.search-box-kbd {
+  @apply pointer-events-none absolute right-2.5 hidden rounded border px-1 text-[10px] text-muted-foreground lg:block;
+}
+
+.search-box-dropdown {
+  @apply absolute top-full right-0 left-0 z-30 mt-2 overflow-hidden rounded-lg border bg-card py-1 shadow-lg;
+}
+
+.search-box-item {
+  @apply block w-full cursor-pointer truncate border-0 bg-transparent px-3 py-2 text-left text-sm text-foreground;
+}
+
+.search-box-item.is-active {
+  @apply bg-muted;
+}
+
+.search-box-hint {
+  @apply border-t px-3 py-1.5 text-[10px] whitespace-nowrap text-muted-foreground;
+}
+
+/* ghost 风分页：无边框圆点，当前页红字淡红底 */
+.page-circle {
+  @apply inline-flex size-10 items-center justify-center rounded-full text-sm text-muted-foreground no-underline transition-colors hover:text-primary;
+}
+
+.page-circle-current {
+  @apply bg-accent font-semibold text-primary hover:text-primary;
+}
+
+.page-circle-disabled {
+  @apply cursor-not-allowed opacity-40 hover:text-muted-foreground;
+}
+
+.site-footer {
+  @apply mx-auto w-[min(1040px,calc(100%-2rem))] border-t py-10 text-xs text-muted-foreground;
+}
+
+.site-footer-nav {
+  @apply mb-4 flex flex-wrap items-center gap-x-4 gap-y-1;
+}
+
+.site-footer-nav a {
+  @apply no-underline transition-colors hover:text-primary;
+}
+
+.site-footer-bottom {
+  @apply flex items-center justify-between gap-4;
+}
+
+/* 导航下拉：桌面端 hover / 键盘 focus 展开，纯 CSS 实现不引交互依赖 */
+.nav-group {
+  @apply relative shrink-0;
+}
+
+.nav-dropdown {
+  @apply absolute left-0 top-full z-30 hidden min-w-40 flex-col gap-0.5 rounded-md border bg-card p-1.5 shadow-md;
+}
+
+.nav-group:hover .nav-dropdown,
+.nav-group:focus-within .nav-dropdown {
+  @apply flex;
+}
+
+/* 文章正文（后端渲染并消毒后的 HTML）排版样式 */
+.article-content {
+  @apply mt-10 leading-7 break-words;
+}
+
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+  /* 为吸顶导航预留锚点偏移 */
+  scroll-margin-top: 5.5rem;
+  @apply font-semibold leading-snug text-title;
+}
+
+.article-content h2 {
+  @apply mt-12 mb-4 border-b pb-2 text-2xl;
+}
+
+.article-content h3 {
+  @apply mt-8 mb-3 text-xl;
+}
+
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+  @apply mt-6 mb-2 text-base;
+}
+
+.article-content p {
+  @apply my-4;
+}
+
+.article-content a {
+  @apply text-primary underline underline-offset-4 hover:opacity-80;
+}
+
+.article-content ul {
+  @apply my-4 list-disc pl-6;
+}
+
+.article-content ol {
+  @apply my-4 list-decimal pl-6;
+}
+
+.article-content li {
+  @apply my-1;
+}
+
+.article-content blockquote {
+  @apply my-6 border-l-4 border-primary/40 bg-muted/60 py-2 pl-4 pr-3 text-muted-foreground;
+}
+
+.article-content code {
+  @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em];
+}
+
+/* 代码块在亮/暗两套主题下都保持深色（atom-one-dark 高亮主题是深色的） */
+.article-content pre {
+  @apply my-6 overflow-x-auto rounded-lg bg-neutral-900 p-4 text-sm leading-relaxed text-neutral-100;
+}
+
+.article-content pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+
+/* Mac 风格代码窗口：结构由 HighlightedContent 在客户端生成（div.code-window > header + pre） */
+.article-content .code-window {
+  @apply my-6 overflow-hidden rounded-lg bg-neutral-900 text-sm;
+}
+
+.article-content .code-window-header {
+  @apply flex items-center gap-2 border-b border-neutral-700/60 bg-neutral-800 px-4 py-2;
+}
+
+.article-content .code-window-dot {
+  @apply size-3 shrink-0 rounded-full;
+}
+
+.article-content .code-window-lang {
+  @apply ml-1 font-mono text-xs text-neutral-400;
+}
+
+.article-content .code-copy {
+  @apply ml-auto rounded px-2 py-0.5 text-xs text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-100;
+}
+
+.article-content .code-window pre {
+  @apply my-0 rounded-none;
+}
+
+/* 行号：highlightjs-line-numbers.js 把 code 拆成两列表格，数字列禁止选中以便复制纯净代码 */
+.article-content .code-window pre .hljs-ln {
+  /* 覆盖全局 .article-content table 的外边距，行号表不是内容表格 */
+  @apply m-0 w-full border-collapse;
+}
+
+.article-content .code-window pre .hljs-ln td {
+  /* 覆盖全局 .article-content td 的边框与内边距，否则每行都有浅色边框 */
+  @apply border-0 p-0 align-top;
+}
+
+.article-content .code-window pre .hljs-ln .hljs-ln-numbers {
+  @apply w-8 border-r border-neutral-700/60 pr-3 text-right text-neutral-500 select-none;
+}
+
+.article-content .code-window pre .hljs-ln .hljs-ln-code {
+  /* 行号模式下禁止折行，宽行交给 pre 的横向滚动，否则行号与代码错位 */
+  @apply w-full pl-4 whitespace-pre;
+}
+
+.article-content img {
+  @apply mx-auto my-6 h-auto max-w-full rounded-md;
+}
+
+.article-content table {
+  @apply my-6 w-full border-collapse text-sm;
+}
+
+.article-content th,
+.article-content td {
+  @apply border px-3 py-2 text-left;
+}
+
+.article-content th {
+  @apply bg-muted font-medium;
+}
+
+.article-content hr {
+  @apply my-10;
+}
+
+/* 标签 chips：边框 + hover 浮动，参考 xue 的 post-tag 但更简洁（无边框底色，hover 变主题红并上浮） */
+.tag-chip {
+  @apply inline-flex items-baseline gap-1.5 rounded-md border px-3 py-1.5 text-sm no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md;
+}
+
+.tag-chip-count {
+  @apply text-xs text-muted-foreground transition-colors duration-200;
+}
+
+.tag-chip:hover .tag-chip-count {
+  @apply text-primary/70;
+}
+
+/* 日志正文：复用文章排版，但时间线卡片内收紧与头部的间距 */.journal-content {
+  @apply mt-3;
+}
+
+/* 评论正文：复用文章排版但全面收紧——评论是短内容，沿用文章的段落/图片间距会显得松散。
+   与 .article-content 同优先级，靠书写顺序靠后生效 */
+.comment-content {
+  @apply mt-2 text-sm;
+}
+
+.comment-content p {
+  @apply my-2;
+}
+
+.comment-content h2 {
+  @apply mt-4 mb-2 border-0 pb-0 text-lg;
+}
+
+.comment-content h3 {
+  @apply mt-3 mb-1.5 text-base;
+}
+
+.comment-content ul,
+.comment-content ol {
+  @apply my-2;
+}
+
+.comment-content blockquote {
+  @apply my-3 py-1;
+}
+
+.comment-content pre {
+  @apply my-3;
+}
+
+.comment-content img {
+  @apply my-3;
+}
+
+.comment-content table {
+  @apply my-3;
+}
+
+.comment-content hr {
+  @apply my-4;
+}
+
+@media (max-width: 640px) {
+  .site-header nav a {
+    @apply px-2 py-1.5 text-xs;
+  }
+
+  .site-main {
+    @apply py-10;
+  }
+
+  /* 移动端封面只抵消较小的顶部留白 */
+  .home-hero,
+  .page-hero {
+    @apply -mt-10;
+  }
+
+  .site-footer-bottom {
+    @apply flex-col items-start gap-1;
+  }
+}

@@ -1,0 +1,16 @@
+[package]
+name = "aries-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+# 仅需 sync 特性：AiProvider 流式契约使用 mpsc::Sender。
+tokio = { workspace = true, features = ["sync"] }
+uuid.workspace = true

@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust（fmt / clippy / test）
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aries_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # 与 backend/server/tests/common/mod.rs 共享 Harness 的约定一致：
+      # 未设置 ARIES_RUN_DATABASE_TESTS=1 时数据库测试静默跳过。
+      ARIES_RUN_DATABASE_TESTS: "1"
+      DATABASE_HOST: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: aries_test
+      DATABASE_SCHEMA: public
+      BOOTSTRAP_SECRET: ci-test-bootstrap-secret-0123456789
+      ADMIN_ORIGINS: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 不指定 toolchain 输入，由 rust-toolchain.toml 锁定版本；附带 fmt / clippy 组件
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+  frontend:
+    name: Frontend（typecheck / test / build）
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm typecheck
+        run: pnpm typecheck
+
+      - name: pnpm test
+        run: pnpm test
+
+      - name: pnpm build
+        run: pnpm build

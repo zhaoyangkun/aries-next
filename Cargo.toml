@@ -1,0 +1,55 @@
+[workspace]
+members = [
+  "backend/core",
+  "backend/infra",
+  "backend/migrator",
+  "backend/server",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+version = "0.1.0"
+
+[workspace.dependencies]
+anyhow = "1"
+ammonia = "4"
+argon2 = { version = "0.5", features = ["std"] }
+bcrypt = "0.17"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["multipart"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+cookie = "0.18"
+comrak = { version = "0.35", default-features = false }
+dotenvy = "0.15"
+getrandom = "0.3"
+hmac = "0.12"
+http-body-util = "0.1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
+log = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+futures-util = { version = "0.3", default-features = false }
+rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "migrate", "macros", "uuid", "time"] }
+subtle = "2"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde", "serde-well-known"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "fs"] }
+tower = { version = "0.5", features = ["util", "timeout"] }
+tower-http = { version = "0.6", features = ["cors", "request-id", "trace"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+
+[profile.release]
+lto = "thin"
+strip = true

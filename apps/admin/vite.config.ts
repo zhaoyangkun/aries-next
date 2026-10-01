@@ -1,0 +1,68 @@
+import tailwindcss from '@tailwindcss/vite'
+import vue from '@vitejs/plugin-vue'
+import browserslist from 'browserslist'
+import { browserslistToTargets } from 'lightningcss'
+import { fileURLToPath, URL } from 'node:url'
+import AutoImport from 'unplugin-auto-import/vite'
+import Component from 'unplugin-vue-components/vite'
+import { defineConfig } from 'vite'
+import Layouts from 'vite-plugin-vue-layouts'
+import { VueRouterAutoImports } from 'vue-router/unplugin'
+import VueRouter from 'vue-router/vite'
+
+const RouteGenerateExclude = ['**/components/**', '**/layouts/**', '**/data/**', '**/types/**']
+
+export default defineConfig({
+  plugins: [
+    VueRouter({
+      exclude: RouteGenerateExclude,
+      dts: 'src/types/route-map.d.ts',
+    }),
+    vue(),
+    tailwindcss(),
+    Layouts({
+      defaultLayout: 'default',
+    }),
+    AutoImport({
+      include: [
+        /\.[tj]sx?$/,
+        /\.vue$/,
+      ],
+      imports: [
+        'vue',
+        VueRouterAutoImports,
+      ],
+      dirs: [
+        'src/composables/**/*.ts',
+        'src/constants/**/*.ts',
+        'src/stores/**/*.ts',
+      ],
+      defaultExportByFilename: true,
+      dts: 'src/types/auto-import.d.ts',
+    }),
+    Component({
+      dirs: [
+        'src/components',
+      ],
+      collapseSamePrefixes: true,
+      directoryAsNamespace: true,
+      dts: 'src/types/auto-import-components.d.ts',
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8088',
+    },
+  },
+  css: {
+    transformer: 'lightningcss',
+    lightningcss: {
+      targets: browserslistToTargets(browserslist(['> 1%', 'last 2 versions'])),
+    },
+  },
+})

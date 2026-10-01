@@ -1,0 +1,5107 @@
+openapi: 3.1.0
+info:
+  title: Aries Next API
+  version: 0.1.0
+  description: Aries Next API Contract。覆盖 Authentication、Content Publishing、Media Library、Public Web、Site Settings、Import、评论管理、Dashboard 聚合、Audit Log 查询、运行日志查询与 SQL 日志开关，以及扩展内容（Page、Journal、Gallery、Link、Navigation）与分组设置（appearance / email / integrations / ai）。
+servers:
+  - url: http://127.0.0.1:8088
+paths:
+  /api/health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      responses:
+        '200':
+          description: Process 正常运行。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      responses:
+        '200':
+          description: PostgreSQL 可访问。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: PostgreSQL 暂不可用。
+  /api/admin/bootstrap/status:
+    get:
+      tags: [Admin Authentication]
+      operationId: getBootstrapStatus
+      responses:
+        '200':
+          description: 返回是否已创建首个 User。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapStatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/admin/bootstrap:
+    post:
+      tags: [Admin Authentication]
+      operationId: bootstrapOwner
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapRequest'
+      responses:
+        '200':
+          description: 创建首个 Owner 并签发 Session Cookie。
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/auth/login:
+    post:
+      tags: [Admin Authentication]
+      operationId: loginAdmin
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication 成功并签发 Session Cookie。
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/auth/logout:
+    post:
+      tags: [Admin Authentication]
+      operationId: logoutAdmin
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: 撤销当前 Session 并清除 Cookie。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/auth/session:
+    get:
+      tags: [Admin Authentication]
+      operationId: getAdminSession
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 返回当前 Session 与 User View。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/admin/auth/password/forgot:
+    post:
+      tags: [Admin Authentication]
+      operationId: requestPasswordReset
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: 无论账号是否存在都返回相同响应。Phase 05 接入 Email Adapter 前不会发送 Email。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/auth/password/reset:
+    post:
+      tags: [Admin Authentication]
+      operationId: resetPassword
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: 更新 Password 并撤销该 User 的全部 Session。
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/profile:
+    get:
+      tags: [Admin Profile]
+      operationId: getAdminProfile
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 返回当前 User Profile。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin Profile]
+      operationId: updateAdminProfile
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: 返回更新后的 User Profile。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/profile/password:
+    put:
+      tags: [Admin Profile]
+      operationId: updateAdminPassword
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
+      responses:
+        '204':
+          description: 更新 Password，撤销全部 Session 并清除当前 Cookie。
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/articles:
+    get:
+      tags: [Admin Articles]
+      operationId: listAdminArticles
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ArticleStatus' }
+        - name: sort
+          in: query
+          description: 排序字段白名单；非法值静默回退 `updated_at`。
+          schema:
+            type: string
+            enum: [updated_at, created_at, published_at, title]
+            default: updated_at
+        - name: order
+          in: query
+          description: 排序方向；非法值静默回退 `desc`。稳定 Tie-breaker 恒为 `id DESC`。
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: 返回具备稳定 Total 语义的 Article Page。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticlePageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Articles]
+      operationId: createAdminArticleDraft
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateArticleRequest'
+      responses:
+        '201':
+          description: Draft 已写入 PostgreSQL。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/articles/preview:
+    post:
+      tags: [Admin Articles]
+      operationId: previewAdminArticle
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewArticleRequest'
+      responses:
+        '200':
+          description: 返回经过 `comrak` Render 和 `ammonia` Sanitization 的 HTML。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewArticleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/articles/{id}:
+    get:
+      tags: [Admin Articles]
+      operationId: getAdminArticle
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 返回 Article 的 Markdown 原文和当前版本。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Articles]
+      operationId: updateAdminArticle
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateArticleRequest'
+      responses:
+        '200':
+          description: 返回保存后的 Article 和新版本号。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Articles]
+      operationId: deleteAdminArticle
+      description: 物理删除文章及其 Revision 与 Tag 关联；仅 `recycled` 状态允许删除，否则返回 409 `ARTICLE_NOT_RECYCLED`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: Article 已物理删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/articles/{id}/revisions:
+    get:
+      tags: [Admin Articles]
+      operationId: listAdminArticleRevisions
+      description: 按 `revision_no` 倒序返回 Revision 列表；响应不含密码哈希，只暴露 `password_protected`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 返回 Article 的 Revision 列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticleRevisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/articles/{id}/revisions/{rev}/restore:
+    post:
+      tags: [Admin Articles]
+      operationId: restoreAdminArticleRevision
+      description: 将指定 Revision 的 Markdown 与元数据写回文章（`status`/`published_at` 不回滚）；恢复前会自动为当前版本留档新 Revision。版本冲突返回 409 `ARTICLE_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: rev
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRevisionRequest'
+      responses:
+        '200':
+          description: 返回恢复后的 Article 和新版本号。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Article 或 Revision 不存在（`ARTICLE_NOT_FOUND` / `REVISION_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/articles/{id}/status:
+    patch:
+      tags: [Admin Articles]
+      operationId: changeAdminArticleStatus
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeArticleStatusRequest'
+      responses:
+        '200':
+          description: 返回状态流转后的 Article 和新版本号。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/categories:
+    get:
+      tags: [Admin Articles]
+      operationId: listAdminArticleCategories
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 返回可用于 Article Editor 的 Category 列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticleCategoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Articles]
+      operationId: createAdminArticleCategory
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '201':
+          description: 返回新建的 Article Category。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/categories/{id}:
+    put:
+      tags: [Admin Articles]
+      operationId: updateAdminArticleCategory
+      description: 更新 Category 的 `name`/`slug`；slug 复用统一 Normalize 规则，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '200':
+          description: 返回更新后的 Article Category。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Articles]
+      operationId: deleteAdminArticleCategory
+      description: 仍被 Article 引用时返回 409 `TAXONOMY_IN_USE`，并在 `error.details.reference_count` 携带引用数。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: Category 已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/tags:
+    get:
+      tags: [Admin Articles]
+      operationId: listAdminTags
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 返回可用于 Article Editor 的 Tag 列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticleTagResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Articles]
+      operationId: createAdminTag
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '201':
+          description: 返回新建的 Tag。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleTagResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/tags/{id}:
+    put:
+      tags: [Admin Articles]
+      operationId: updateAdminTag
+      description: 更新 Tag 的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '200':
+          description: 返回更新后的 Tag。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleTagResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Articles]
+      operationId: deleteAdminTag
+      description: 仍被 Article 引用时返回 409 `TAXONOMY_IN_USE`，并在 `error.details.reference_count` 携带引用数。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: Tag 已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/comments:
+    get:
+      tags: [Admin Comments]
+      operationId: listAdminComments
+      description: Admin 评论列表。返回访客 Email 辅助审核判断；Public API 永不暴露该字段。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/CommentStatus' }
+        - name: target_type
+          in: query
+          schema:
+            type: string
+            enum: [article, page, link]
+        - name: target_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: keyword
+          in: query
+          description: 对内容 Markdown 与评论者名称做模糊匹配。
+          schema: { type: string }
+      responses:
+        '200':
+          description: 具备稳定 Total 语义的 Comment Page。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/comments/{id}:
+    get:
+      tags: [Admin Comments]
+      operationId: getAdminComment
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 评论详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Comments]
+      operationId: deleteAdminComment
+      description: 物理删除评论。仅 `recycled` 状态允许，其余状态返回 409 `COMMENT_NOT_RECYCLED`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 评论已物理删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/comments/{id}/status:
+    patch:
+      tags: [Admin Comments]
+      operationId: changeAdminCommentStatus
+      description: 评论审核。状态转换遵循 core 状态机：pending → approved/rejected/spam；approved/rejected/spam → recycled；recycled → approved（恢复并公开）。非法转换返回 409 `INVALID_COMMENT_TRANSITION`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeCommentStatusRequest'
+      responses:
+        '200':
+          description: 状态变更成功。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/comments/{id}/reply:
+    post:
+      tags: [Admin Comments]
+      operationId: replyAdminComment
+      description: 管理员回复评论。Markdown 渲染并 Sanitize 后返回，状态直接为 `approved`，署名取操作管理员的展示名。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplyCommentRequest'
+      responses:
+        '201':
+          description: 回复已创建并公开。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/dashboard:
+    get:
+      tags: [Admin Dashboard]
+      operationId: getAdminDashboard
+      description: Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务，一次请求完成。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 聚合统计。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/audit-logs:
+    get:
+      tags: [Admin Audit]
+      operationId: listAdminAuditLogs
+      description: Admin 敏感操作审计日志查询，仅 Owner 可访问。时间范围按 `created_at` 左闭右开过滤，格式 RFC 3339；非法时间值返回 400 `INVALID_DATE_RANGE`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: actor_user_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: action
+          in: query
+          description: 如 `article.created`、`comment.moderated`。
+          schema: { type: string }
+        - name: target_type
+          in: query
+          description: 如 `article`、`comment`、`site_settings`。
+          schema: { type: string }
+        - name: target_id
+          in: query
+          schema: { type: string }
+        - name: start
+          in: query
+          schema: { type: string, format: date-time }
+        - name: end
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: 审计日志分页。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/logs:
+    get:
+      tags: [Admin Logs]
+      operationId: listAdminLogs
+      description: 运行日志查询（数据来自 `server_logs` 表，tracing 事件批量落库），仅 Owner（`ManageSettings`）可访问。排序按 `ts, id`；`start`/`end` 按 `ts` 左闭右开过滤，格式 RFC 3339，非法值返回 400 `INVALID_DATE_RANGE`。`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`。提供 `around_id` 时进入上下文模式：以锚点行的 `ts` 为中心前后各取 `context` 条，按 `ts asc, id asc` 返回，忽略 `page`/`page_size`/`start`/`end`/`order`；锚点不存在返回 404 `LOG_ENTRY_NOT_FOUND`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: level
+          in: query
+          description: 最低级别语义，如 `WARN` 含 WARN+ERROR；缺省或未知值返回全部级别。
+          schema: { type: string, enum: [ERROR, WARN, INFO, DEBUG, TRACE] }
+        - name: target
+          in: query
+          description: tracing target（模块路径）精确匹配；候选值见 `/api/admin/logs/targets`。与 `exclude_target` 互斥。
+          schema: { type: string }
+        - name: exclude_target
+          in: query
+          description: 精确排除某个 target（如 `sqlx::query`）；与 `target` 同用返回 400 `INVALID_FILTER`。
+          schema: { type: string }
+        - name: around_id
+          in: query
+          description: 上下文模式锚点（日志行 id）；提供时忽略 `page`/`page_size`/`start`/`end`/`order`，响应中 `page` 恒为 1、`total` 为实际返回条数、`page_size` 为 `context`。
+          schema: { type: integer, format: int64 }
+        - name: context
+          in: query
+          description: 上下文模式窗口：锚点前后各取的条数。
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: keyword
+          in: query
+          description: 对 `message` 与 `fields`（JSON 文本）模糊匹配（ILIKE）；`%`、`_`、`\` 按字面量转义。
+          schema: { type: string }
+        - name: request_id
+          in: query
+          description: 精确匹配 `x-request-id`，用于查询同一请求的完整日志链路。
+          schema: { type: string }
+        - name: start
+          in: query
+          schema: { type: string, format: date-time }
+        - name: end
+          in: query
+          schema: { type: string, format: date-time }
+        - name: order
+          in: query
+          description: 排序方向；链路追踪场景用 `asc` 按时间正序看流转，未知值按 `desc` 处理。
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+      responses:
+        '200':
+          description: 运行日志分页，附最近 24 小时各级别条数。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 上下文模式锚点不存在（`LOG_ENTRY_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/admin/logs/stats:
+    get:
+      tags: [Admin Logs]
+      operationId: listAdminLogStats
+      description: 运行日志分桶统计（趋势图数据），仅 Owner（`ManageSettings`）可访问。`hours` 默认 24、范围 1–168；≤48 小时按小时分桶，>48 小时按天分桶（`date_trunc`）；桶按时间升序，五个级别键恒在（无数据为 0）。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: hours
+          in: query
+          description: 统计窗口（小时）。
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+      responses:
+        '200':
+          description: 分桶统计。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/logs/targets:
+    get:
+      tags: [Admin Logs]
+      operationId: listAdminLogTargets
+      description: 已出现过的 tracing target 去重列表，用于筛选下拉框，仅 Owner（`ManageSettings`）可访问。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: target 列表（升序，最多 200 条）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogTargetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/logs/sql:
+    get:
+      tags: [Admin Logs]
+      operationId: getSqlLogging
+      description: 查询 SQL 语句日志（`sqlx::query` DEBUG 级）的运行时开关状态，仅 Owner（`ManageSettings`）可访问。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 当前开关状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlLoggingState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin Logs]
+      operationId: setSqlLogging
+      description: 运行时切换 SQL 语句日志开关（tracing_subscriber reload），无需重启；`LOG_SQL` 环境变量仅作为启动初始值。仅 Owner（`ManageSettings`）可访问。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlLoggingRequest'
+      responses:
+        '200':
+          description: 切换后的开关状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlLoggingState'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/logs/filter:
+    get:
+      tags: [Admin Logs]
+      operationId: getLogFilterOverride
+      description: 查询运行时日志级别覆盖状态（自定义 EnvFilter directives 与自动复位剩余时间），仅 Owner（`ManageSettings`）可访问。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 当前覆盖状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogFilterOverride'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin Logs]
+      operationId: setLogFilterOverride
+      description: 运行时设置日志级别覆盖（tracing_subscriber reload，无需重启），用于临时排障（如 `aries_server=debug`）。可带自动复位：到期未再变更则恢复默认过滤器；空 `directives` 清除覆盖（含未到期自动复位一并失效）。仅 Owner（`ManageSettings`）可访问。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogFilterOverrideRequest'
+      responses:
+        '200':
+          description: 设置后的覆盖状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogFilterOverride'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/logs/tail:
+    get:
+      tags: [Admin Logs]
+      operationId: tailAdminLogs
+      description: "实时推送运行日志（SSE，`text/event-stream`）：以连接时刻的最大日志 id 为锚点，每 500ms 轮询推送之后写入且匹配筛选的新日志。事件为 `event: log`、`data` 为单个日志条目（形状同 `LogListItem`）；锚点查询失败时推送 `event: error` 后结束。筛选参数语义与列表接口一致（`level` 为最低级别；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`）。仅 Owner（`ManageSettings`）可访问。"
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: level
+          in: query
+          description: 最低级别（同列表语义）。
+          schema: { type: string, enum: [ERROR, WARN, INFO, DEBUG, TRACE] }
+        - name: target
+          in: query
+          description: tracing target 精确匹配；与 `exclude_target` 互斥。
+          schema: { type: string }
+        - name: exclude_target
+          in: query
+          description: 精确排除该 target；与 `target` 互斥。
+          schema: { type: string }
+        - name: keyword
+          in: query
+          description: message 与 fields 模糊匹配（ILIKE，%/_ 转义）。
+          schema: { type: string }
+        - name: request_id
+          in: query
+          description: 请求链路追踪：精确匹配 request_id。
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE 流（持续响应，客户端断开即结束）。
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event: log\ndata: {\"id\": 1, \"ts\": \"2026-09-12T00:00:00Z\", \"level\": \"INFO\", \"target\": \"aries_server\", \"message\": \"request completed\", \"span_name\": \"http_request\", \"request_id\": \"...\", \"fields\": {}}"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/pages:
+    get:
+      tags: [Admin Pages]
+      operationId: listAdminPages
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/PageStatus' }
+        - name: keyword
+          in: query
+          description: 对标题与 Slug 做模糊匹配；空白值被忽略。
+          schema: { type: string }
+      responses:
+        '200':
+          description: 自定义页面分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Pages]
+      operationId: createAdminPage
+      description: 创建自定义页面；`content_html` 由服务端 Render Markdown 后入库。Slug 冲突返回 409 `SLUG_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageRequest'
+      responses:
+        '201':
+          description: 返回新建的页面。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/pages/{id}:
+    get:
+      tags: [Admin Pages]
+      operationId: getAdminPage
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 页面详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Pages]
+      operationId: updateAdminPage
+      description: 全量更新页面；`content_html` 由服务端重新 Render。Slug 冲突返回 409 `SLUG_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageRequest'
+      responses:
+        '200':
+          description: 返回更新后的页面。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Pages]
+      operationId: deleteAdminPage
+      description: 软删除页面；删除后同 Slug 可重新创建。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 页面已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/journals:
+    get:
+      tags: [Admin Journals]
+      operationId: listAdminJournals
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: visibility
+          in: query
+          schema: { $ref: '#/components/schemas/JournalVisibility' }
+      responses:
+        '200':
+          description: 日志分页；稳定排序 `created_at DESC, id DESC`，不含已软删除记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Journals]
+      operationId: createAdminJournal
+      description: 创建日志；`content_markdown` 长度 1–2000，`content_html` 由服务端 Render。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalRequest'
+      responses:
+        '201':
+          description: 返回新建的日志。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/journals/{id}:
+    get:
+      tags: [Admin Journals]
+      operationId: getAdminJournal
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 日志详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Journals]
+      operationId: updateAdminJournal
+      description: 全量更新日志；`content_html` 由服务端重新 Render。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalRequest'
+      responses:
+        '200':
+          description: 返回更新后的日志。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Journals]
+      operationId: deleteAdminJournal
+      description: 软删除日志。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 日志已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/galleries:
+    get:
+      tags: [Admin Galleries]
+      operationId: listAdminGalleries
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/GalleryStatus' }
+        - name: category_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: keyword
+          in: query
+          description: 对标题与 Slug 做模糊匹配；空白值被忽略。
+          schema: { type: string }
+      responses:
+        '200':
+          description: 图库分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Galleries]
+      operationId: createAdminGallery
+      description: 创建图库；`category_id` 必须指向 kind 为 `gallery` 的分类。Slug 冲突返回 409 `GALLERY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryRequest'
+      responses:
+        '201':
+          description: 返回新建的图库。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/galleries/categories:
+    get:
+      tags: [Admin Galleries]
+      operationId: listAdminGalleryCategories
+      description: 返回 kind 为 `gallery` 的分类列表。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 图库分类列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticleCategoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Galleries]
+      operationId: createAdminGalleryCategory
+      description: 创建 kind 为 `gallery` 的分类；Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '201':
+          description: 返回新建的图库分类。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/galleries/categories/{id}:
+    put:
+      tags: [Admin Galleries]
+      operationId: updateAdminGalleryCategory
+      description: 更新图库分类的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '200':
+          description: 返回更新后的图库分类。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Galleries]
+      operationId: deleteAdminGalleryCategory
+      description: 物理删除图库分类；仍被 Gallery 引用时返回 409 `TAXONOMY_IN_USE`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 图库分类已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/galleries/{id}:
+    get:
+      tags: [Admin Galleries]
+      operationId: getAdminGallery
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 图库详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Galleries]
+      operationId: updateAdminGallery
+      description: 全量更新图库；Slug 冲突返回 409 `GALLERY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryRequest'
+      responses:
+        '200':
+          description: 返回更新后的图库。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Galleries]
+      operationId: deleteAdminGallery
+      description: 软删除图库；其条目一并解除引用。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 图库已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/galleries/{id}/items:
+    get:
+      tags: [Admin Galleries]
+      operationId: listAdminGalleryItems
+      description: 图库条目列表；稳定排序 `sort_order ASC, id ASC`。图库不存在返回 404。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 图库条目列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GalleryItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Admin Galleries]
+      operationId: addAdminGalleryItem
+      description: 向图库添加媒体条目；同一媒体在同一图库中只可出现一次，重复返回 409 `GALLERY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryItemRequest'
+      responses:
+        '201':
+          description: 返回新建的图库条目。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/galleries/{id}/items/order:
+    put:
+      tags: [Admin Galleries]
+      operationId: reorderAdminGalleryItems
+      description: 原子批量重排图库条目；事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不属于该图库则整体回滚。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryItemOrderRequest'
+      responses:
+        '204':
+          description: 排序已应用。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/galleries/{id}/items/{item_id}:
+    put:
+      tags: [Admin Galleries]
+      operationId: updateAdminGalleryItem
+      description: 更新条目的 `alt`/`location`/`sort_order`；媒体引用创建后不可改。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: item_id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GalleryItemUpdateRequest'
+      responses:
+        '200':
+          description: 返回更新后的图库条目。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Galleries]
+      operationId: removeAdminGalleryItem
+      description: 物理移除图库条目。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: item_id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 条目已移除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/links:
+    get:
+      tags: [Admin Links]
+      operationId: listAdminLinks
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/LinkStatus' }
+        - name: category_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: keyword
+          in: query
+          description: 对标题与 URL 做模糊匹配；空白值被忽略。
+          schema: { type: string }
+      responses:
+        '200':
+          description: 友情链接分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Links]
+      operationId: createAdminLink
+      description: 创建友情链接；`url` 仅允许 http/https，否则返回 400 `INVALID_LINK_URL`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkRequest'
+      responses:
+        '201':
+          description: 返回新建的友情链接。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/links/categories:
+    get:
+      tags: [Admin Links]
+      operationId: listAdminLinkCategories
+      description: 返回 kind 为 `link` 的分类列表。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 友链分类列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticleCategoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Links]
+      operationId: createAdminLinkCategory
+      description: 创建 kind 为 `link` 的分类；Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '201':
+          description: 返回新建的友链分类。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/links/categories/{id}:
+    put:
+      tags: [Admin Links]
+      operationId: updateAdminLinkCategory
+      description: 更新友链分类的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyRequest'
+      responses:
+        '200':
+          description: 返回更新后的友链分类。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleCategoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin Links]
+      operationId: deleteAdminLinkCategory
+      description: 物理删除友链分类；仍存在未删除的友链引用时返回 409 `TAXONOMY_IN_USE`（FK 为 `ON DELETE SET NULL`，回收站中的友链不阻塞删除）。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 友链分类已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/links/{id}:
+    get:
+      tags: [Admin Links]
+      operationId: getAdminLink
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 友情链接详情。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Links]
+      operationId: updateAdminLink
+      description: 全量更新友情链接；`url` 仅允许 http/https。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkRequest'
+      responses:
+        '200':
+          description: 返回更新后的友情链接。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Links]
+      operationId: deleteAdminLink
+      description: 软删除友情链接。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 友情链接已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/navigation:
+    get:
+      tags: [Admin Navigation]
+      operationId: listAdminNavigation
+      description: 平铺返回全部导航节点（含隐藏项），前端按 `parent_id` 组树；稳定排序 `parent_id NULLS FIRST, sort_order ASC, id ASC`。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 导航节点列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NavigationItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Navigation]
+      operationId: createAdminNavigationItem
+      description: 创建导航节点；最多两级，超出返回 400 `INVALID_NAVIGATION_HIERARCHY`。`target_type` 为 `url` 时必须提供 `url`，其余类型必须提供 `target_id`（400 `INVALID_NAVIGATION_TARGET`）。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NavigationItemRequest'
+      responses:
+        '201':
+          description: 返回新建的导航节点。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavigationItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/navigation/order:
+    put:
+      tags: [Admin Navigation]
+      operationId: reorderAdminNavigation
+      description: 原子批量重排导航节点；事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不存在则整体回滚并返回 404 `NAVIGATION_NOT_FOUND`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NavigationOrderRequest'
+      responses:
+        '204':
+          description: 排序已应用。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/navigation/{id}:
+    put:
+      tags: [Admin Navigation]
+      operationId: updateAdminNavigationItem
+      description: 全量更新导航节点；层级与目标字段校验同创建。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NavigationItemRequest'
+      responses:
+        '200':
+          description: 返回更新后的导航节点。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NavigationItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Navigation]
+      operationId: deleteAdminNavigationItem
+      description: 物理删除导航节点；仍含子节点时返回 409 `NAVIGATION_CONFLICT`，须先删除或移动子节点。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 导航节点已删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/settings/{group}:
+    get:
+      tags: [Admin Settings]
+      operationId: getAdminSettingGroup
+      description: 读取分组设置，需要 `settings:manage` 权限。email 组的 `smtp_password`、ai 组的 `api_key` 为 write-only，响应只携带 `*_set` 表示是否已设置。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: group
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/SettingGroupName' }
+      responses:
+        '200':
+          description: 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingGroupResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 分组名非法（`SETTING_GROUP_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Admin Settings]
+      operationId: updateAdminSettingGroup
+      description: 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变，只更新提交的字段，不会重置未提交字段。email 组 `smtp_password`、ai 组 `api_key` 三态语义：字段省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: group
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/SettingGroupName' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingGroupRequest'
+      responses:
+        '200':
+          description: 返回更新后的分组设置。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingGroupResponse'
+        '400':
+          description: Payload 结构不合法（`INVALID_SETTING_PAYLOAD`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 分组名非法（`SETTING_GROUP_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/ai/editor/rewrite:
+    post:
+      tags: [Admin AI]
+      operationId: aiEditorRewrite
+      description: 改写选中的 Markdown 片段（SSE 流式）。需要 `content:manage` 权限与 `editor_assist` 功能开关。事件序列：`start`（feature/model/prompt_version）→ `delta` × N（`{text}`）→ `usage`（可选，token 用量）→ `done`；失败时以 `error`（`{code}`：`AI_PROVIDER_FAILED` / `AI_PROVIDER_TIMEOUT` / `AI_RATE_LIMITED` / `AI_INVALID_OUTPUT`）终止。每用户每分钟限 10 次（429）。每次请求落 `ai_requests` 审计并写 Audit（不含完整 Prompt）。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiRewriteRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: AI 未启用（`AI_DISABLED`）或该功能未开启（`AI_FEATURE_DISABLED`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/editor/summary:
+    post:
+      tags: [Admin AI]
+      operationId: aiEditorSummary
+      description: 根据标题与正文生成摘要草稿；事件序列与门禁同 `aiEditorRewrite`。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiArticleContextRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/editor/metadata:
+    post:
+      tags: [Admin AI]
+      operationId: aiEditorMetadata
+      description: 建议 slug/keywords/description。Provider 被要求输出 JSON，服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端自行解析 delta 拼接的 JSON 文本。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiArticleContextRequest'
+      responses:
+        '200':
+          description: SSE 流（`text/event-stream`）。
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/usage:
+    get:
+      tags: [Admin AI]
+      operationId: listAiUsage
+      description: AI 请求用量审计分页查询，需要 `settings:manage` 权限；可按 `feature` 过滤，按创建时间倒序。`operator_user_id` 为 null 表示系统触发（评论自动审核）。
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: feature
+          in: query
+          schema: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation] }
+      responses:
+        '200':
+          description: 用量审计分页。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiUsagePageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/public/articles:
+    get:
+      tags: [Public Articles]
+      operationId: listPublicArticles
+      description: 匿名可访问；只返回 `published` 状态文章。固定排序 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`，不提供排序参数。缺省分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200），阻止爬虫沿 `?page=N` 生成无限重复 URL。
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: category_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: tag_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: category
+          in: query
+          description: 按分类 Slug 过滤（大小写不敏感）。
+          schema: { type: string }
+        - name: tag
+          in: query
+          description: 按标签 Slug 过滤（大小写不敏感）。
+          schema: { type: string }
+      responses:
+        '200':
+          description: 返回已发布 Article 的分页结果；列表项不含 Markdown 原文与内部字段。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicArticlePageResponse'
+        '404':
+          description: 越界分页（`PAGE_OUT_OF_RANGE`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/articles/{slug}:
+    get:
+      tags: [Public Articles]
+      operationId: getPublicArticle
+      description: "匿名可访问；Slug 不区分大小写。草稿、回收站或不存在的 Slug 一律返回 404 `ARTICLE_NOT_FOUND`。受密码保护的文章返回 `password_protected: true` 且 `rendered_html: null`，携带有效解锁 Cookie（见 access 端点）后返回正文。普通文章响应 `Cache-Control: public, max-age=60`，密码文章为 `private, no-store`。"
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 返回已发布 Article 的公开详情；不含 `markdown_source`、`author_id`、`version`。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicArticleDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/articles/{slug}/access:
+    post:
+      tags: [Public Articles]
+      operationId: unlockPublicArticle
+      description: 校验访问密码；成功后下发 HttpOnly Cookie `aries_article_access_{article_id}`（Path 限定本文详情、SameSite=Lax、2 小时），值为 HMAC-SHA256 凭据，密码修改后自动失效。同一客户端对同一文章限流 5 次/分钟。响应对所有缓存 `no-store`。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        '200':
+          description: 解锁成功，`Set-Cookie` 携带访问凭据。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unlocked]
+                properties:
+                  unlocked: { type: boolean }
+        '400':
+          description: 文章未设置访问密码（`ARTICLE_NOT_PROTECTED`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 密码错误（`INVALID_ARTICLE_PASSWORD`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/public/articles/{slug}/views:
+    post:
+      tags: [Public Articles]
+      operationId: recordPublicArticleView
+      description: 浏览量 +1；同一客户端（IP + User-Agent 指纹）30 分钟滑动窗口内重复调用只计一次，窗口内重复调用返回当前计数。客户端不能指定计数值。响应 `no-store`。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 当前浏览量。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [visit_count]
+                properties:
+                  visit_count: { type: integer, format: int64, minimum: 0 }
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/site:
+    get:
+      tags: [Public Site]
+      operationId: getPublicSite
+      description: site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。
+      responses:
+        '200':
+          description: 公开站点信息。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSiteResponse'
+  /api/public/categories:
+    get:
+      tags: [Public Taxonomy]
+      operationId: listPublicCategories
+      description: kind 为 `article` 的分类列表，含实时 Published 文章数。
+      responses:
+        '200':
+          description: 分类摘要列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicCategory'
+  /api/public/categories/{slug}/articles:
+    get:
+      tags: [Public Taxonomy]
+      operationId: listPublicCategoryArticles
+      description: 该分类下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: 分页文章列表。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicArticlePageResponse'
+        '404':
+          description: 分类不存在（`CATEGORY_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/tags:
+    get:
+      tags: [Public Taxonomy]
+      operationId: listPublicTags
+      description: 标签列表，含实时 Published 文章数。
+      responses:
+        '200':
+          description: 标签摘要列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicTag'
+  /api/public/tags/{slug}/articles:
+    get:
+      tags: [Public Taxonomy]
+      operationId: listPublicTagArticles
+      description: 该标签下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: 分页文章列表。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicArticlePageResponse'
+        '404':
+          description: 标签不存在（`TAG_NOT_FOUND`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/archives:
+    get:
+      tags: [Public Articles]
+      operationId: listPublicArchives
+      description: Published 文章按 year/month 聚合，组间倒序、组内按发布时间倒序。
+      responses:
+        '200':
+          description: 归档分组列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicArchiveMonth'
+  /api/public/search:
+    get:
+      tags: [Public Articles]
+      operationId: searchPublicArticles
+      description: 全文搜索（PostgreSQL FTS `simple` 分词，OR ILIKE 兜底标题与摘要），只命中 Published；结果不含正文全文。按相关度排序（标题命中 > 摘要命中 > 仅正文命中，同档按发布时间倒序）。摘要未覆盖的正文命中在 `matched_excerpt` 返回纯文本片段（Markdown 已剥离、两端可带 `…`），由前端负责关键词高亮；摘要已含关键词时不返回该字段。分页大小取站点设置 `page_size_search`。`page > 1` 且当前页无命中时返回 404 `PAGE_OUT_OF_RANGE`；page=1 无命中保持 200。
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        '200':
+          description: 搜索命中分页。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicArticlePageResponse'
+        '400':
+          description: 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 越界分页（`PAGE_OUT_OF_RANGE`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/search/suggest:
+    get:
+      tags: [Public Articles]
+      operationId: searchSuggest
+      description: 搜索建议（输入即搜下拉）：标题/摘要包含匹配，标题前缀命中优先，按发布时间倒序取前 `limit` 条，只命中 Published。响应不可缓存。
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 8 }
+      responses:
+        '200':
+          description: 建议列表（可能为空数组）。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicSearchSuggestion'
+        '400':
+          description: 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/pages/{slug}:
+    get:
+      tags: [Public Extended]
+      operationId: getPublicPage
+      description: 匿名可访问；只返回 `published` 页面。草稿、已删除或不存在的 Slug 一律返回 404 `PAGE_NOT_FOUND`。响应不含 Markdown 原文。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 已发布页面的公开详情。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicPageDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/journals:
+    get:
+      tags: [Public Extended]
+      operationId: listPublicJournals
+      description: 匿名可访问；只返回 `visibility = public` 的日志，`private` 内容永不进入结果集。稳定排序 `created_at DESC, id DESC`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 公开日志分页；列表项只含渲染后的 HTML。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicJournalPageResponse'
+        '404':
+          description: 越界分页（`PAGE_OUT_OF_RANGE`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/galleries:
+    get:
+      tags: [Public Extended]
+      operationId: listPublicGalleries
+      description: 匿名可访问；只返回 `published` 图库摘要，`cover_url` 取封面媒体的公开 URL。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 公开图库摘要分页。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicGalleryPageResponse'
+        '404':
+          description: 越界分页（`PAGE_OUT_OF_RANGE`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/public/galleries/{slug}:
+    get:
+      tags: [Public Extended]
+      operationId: getPublicGallery
+      description: 匿名可访问；只返回 `published` 图库，草稿、已删除或不存在的 Slug 一律返回 404 `GALLERY_NOT_FOUND`。条目携带媒体公开 URL 与尺寸；条目未填 `alt` 时回退媒体资产自身的 `alt`。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 公开图库详情（含条目）。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicGalleryDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/links:
+    get:
+      tags: [Public Extended]
+      operationId: listPublicLinks
+      description: 匿名可访问；只返回 `status = active` 的友情链接，不含管理字段。稳定排序 `sort_order ASC, id ASC`。
+      responses:
+        '200':
+          description: 公开友情链接列表。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicLink'
+  /api/public/photos:
+    get:
+      tags: [Public Extended]
+      operationId: listPublicPhotos
+      description: 匿名可访问的照片墙：跨相册平铺所有 `published` 且未删除相册的条目，不分页（对齐旧版 xue 主题的 GetAll 行为）。稳定排序 `galleries.sort_order ASC, galleries.id ASC, gallery_items.sort_order ASC`。
+      responses:
+        '200':
+          description: 公开照片墙列表。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicPhoto'
+  /api/public/articles/{slug}/comments:
+    get:
+      tags: [Public Comments]
+      operationId: listPublicArticleComments
+      description: 匿名可访问；只返回已发布文章的 `approved` 评论，组织为两级树（根评论的 `children` 为回复，回复下的回复平铺在同一根下）。分页只作用于根评论，回复整组跟随所属根；根评论按创建时间升序。文章不存在或未发布返回 404 `ARTICLE_NOT_FOUND`；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+          description: 缺省时取站点设置 `comments_per_page`。
+      responses:
+        '200':
+          description: 已批准评论树分页。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCommentPageResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/pages/{slug}/comments:
+    get:
+      tags: [Public Comments]
+      operationId: listPublicPageComments
+      description: 匿名可访问；与 `listPublicArticleComments` 同语义，目标为已发布页面（Page）。页面不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+          description: 缺省时取站点设置 `comments_per_page`。
+      responses:
+        '200':
+          description: 已批准评论树分页。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCommentPageResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/public/comments:
+    post:
+      tags: [Public Comments]
+      operationId: createPublicComment
+      description: 访客发表评论。目标只允许已发布文章（`article`）或已发布页面（`page`），按 `target_slug` 定位。初始状态由站点评论策略决定：`moderated` → `pending`、`auto_approve` → `approved`、`closed` → 403 `COMMENTS_CLOSED`。Markdown 由服务端渲染并 Sanitize；Email/IP/UA 只存 Hash，不出现在任何响应中。同一客户端 60 秒最多 3 条（429 `RATE_LIMITED`）；相同 Email + 目标 + 内容 5 分钟内重复提交返回 409 `COMMENT_DUPLICATE`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePublicCommentRequest'
+      responses:
+        '200':
+          description: 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCommentCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/public/comments/{id}/replies:
+    post:
+      tags: [Public Comments]
+      operationId: replyPublicComment
+      description: 回复某条评论；只允许回复 `approved` 状态的评论，其余一律 404 `COMMENT_NOT_FOUND`（不泄露未审核评论的存在）。回复回复时新评论挂到同一根下，保持两级展示。校验、限流与策略规则同 `POST /api/public/comments`。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplyPublicCommentRequest'
+      responses:
+        '200':
+          description: 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCommentCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/public/navigation:
+    get:
+      tags: [Public Extended]
+      operationId: listPublicNavigation
+      description: 匿名可访问；只返回 `visible = true` 的节点，组织为两级树（一级节点的 `children` 为其子菜单）。隐藏节点不出现在响应中。
+      responses:
+        '200':
+          description: 公开导航两级树。
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              examples: ['public, max-age=60, stale-while-revalidate=300']
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicNavigationNode'
+  /api/admin/media:
+    get:
+      tags: [Admin Media]
+      operationId: listAdminMedia
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: keyword
+          in: query
+          description: 按 `original_name` 模糊匹配。
+          schema: { type: string }
+        - name: provider
+          in: query
+          schema: { type: string, enum: [local, s3, legacy_url] }
+        - name: mime
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: 仅返回 `active` 资产；稳定排序 `created_at DESC, id DESC`。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin Media]
+      operationId: uploadAdminMedia
+      description: Multipart 字段名 `file[]`，每批 1–5 个文件，单文件 ≤ 5MB；扩展名白名单 jpg/jpeg/png/gif/bmp/webp，并校验 Magic Bytes 与声明 MIME。响应恒为数组。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file[]:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: 全部文件已入库；同内容 Hash 的资产带 `duplicate_of` 提示。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaAssetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/media/remote:
+    post:
+      tags: [Admin Media]
+      operationId: uploadAdminMediaFromUrl
+      description: 抓取远端图片并入库。SSRF 防护：仅 http/https，拒绝内网与环回地址，Redirect 最多 3 次且逐跳重校验，Body ≤ 5MB，超时 10s。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoteUploadRequest'
+      responses:
+        '201':
+          description: 远端文件已下载并入库。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/media/batch-delete:
+    post:
+      tags: [Admin Media]
+      operationId: batchDeleteAdminMedia
+      description: 批量软删除，部分成功语义。被引用的资产保持 active 并归入 `referenced`；不存在或已删除的 ID 归入 `not_found`。单次 1–100 个 ID（服务端去重）。有实际删除时自动入队 `media_cleanup` 任务，并记录 `media.batch_delete` 审计事件。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDeleteMediaRequest'
+      responses:
+        '200':
+          description: 逐项归类结果（deleted / referenced / not_found 均按 ID 升序）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaBatchDeleteResult'
+        '400':
+          description: 空批次或超过 100 个 ID（`INVALID_BATCH_DELETE`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/media/{id}:
+    get:
+      tags: [Admin Media]
+      operationId: getAdminMedia
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 资产详情；已软删除的资产返回 404。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Admin Media]
+      operationId: updateAdminMedia
+      description: 仅允许更新 `alt` 与 `original_name`；文件内容、Hash、URL 创建后不可变。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMediaRequest'
+      responses:
+        '200':
+          description: 资产已更新。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Admin Media]
+      operationId: deleteAdminMedia
+      description: 软删除；仍存在引用时返回 409 并携带 Usages 摘要。物理删除由 `media_cleanup` 后台任务在零引用后执行。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: 已软删除。
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/media/{id}/usages:
+    get:
+      tags: [Admin Media]
+      operationId: listAdminMediaUsages
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 资产的引用列表。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MediaUsageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/articles/imports:
+    post:
+      tags: [Admin Media]
+      operationId: importAdminMarkdown
+      description: Multipart 字段名 `file[]`，1–10 个 `.md` 文件，单文件 ≤ 2MB；解析 YAML Front Matter（title/slug/tags/category/summary）并生成 Slug 冲突预览，结果存入 Background Job。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file[]:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: 导入预览已生成。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/admin/imports/{id}:
+    get:
+      tags: [Admin Media]
+      operationId: getAdminImport
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: 导入预览（标题、Slug、警告、冲突标记）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/admin/imports/{id}/commit:
+    post:
+      tags: [Admin Media]
+      operationId: commitAdminImport
+      description: 按逐篇策略落库；所有导入文章一律为 Draft，绝不自动发布。Job 只允许 Commit 一次。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitImportRequest'
+      responses:
+        '200':
+          description: 导入完成，Job 置为 Done。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitImportResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/admin/site-settings:
+    get:
+      tags: [Admin Site Settings]
+      operationId: getAdminSiteSettings
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 单行站点设置。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin Site Settings]
+      operationId: updateAdminSiteSettings
+      description: 全量更新站点设置；`site_url` 必须为合法 http/https URL 或空，Page Size 取值 1–100。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteSettingsRequest'
+      responses:
+        '200':
+          description: 站点设置已更新。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSettingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/media/files/{path}:
+    get:
+      tags: [Public Media]
+      operationId: getMediaFile
+      description: "匿名可缓存的媒体文件端点；Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider Redirect 到公开 URL。Path 做路径穿越校验。"
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 文件内容；Content-Type 按入库时的 MIME。
+          content:
+            application/octet-stream: {}
+        '307':
+          description: S3 Provider 时 Redirect 到公开 URL。
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: aries_admin_session
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。
+      schema:
+        type: string
+        format: uri
+  responses:
+    BadRequest:
+      description: Request Validation 失败。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Credentials 无效、Session 缺失或 Session 已过期。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Origin、Bootstrap Secret 或 Permission 不满足要求。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Bootstrap 已完成或唯一字段冲突。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource 不存在。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: 超出 Rate Limit。本地限流（登录、评论提交等）会携带 `Retry-After` 响应头（距可重试的剩余秒数，整数）；上游 Provider 限流（如 AI）可能缺省。
+      headers:
+        Retry-After:
+          description: 距当前限流窗口恢复、可重试的剩余秒数（向上取整，至少 1）。
+          schema:
+            type: integer
+            minimum: 1
+            example: 870
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal Error；响应不暴露 PostgreSQL 或 Rust Error Detail。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          examples: [ok]
+        service:
+          type: string
+          examples: [aries-server]
+    BootstrapStatusResponse:
+      type: object
+      required: [initialized]
+      properties:
+        initialized:
+          type: boolean
+    BootstrapRequest:
+      type: object
+      additionalProperties: false
+      required: [bootstrap_secret, username, email, display_name, password]
+      properties:
+        bootstrap_secret:
+          type: string
+          minLength: 24
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9_-]+$'
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [login, password]
+      properties:
+        login:
+          type: string
+        password:
+          type: string
+    ForgotPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [email, display_name, avatar_url]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        avatar_url:
+          type: [string, 'null']
+          format: uri
+          maxLength: 2048
+    UpdatePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 10
+          maxLength: 128
+    UserResponse:
+      type: object
+      required: [id, username, email, display_name, avatar_url, role, permissions]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        avatar_url:
+          type: [string, 'null']
+          format: uri
+        role:
+          type: string
+          enum: [owner, editor, moderator]
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - dashboard:view
+              - content:manage
+              - comments:moderate
+              - users:manage
+              - settings:manage
+              - profile:manage
+    SessionResponse:
+      type: object
+      required: [user, expires_at]
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        expires_at:
+          type: string
+          format: date-time
+    ArticleStatus:
+      type: string
+      enum: [draft, published, recycled]
+    ArticleStatusCommand:
+      type: string
+      enum: [publish, recycle, recover]
+    ChangeArticleStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [command, expected_version]
+      properties:
+        command:
+          $ref: '#/components/schemas/ArticleStatusCommand'
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    CreateTaxonomyRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 160
+    ArticleCategoryResponse:
+      type: object
+      description: 管理端分类 DTO；`/api/admin/categories` 只返回 `kind = article`，`link` / `gallery` 分类由各自模块的分类端点返回同一结构。
+      required: [id, parent_id, kind, name, slug, description]
+      properties:
+        id: { type: integer, format: int64 }
+        parent_id: { type: [integer, 'null'], format: int64 }
+        kind: { type: string, enum: [article, link, gallery] }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+    ArticleTagResponse:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+    CreateArticleRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 160
+        summary:
+          type: string
+          maxLength: 500
+          default: ''
+        markdown_source:
+          type: string
+          maxLength: 1000000
+          default: ''
+        category_id:
+          type: [integer, 'null']
+          format: int64
+        cover_url:
+          type: [string, 'null']
+          format: uri
+        seo_keywords:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 50
+        access_password:
+          description: 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。字段缺省表示不改动（新建时视为无密码）；显式 `null` 表示清除密码；字符串表示设置新密码，Trim 后少于 6 个字符返回 400 `INVALID_ACCESS_PASSWORD`。
+          type: [string, 'null']
+          minLength: 6
+          maxLength: 128
+        allow_comments:
+          type: boolean
+          default: true
+        is_pinned:
+          type: boolean
+          default: false
+        tag_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+    UpdateArticleRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateArticleRequest'
+        - type: object
+          required: [expected_version]
+          properties:
+            expected_version:
+              type: integer
+              format: int64
+              minimum: 1
+    PreviewArticleRequest:
+      type: object
+      additionalProperties: false
+      required: [markdown_source]
+      properties:
+        markdown_source:
+          type: string
+          maxLength: 1000000
+    PreviewArticleResponse:
+      type: object
+      required: [rendered_html]
+      properties:
+        rendered_html:
+          type: string
+    RestoreRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+    ArticleRevisionResponse:
+      type: object
+      description: Revision 快照；不含密码哈希，`password_protected` 仅表示当时是否设置过访问密码。
+      required:
+        - revision_no
+        - title
+        - slug
+        - summary
+        - category_id
+        - cover_url
+        - seo_keywords
+        - tag_ids
+        - password_protected
+        - allow_comments
+        - is_pinned
+        - markdown_source
+        - operator_id
+        - created_at
+      properties:
+        revision_no: { type: integer, format: int64 }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: string }
+        category_id: { type: [integer, 'null'], format: int64 }
+        cover_url: { type: [string, 'null'], format: uri }
+        seo_keywords:
+          type: array
+          items: { type: string }
+        tag_ids:
+          type: array
+          items: { type: integer, format: int64 }
+        password_protected: { type: boolean }
+        allow_comments: { type: boolean }
+        is_pinned: { type: boolean }
+        markdown_source: { type: string }
+        operator_id: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    ArticleResponse:
+      type: object
+      required:
+        - id
+        - author_id
+        - category_id
+        - status
+        - slug
+        - title
+        - summary
+        - cover_url
+        - markdown_source
+        - rendered_html
+        - seo_keywords
+        - tag_ids
+        - password_protected
+        - allow_comments
+        - is_pinned
+        - version
+        - published_at
+        - created_at
+        - updated_at
+      properties:
+        id: { type: integer, format: int64 }
+        author_id: { type: integer, format: int64 }
+        category_id: { type: [integer, 'null'], format: int64 }
+        status: { $ref: '#/components/schemas/ArticleStatus' }
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        cover_url: { type: [string, 'null'], format: uri }
+        markdown_source: { type: string }
+        rendered_html: { type: string }
+        seo_keywords:
+          type: array
+          items: { type: string }
+        tag_ids:
+          type: array
+          items: { type: integer, format: int64 }
+        password_protected: { type: boolean }
+        allow_comments: { type: boolean }
+        is_pinned: { type: boolean }
+        version: { type: integer, format: int64 }
+        published_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ArticlePageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArticleResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    PublicArticleListItem:
+      type: object
+      description: Public 列表项；不含 `markdown_source`、`author_id`、`version` 等内部字段。
+      required:
+        - id
+        - slug
+        - title
+        - summary
+        - cover_url
+        - category_id
+        - tag_ids
+        - is_pinned
+        - password_protected
+        - published_at
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        cover_url: { type: [string, 'null'], format: uri }
+        category_id: { type: [integer, 'null'], format: int64 }
+        tag_ids:
+          type: array
+          items: { type: integer, format: int64 }
+        is_pinned: { type: boolean }
+        password_protected: { type: boolean }
+        matched_excerpt:
+          type: [string, 'null']
+          description: 仅搜索接口在摘要未覆盖正文命中时返回的纯文本片段（Markdown 已剥离）；其他列表接口不出现该字段。
+        published_at: { type: [string, 'null'], format: date-time }
+    PublicArticleDetail:
+      allOf:
+        - $ref: '#/components/schemas/PublicArticleListItem'
+        - type: object
+          required:
+            - allow_comments
+            - seo_keywords
+            - rendered_html
+            - category
+            - tags
+            - visit_count
+            - comment_count
+            - previous
+            - next
+            - created_at
+            - updated_at
+          properties:
+            allow_comments: { type: boolean }
+            seo_keywords:
+              type: array
+              items: { type: string }
+            rendered_html:
+              description: 经过 `comrak` Render 和 `ammonia` Sanitization 的 HTML；受密码保护且未解锁时为 `null`。
+              type: [string, 'null']
+            category:
+              type: [object, 'null']
+              properties:
+                id: { type: integer, format: int64 }
+                name: { type: string }
+                slug: { type: string }
+            tags:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer, format: int64 }
+                  name: { type: string }
+                  slug: { type: string }
+            visit_count: { type: integer, format: int64, minimum: 0 }
+            comment_count: { type: integer, format: int64, minimum: 0 }
+            previous:
+              description: 同一公开排序中靠前（更新）的一篇；第一篇为 `null`。
+              type: [object, 'null']
+              properties:
+                slug: { type: string }
+                title: { type: string }
+            next:
+              description: 同一公开排序中靠后（更旧）的一篇；最后一篇为 `null`。
+              type: [object, 'null']
+              properties:
+                slug: { type: string }
+                title: { type: string }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    PublicSiteResponse:
+      type: object
+      required: [site_name, site_description, site_url, logo_url, icp_text, default_cover_url]
+      properties:
+        site_name: { type: string }
+        site_description: { type: string }
+        site_url: { type: string }
+        logo_url: { type: string }
+        icp_text: { type: string }
+        default_cover_url: { type: string }
+    PublicCategory:
+      type: object
+      required: [id, name, slug, description, article_count]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        article_count:
+          description: 实时统计的 Published 文章数。
+          type: integer
+          format: int64
+          minimum: 0
+    PublicTag:
+      type: object
+      required: [id, name, slug, article_count]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        article_count:
+          description: 实时统计的 Published 文章数。
+          type: integer
+          format: int64
+          minimum: 0
+    PublicArchiveMonth:
+      type: object
+      required: [year, month, count, articles]
+      properties:
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        count: { type: integer, format: int64, minimum: 0 }
+        articles:
+          type: array
+          items:
+            type: object
+            required: [slug, title, published_at]
+            properties:
+              slug: { type: string }
+              title: { type: string }
+              published_at: { type: string, format: date-time }
+    PublicArticlePageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicArticleListItem'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    PublicSearchSuggestion:
+      type: object
+      description: 搜索建议项：仅 Slug 与 Title，不泄露其他字段。
+      required: [slug, title]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              description: '可选结构化补充信息；如 `TAXONOMY_IN_USE` 时携带 `{ "reference_count": <number> }`。'
+              type: object
+    MediaAssetResponse:
+      type: object
+      required: [id, provider, object_key, url, original_name, mime, size_bytes, sha256, alt, status, uploaded_by, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        provider: { type: string, enum: [local, s3, legacy_url] }
+        object_key:
+          description: 服务端生成的不可预测 Key（`yyyy/mm/<uuid>.<ext>`），不含用户文件名。
+          type: string
+        url: { type: string }
+        original_name: { type: string }
+        mime: { type: string }
+        size_bytes: { type: integer, format: int64, minimum: 0 }
+        width:
+          description: 尺寸探测失败时为 `null`，由 `metadata_probe` 后台任务补探测。
+          type: [integer, 'null']
+        height:
+          type: [integer, 'null']
+        sha256: { type: string }
+        alt: { type: string }
+        status: { type: string, enum: [active, deleted] }
+        uploaded_by: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        duplicate_of:
+          description: 仅上传响应出现；同内容 Hash 的已存在资产 ID。
+          type: integer
+          format: int64
+    MediaPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaAssetResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    UpdateMediaRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        alt: { type: string, maxLength: 500, default: '' }
+        original_name:
+          description: 缺省或空串表示不改动。
+          type: string
+          maxLength: 255
+    BatchDeleteMediaRequest:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids:
+          description: 待删除的资产 ID 列表，单次 1–100 个（服务端去重）。
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: integer, format: int64 }
+    MediaBatchDeleteResult:
+      description: 批量删除的部分成功结果；三个列表均按 ID 升序，且互不相交。
+      type: object
+      required: [deleted, referenced, not_found]
+      properties:
+        deleted:
+          description: 成功软删除的 ID。
+          type: array
+          items: { type: integer, format: int64 }
+        referenced:
+          description: 仍被内容引用、保持 active 的 ID。
+          type: array
+          items: { type: integer, format: int64 }
+        not_found:
+          description: 不存在或已删除的 ID。
+          type: array
+          items: { type: integer, format: int64 }
+    RemoteUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+    MediaUsageResponse:
+      type: object
+      required: [id, asset_id, target_type, target_id, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        asset_id: { type: integer, format: int64 }
+        target_type: { type: string, enum: [article_cover, article_content, gallery_item] }
+        target_id: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    ImportPreviewItem:
+      type: object
+      required: [index, file_name, title, slug, summary, tags, warnings, slug_conflict]
+      properties:
+        index: { type: integer, minimum: 0 }
+        file_name: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        category:
+          type: [string, 'null']
+        warnings:
+          type: array
+          items: { type: string }
+        slug_conflict:
+          description: Slug 已被现有文章占用时需要在 Commit 时给出 skip/rename 策略。
+          type: boolean
+    ImportJobResponse:
+      type: object
+      required: [job_id, status, items]
+      properties:
+        job_id: { type: integer, format: int64 }
+        status: { type: string, enum: [pending, running, done, failed] }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPreviewItem'
+    CommitImportRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          description: 仅冲突项需要显式策略；未列出的冲突项默认 skip。
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [index, strategy]
+            properties:
+              index: { type: integer, minimum: 0 }
+              strategy: { type: string, enum: [skip, rename] }
+    CommitImportResult:
+      type: object
+      required: [created, skipped, renamed]
+      properties:
+        created:
+          type: array
+          items:
+            type: object
+            required: [id, title, slug]
+            properties:
+              id: { type: integer, format: int64 }
+              title: { type: string }
+              slug: { type: string }
+        skipped:
+          type: array
+          items: { type: string }
+        renamed:
+          type: array
+          items:
+            type: object
+            required: [from, to]
+            properties:
+              from: { type: string }
+              to: { type: string }
+    SiteSettingsResponse:
+      type: object
+      required: [site_name, site_description, site_url, logo_url, icp_text, default_cover_url, page_size_index, page_size_archive, page_size_search, comment_policy, comments_per_page, updated_at]
+      properties:
+        site_name: { type: string }
+        site_description: { type: string }
+        site_url: { type: string }
+        logo_url: { type: string }
+        icp_text: { type: string }
+        default_cover_url: { type: string }
+        page_size_index: { type: integer, minimum: 1, maximum: 100 }
+        page_size_archive: { type: integer, minimum: 1, maximum: 100 }
+        page_size_search: { type: integer, minimum: 1, maximum: 100 }
+        comment_policy: { $ref: '#/components/schemas/CommentPolicy' }
+        comments_per_page: { type: integer, minimum: 5, maximum: 100 }
+        updated_at: { type: string, format: date-time }
+    UpdateSiteSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [site_name, page_size_index, page_size_archive, page_size_search, comment_policy, comments_per_page]
+      properties:
+        site_name: { type: string, minLength: 1, maxLength: 100 }
+        site_description: { type: string, default: '' }
+        site_url:
+          description: 合法 http/https URL、站内绝对路径或空串。
+          type: string
+          default: ''
+        logo_url: { type: string, default: '' }
+        icp_text: { type: string, default: '' }
+        default_cover_url: { type: string, default: '' }
+        page_size_index: { type: integer, minimum: 1, maximum: 100 }
+        page_size_archive: { type: integer, minimum: 1, maximum: 100 }
+        page_size_search: { type: integer, minimum: 1, maximum: 100 }
+        comment_policy:
+          description: closed 禁止评论；moderated 提交后待人工审核；auto_approve 提交后直接公开。
+          $ref: '#/components/schemas/CommentPolicy'
+        comments_per_page: { type: integer, minimum: 5, maximum: 100 }
+    CommentPolicy:
+      type: string
+      enum: [closed, moderated, auto_approve]
+    CommentStatus:
+      type: string
+      enum: [pending, approved, rejected, spam, recycled]
+    CommentResponse:
+      type: object
+      description: Admin 端评论 DTO。`author_email` 仅 Admin API 返回，Public API 永不暴露。
+      required:
+        - id
+        - target_type
+        - target_id
+        - root_id
+        - parent_id
+        - author_name
+        - author_email
+        - author_url
+        - content_markdown
+        - content_html
+        - status
+        - is_admin_reply
+        - moderation_reason
+        - moderated_at
+        - ai_risk
+        - ai_reason
+        - ai_confidence
+        - created_at
+        - updated_at
+      properties:
+        id: { type: integer, format: int64 }
+        target_type: { type: string, enum: [article, page, link] }
+        target_id: { type: integer, format: int64 }
+        root_id: { type: [integer, 'null'], format: int64 }
+        parent_id: { type: [integer, 'null'], format: int64 }
+        author_name: { type: string }
+        author_email: { type: string }
+        author_url: { type: [string, 'null'] }
+        content_markdown: { type: string }
+        content_html:
+          description: 服务端 Comrak 渲染并 Sanitize 后的 HTML，可安全直出。
+          type: string
+        status: { $ref: '#/components/schemas/CommentStatus' }
+        is_admin_reply: { type: boolean }
+        moderation_reason: { type: [string, 'null'] }
+        moderated_at: { type: [string, 'null'], format: date-time }
+        ai_risk:
+          type: [string, 'null']
+          enum: [safe, suspicious, spam, null]
+          description: AI 审核风险结论；null 表示未经过 AI 审核。
+        ai_reason: { type: [string, 'null'], description: AI 给出的简短理由 }
+        ai_confidence: { type: [number, 'null'], format: float, description: AI 置信度（0–1） }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CommentPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CommentResponse' }
+        total:
+          description: 当前筛选条件下的评论总数。
+          type: integer
+          format: int64
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    ChangeCommentStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/CommentStatus' }
+        reason:
+          description: 审核备注（可选，trim 后非空才持久化）。
+          type: string
+          default: ''
+    ReplyCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [content_markdown]
+      properties:
+        content_markdown: { type: string, minLength: 1, maxLength: 2000 }
+    DashboardResponse:
+      type: object
+      required: [articles, comments, recent_pending_comments, recent_failed_jobs]
+      properties:
+        articles:
+          type: object
+          required: [total, draft, published, recycled]
+          properties:
+            total: { type: integer, format: int64 }
+            draft: { type: integer, format: int64 }
+            published: { type: integer, format: int64 }
+            recycled: { type: integer, format: int64 }
+        comments:
+          type: object
+          required: [total, pending, today]
+          properties:
+            total: { type: integer, format: int64 }
+            pending: { type: integer, format: int64 }
+            today:
+              description: UTC 当日新增评论数。
+              type: integer
+              format: int64
+        recent_pending_comments:
+          type: array
+          description: 最新 5 条待审核评论。
+          items: { $ref: '#/components/schemas/CommentResponse' }
+        recent_failed_jobs:
+          type: array
+          description: 最近失败的后台任务（attempts 已达 max_attempts）。
+          items:
+            type: object
+            required: [id, kind, attempts, max_attempts, updated_at]
+            properties:
+              id: { type: integer, format: int64 }
+              kind: { type: string }
+              attempts: { type: integer }
+              max_attempts: { type: integer }
+              last_error: { type: [string, 'null'] }
+              updated_at: { type: string, format: date-time }
+    AuditPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, action, target_type, created_at]
+            properties:
+              id: { type: integer, format: int64 }
+              actor_user_id: { type: [integer, 'null'], format: int64 }
+              actor_username:
+                description: 用户被删除时为 null。
+                type: [string, 'null']
+              action: { type: string }
+              target_type: { type: string }
+              target_id: { type: [string, 'null'] }
+              metadata: { type: object }
+              created_at: { type: string, format: date-time }
+        total:
+          description: 当前筛选条件下的审计记录总数。
+          type: integer
+          format: int64
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    LogItem:
+      type: object
+      required: [id, ts, level, target, message, span_name, request_id, fields]
+      properties:
+        id: { type: integer, format: int64 }
+        ts:
+          description: 事件时间，RFC 3339 字符串。
+          type: string
+          format: date-time
+        level:
+          description: 级别原文（`ERROR`/`WARN`/`INFO`/`DEBUG`/`TRACE`）；不做枚举约束，未来新增级别无需改表。
+          type: string
+        target:
+          description: tracing target（模块路径）。
+          type: string
+        message: { type: string }
+        span_name:
+          description: 最近的 Span 名（HTTP 请求内日志为 TraceLayer Span）。
+          type: [string, 'null']
+        request_id:
+          description: 请求的 `x-request-id`；可按此值查询整条请求链路。
+          type: [string, 'null']
+        fields:
+          description: 事件的其余结构化字段。
+          type: object
+    LogPageResponse:
+      type: object
+      required: [items, total, page, page_size, level_counts]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogItem'
+        total:
+          description: 当前筛选条件下的日志总数。
+          type: integer
+          format: int64
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 200 }
+        level_counts:
+          description: 最近 24 小时各级别条数，与筛选条件无关。
+          type: object
+          required: [ERROR, WARN, INFO, DEBUG, TRACE]
+          properties:
+            ERROR: { type: integer, format: int64 }
+            WARN: { type: integer, format: int64 }
+            INFO: { type: integer, format: int64 }
+            DEBUG: { type: integer, format: int64 }
+            TRACE: { type: integer, format: int64 }
+    LogTargetsResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items: { type: string }
+    LogStatsBucket:
+      type: object
+      description: 单个时间桶；五个级别键恒在，无数据为 0。
+      required: [bucket, ERROR, WARN, INFO, DEBUG, TRACE]
+      properties:
+        bucket:
+          description: 桶起点，RFC 3339；≤48 小时窗口按小时分桶，更长窗口按天分桶。
+          type: string
+          format: date-time
+        ERROR: { type: integer, format: int64 }
+        WARN: { type: integer, format: int64 }
+        INFO: { type: integer, format: int64 }
+        DEBUG: { type: integer, format: int64 }
+        TRACE: { type: integer, format: int64 }
+    LogStatsResponse:
+      type: object
+      required: [hours, buckets, channel_dropped]
+      properties:
+        hours:
+          description: 实际统计窗口（小时），经 1–168 收敛后的值。
+          type: integer
+          minimum: 1
+          maximum: 168
+        buckets:
+          description: 按时间升序的分桶结果。
+          type: array
+          items:
+            $ref: '#/components/schemas/LogStatsBucket'
+        channel_dropped:
+          description: 运行日志 channel 满累计丢弃条数（可丢弃数据，仅作观测）。
+          type: integer
+          minimum: 0
+          format: int64
+    SqlLoggingState:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          description: SQL 语句日志当前是否开启。
+          type: boolean
+    SqlLoggingRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+    LogFilterOverride:
+      type: object
+      required: [directives, restore_seconds_remaining]
+      properties:
+        directives:
+          description: 当前生效的自定义 EnvFilter directives（如 `aries_server=debug`）；空串表示无覆盖。
+          type: string
+        restore_seconds_remaining:
+          description: 自动复位剩余秒数；null 表示持续到被显式清除。
+          type: [integer, 'null']
+          minimum: 0
+          format: int64
+    LogFilterOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [directives]
+      properties:
+        directives:
+          description: 逗号分隔的 EnvFilter directives（如 `aries_server=debug,tower_http=debug`）；空串清除覆盖。非法 directive 返回 400 `INVALID_DIRECTIVES`。
+          type: string
+        restore_minutes:
+          description: 自动复位时间（分钟），到期未再变更则恢复默认过滤器；省略或 0 表示不复位，超过 1440 按 1440 收敛。
+          type: integer
+          minimum: 0
+          maximum: 1440
+    PageStatus:
+      type: string
+      enum: [draft, published]
+    PageRequest:
+      type: object
+      additionalProperties: false
+      required: [slug, title]
+      properties:
+        slug:
+          description: 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。
+          type: string
+          minLength: 1
+          maxLength: 160
+        title: { type: string, minLength: 1, maxLength: 200 }
+        content_markdown: { type: string, default: '' }
+        status: { $ref: '#/components/schemas/PageStatus', default: draft }
+        sort_order: { type: integer, default: 0 }
+    PageResponse:
+      type: object
+      required: [id, slug, title, content_markdown, content_html, status, sort_order, created_by, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        title: { type: string }
+        content_markdown: { type: string }
+        content_html:
+          description: 服务端 Render 并 Sanitize 后的 HTML。
+          type: string
+        status: { $ref: '#/components/schemas/PageStatus' }
+        sort_order: { type: integer }
+        created_by:
+          description: 创建人 User ID；创建人被删除时为 `null`。
+          type: [integer, 'null']
+          format: int64
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PagePageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PageResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    JournalVisibility:
+      type: string
+      enum: [public, private]
+    JournalRequest:
+      type: object
+      additionalProperties: false
+      required: [content_markdown]
+      properties:
+        content_markdown: { type: string, minLength: 1, maxLength: 2000 }
+        visibility: { $ref: '#/components/schemas/JournalVisibility', default: public }
+    JournalResponse:
+      type: object
+      required: [id, content_markdown, content_html, visibility, created_by, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        content_markdown: { type: string }
+        content_html:
+          description: 服务端 Render 并 Sanitize 后的 HTML。
+          type: string
+        visibility: { $ref: '#/components/schemas/JournalVisibility' }
+        created_by:
+          description: 创建人 User ID；创建人被删除时为 `null`。
+          type: [integer, 'null']
+          format: int64
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    JournalPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    GalleryStatus:
+      type: string
+      enum: [draft, published]
+    GalleryRequest:
+      type: object
+      additionalProperties: false
+      required: [category_id, slug, title]
+      properties:
+        category_id:
+          description: 必须指向 kind 为 `gallery` 的分类。
+          type: integer
+          format: int64
+        slug:
+          description: 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。
+          type: string
+          minLength: 1
+          maxLength: 160
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, default: '' }
+        cover_media_id:
+          description: 封面媒体资产 ID；媒体删除时自动置空。
+          type: [integer, 'null']
+          format: int64
+        status: { $ref: '#/components/schemas/GalleryStatus', default: draft }
+        sort_order: { type: integer, default: 0 }
+    GalleryResponse:
+      type: object
+      required: [id, category_id, slug, title, description, cover_media_id, status, sort_order, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        category_id: { type: integer, format: int64 }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        cover_media_id: { type: [integer, 'null'], format: int64 }
+        status: { $ref: '#/components/schemas/GalleryStatus' }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    GalleryPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GalleryResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    GalleryItemRequest:
+      type: object
+      additionalProperties: false
+      required: [media_asset_id]
+      properties:
+        media_asset_id:
+          description: 同一媒体在同一图库中只可出现一次。
+          type: integer
+          format: int64
+        alt: { type: string, default: '' }
+        location: { type: string, default: '' }
+        sort_order: { type: integer, default: 0 }
+    GalleryItemUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        alt: { type: string, default: '' }
+        location: { type: string, default: '' }
+        sort_order: { type: integer, default: 0 }
+    GalleryItemOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [item_ids]
+      properties:
+        item_ids:
+          description: 该图库全部条目 ID 的目标顺序；服务端在事务内原子重写 `sort_order`。
+          type: array
+          items: { type: integer, format: int64 }
+    GalleryItemMedia:
+      type: object
+      description: 内联媒体摘要（条目接口一次返回，前端无需逐条再拉媒体详情）。
+      required: [id, url, alt, width, height]
+      properties:
+        id: { type: integer, format: int64 }
+        url: { type: string, description: 媒体公开 URL }
+        alt: { type: string }
+        width: { type: [integer, 'null'], description: 尺寸探测失败时为 null }
+        height: { type: [integer, 'null'], description: 尺寸探测失败时为 null }
+    GalleryItemResponse:
+      type: object
+      required: [id, gallery_id, media_asset_id, alt, location, sort_order, created_at, media]
+      properties:
+        id: { type: integer, format: int64 }
+        gallery_id: { type: integer, format: int64 }
+        media_asset_id: { type: integer, format: int64 }
+        alt: { type: string }
+        location: { type: string }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+        media:
+          description: 内联媒体摘要；引用的媒体资产被软删除时为 null。
+          oneOf:
+            - $ref: '#/components/schemas/GalleryItemMedia'
+            - type: 'null'
+    LinkStatus:
+      type: string
+      enum: [active, inactive]
+    LinkRequest:
+      type: object
+      additionalProperties: false
+      required: [title, url]
+      properties:
+        category_id:
+          description: 可空（允许未分类）；须指向 kind 为 `link` 的分类。
+          type: [integer, 'null']
+          format: int64
+        title: { type: string, minLength: 1, maxLength: 100 }
+        url:
+          description: 仅允许 http/https。
+          type: string
+          minLength: 1
+          maxLength: 2048
+        icon_url: { type: [string, 'null'], maxLength: 2048 }
+        description: { type: string, default: '' }
+        status: { $ref: '#/components/schemas/LinkStatus', default: active }
+        sort_order: { type: integer, default: 0 }
+    LinkResponse:
+      type: object
+      required: [id, category_id, title, url, icon_url, description, status, sort_order, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        category_id: { type: [integer, 'null'], format: int64 }
+        title: { type: string }
+        url: { type: string }
+        icon_url: { type: [string, 'null'] }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/LinkStatus' }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    LinkPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LinkResponse'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    NavigationTargetType:
+      type: string
+      enum: [article, page, category, url]
+    NavigationItemRequest:
+      type: object
+      additionalProperties: false
+      required: [label, target_type]
+      properties:
+        parent_id:
+          description: 父节点 ID；最多两级，不得指向已有子节点的节点之外的更深层级。
+          type: [integer, 'null']
+          format: int64
+        label: { type: string, minLength: 1, maxLength: 60 }
+        target_type: { $ref: '#/components/schemas/NavigationTargetType' }
+        target_id:
+          description: 内部目标 ID；`target_type` 非 `url` 时必填。
+          type: [integer, 'null']
+          format: int64
+        url:
+          description: 外部 URL，仅允许 http/https；`target_type = url` 时必填。
+          type: [string, 'null']
+          maxLength: 2048
+        open_in_new_tab: { type: boolean, default: false }
+        visible: { type: boolean, default: true }
+        sort_order: { type: integer, default: 0 }
+    NavigationItemResponse:
+      type: object
+      required: [id, parent_id, label, target_type, target_id, url, open_in_new_tab, visible, sort_order, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        parent_id: { type: [integer, 'null'], format: int64 }
+        label: { type: string }
+        target_type: { $ref: '#/components/schemas/NavigationTargetType' }
+        target_id: { type: [integer, 'null'], format: int64 }
+        url: { type: [string, 'null'] }
+        open_in_new_tab: { type: boolean }
+        visible: { type: boolean }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NavigationOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [item_ids]
+      properties:
+        item_ids:
+          description: 全部导航节点 ID 的目标顺序；服务端在事务内原子重写 `sort_order`，任一 ID 不存在则整体回滚。
+          type: array
+          items: { type: integer, format: int64 }
+    SettingGroupName:
+      type: string
+      enum: [appearance, email, integrations, ai]
+    AiFeatureToggles:
+      type: object
+      description: AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata 三个编辑器端点。
+      properties:
+        editor_assist: { type: boolean, default: false }
+        comment_moderation: { type: boolean, default: false }
+    AiSettingsView:
+      type: object
+      description: AI 设置的读取视图；`api_key` 为 write-only，只回 `api_key_set`。
+      properties:
+        enabled: { type: boolean, default: false }
+        protocol:
+          type: string
+          enum: [openai, anthropic]
+          default: openai
+          description: Provider 协议；openai 走 `/chat/completions` 兼容协议，anthropic 走 Messages API。旧 payload 无此字段时按 openai 处理。
+        base_url: { type: [string, 'null'], description: Provider Base URL；anthropic 缺省为 `https://api.anthropic.com` }
+        model: { type: [string, 'null'] }
+        api_key_set: { type: boolean, description: 是否已配置 api_key（永不回传明文） }
+        features: { $ref: '#/components/schemas/AiFeatureToggles' }
+    AiRewriteRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 8000, description: 选中的 Markdown 片段 }
+    AiArticleContextRequest:
+      type: object
+      additionalProperties: false
+      required: [title, content]
+      properties:
+        title: { type: string }
+        content: { type: string, description: 正文 Markdown；标题 + 正文合计不超过 20000 字符 }
+    AiUsageItem:
+      type: object
+      description: AI 请求审计记录；不存完整 Prompt。
+      required: [id, feature, operator_user_id, model, status, prompt_tokens, completion_tokens, latency_ms, error_category, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        feature: { type: string, enum: [editor_rewrite, editor_summary, editor_metadata, comment_moderation] }
+        operator_user_id: { type: [integer, 'null'], format: int64, description: null 表示系统触发 }
+        model: { type: string }
+        status: { type: string, enum: [success, failed, cancelled] }
+        prompt_tokens: { type: [integer, 'null'] }
+        completion_tokens: { type: [integer, 'null'] }
+        latency_ms: { type: integer }
+        error_category: { type: [string, 'null'], description: 失败分类（config/provider/timeout/rate_limited/invalid_output/store） }
+        created_at: { type: string, format: date-time }
+    AiUsagePageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiUsageItem'
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        page_size: { type: integer }
+    AppearanceSettings:
+      type: object
+      description: 外观设置；只含结构化字段，禁止任意 Script/head_content 注入。
+      properties:
+        logo_url: { type: [string, 'null'] }
+        favicon_url: { type: [string, 'null'] }
+        color_scheme: { type: [string, 'null'], enum: [system, light, dark, null] }
+        list_density: { type: [string, 'null'], enum: [comfortable, compact, null] }
+    EmailSettingsView:
+      type: object
+      description: 邮件设置的公开视图；`smtp_password` 永不回传，只回 `smtp_password_set`。
+      properties:
+        enabled: { type: boolean }
+        smtp_host: { type: [string, 'null'] }
+        smtp_port: { type: [integer, 'null'], minimum: 1, maximum: 65535 }
+        smtp_username: { type: [string, 'null'] }
+        smtp_password_set: { type: boolean }
+        from_address: { type: [string, 'null'] }
+        from_name: { type: [string, 'null'] }
+    EmailSettingsPatch:
+      type: object
+      description: 邮件设置更新入参（部分合并语义）；所有字段可选，省略或 `null` 的字段保持当前值，只更新提交的字段，不会重置未提交字段。`smtp_password` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+      properties:
+        enabled: { type: [boolean, 'null'] }
+        smtp_host: { type: [string, 'null'] }
+        smtp_port: { type: [integer, 'null'], minimum: 1, maximum: 65535 }
+        smtp_username: { type: [string, 'null'] }
+        smtp_password: { type: [string, 'null'] }
+        from_address: { type: [string, 'null'] }
+        from_name: { type: [string, 'null'] }
+    AiSettingsPatch:
+      type: object
+      description: AI 设置更新入参（部分合并语义）；所有字段可选，省略或 `null` 的字段保持当前值，只更新提交的字段，不会重置未提交字段。`api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+      properties:
+        enabled: { type: [boolean, 'null'] }
+        protocol: { type: [string, 'null'], enum: [openai, anthropic, null] }
+        base_url: { type: [string, 'null'] }
+        model: { type: [string, 'null'] }
+        api_key: { type: [string, 'null'] }
+        features: { allOf: [{ $ref: '#/components/schemas/AiFeatureToggles' }], nullable: true }
+    IntegrationSettings:
+      type: object
+      description: 第三方集成设置；受控 Integration Slot，仅结构化字段。
+      properties:
+        analytics_id: { type: [string, 'null'] }
+        site_verification_token: { type: [string, 'null'] }
+    SettingGroupResponse:
+      type: object
+      required: [group, version, updated_at, settings]
+      properties:
+        group: { $ref: '#/components/schemas/SettingGroupName' }
+        version:
+          description: 乐观锁版本号，更新成功后递增。
+          type: integer
+          minimum: 1
+        updated_at: { type: string, format: date-time }
+        settings:
+          description: 按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。
+          type: object
+    UpdateSettingGroupRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, settings]
+      properties:
+        expected_version:
+          description: 提交时读到的版本号；与服务端不一致返回 409 `SETTING_VERSION_CONFLICT`。
+          type: integer
+          minimum: 1
+        settings:
+          description: 按 group 分别为 `AppearanceSettings` / `EmailSettingsPatch` / `IntegrationSettings` / `AiSettingsPatch`。
+          type: object
+    PublicPageDetail:
+      type: object
+      description: 公开页面详情；只含渲染后的 HTML 与展示字段。
+      required: [slug, title, content_html, updated_at]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        content_html: { type: string }
+        updated_at: { type: string, format: date-time }
+    PublicJournalItem:
+      type: object
+      description: 公开日志列表项；不含 Markdown 原文与内部字段。
+      required: [id, content_html, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        content_html: { type: string }
+        created_at: { type: string, format: date-time }
+    PublicJournalPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicJournalItem'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    PublicGallerySummary:
+      type: object
+      required: [slug, title, description, cover_url]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        cover_url:
+          description: 封面媒体的公开 URL；未设置封面或封面媒体已删除时为 `null`。
+          type: [string, 'null']
+    PublicGalleryPageResponse:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicGallerySummary'
+        total: { type: integer, format: int64 }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+    PublicGalleryItem:
+      type: object
+      description: 公开图库条目；只含展示字段与媒体 URL/尺寸，不回内部资产元数据。媒体资产被软删除的条目不出现在响应中。
+      required: [url, alt, location, width, height]
+      properties:
+        url: { type: string }
+        alt:
+          description: 条目 `alt` 为空时回退媒体资产自身的 `alt`。
+          type: string
+        location: { type: string }
+        width: { type: [integer, 'null'] }
+        height: { type: [integer, 'null'] }
+    PublicGalleryDetail:
+      type: object
+      required: [slug, title, description, items]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicGalleryItem'
+    PublicComment:
+      type: object
+      description: 公开评论 DTO；永不包含 Email/IP/UA。访客头像为 Email SHA-256 拼出的 Cravatar URL，管理员回复头像为站点 Logo（未配置为 null）。`children` 为该根评论下的回复（回复的回复平铺在同一根下，最多两级）。
+      required: [id, parent_id, nickname, avatar_url, website, content_html, is_admin, created_at, children]
+      properties:
+        id: { type: integer, format: int64 }
+        parent_id: { type: [integer, 'null'], format: int64 }
+        nickname: { type: string, description: 评论者昵称（管理员回复为管理员展示名） }
+        avatar_url: { type: [string, 'null'], description: Cravatar 头像 URL 或站点 Logo }
+        website:
+          type: [string, 'null']
+          description: 访客自己提交的站点链接（入库前已校验 http/https）；管理员回复恒为 null。前端可把昵称渲染成该外链（对齐 Twikoo 行为）。
+        content_html: { type: string, description: 服务端渲染并 Sanitize 后的 HTML }
+        is_admin: { type: boolean, description: 是否为管理员回复 }
+        created_at: { type: string, format: date-time }
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicComment'
+    PublicCommentCreated:
+      allOf:
+        - $ref: '#/components/schemas/PublicComment'
+        - type: object
+          description: 提交成功的响应；`status` 供前端提示「待审核」（pending/approved 取决于站点评论策略）。
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [pending, approved]
+    PublicCommentPageResponse:
+      type: object
+      description: 已批准评论树分页；分页只作用于根评论，`total` 为根评论总数。
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicComment'
+        total: { type: integer, format: int64 }
+        page: { type: integer }
+        page_size: { type: integer }
+    CreatePublicCommentRequest:
+      type: object
+      description: 访客发表评论；`target_type` 支持 `article` / `page`，按 `target_slug` 定位已发布目标。`website` 可选且仅允许 http/https。
+      required: [target_type, target_slug, nickname, email, content]
+      properties:
+        target_type: { type: string, enum: [article, page, link], description: 评论目标类型；公开提交仅接受 article / page }
+        target_slug: { type: string }
+        nickname: { type: string, minLength: 1, maxLength: 60 }
+        email: { type: string, format: email, maxLength: 254 }
+        website: { type: [string, 'null'], maxLength: 2048 }
+        content: { type: string, minLength: 1, maxLength: 2000, description: Markdown 源文本 }
+    ReplyPublicCommentRequest:
+      type: object
+      description: 回复评论；规则同 CreatePublicCommentRequest（目标继承被回复评论）。
+      required: [nickname, email, content]
+      properties:
+        nickname: { type: string, minLength: 1, maxLength: 60 }
+        email: { type: string, format: email, maxLength: 254 }
+        website: { type: [string, 'null'], maxLength: 2048 }
+        content: { type: string, minLength: 1, maxLength: 2000, description: Markdown 源文本 }
+    PublicPhoto:
+      type: object
+      description: 公开照片墙条目；媒体 URL/尺寸与相册、分类信息已由服务端解析。
+      required: [url, alt, location, width, height, gallery_slug, gallery_title, category_name]
+      properties:
+        url: { type: string, description: 媒体公开 URL }
+        alt: { type: string, description: 条目 alt 文本（可为空串） }
+        location: { type: string, description: 拍摄地点（可为空串） }
+        width: { type: [integer, 'null'], description: 图片宽度（探测失败时为 null） }
+        height: { type: [integer, 'null'], description: 图片高度（探测失败时为 null） }
+        gallery_slug: { type: string, description: 所属相册 Slug }
+        gallery_title: { type: string, description: 所属相册标题 }
+        category_name: { type: [string, 'null'], description: 所属相册的分类名（分类已删除时为 null） }
+    PublicLink:
+      type: object
+      description: 公开友情链接；不含 `status`/`sort_order` 等管理字段，`category_name` 供前端按分类分组展示。
+      required: [title, url, icon_url, description, category_id, category_name]
+      properties:
+        title: { type: string }
+        url: { type: string }
+        icon_url: { type: [string, 'null'] }
+        description: { type: string }
+        category_id: { type: [integer, 'null'], format: int64 }
+        category_name:
+          type: [string, 'null']
+          description: 友链分类名；未分类或分类已删除时为 null（解析失败降级，不影响整个列表）。
+    PublicNavigationNode:
+      type: object
+      description: 公开导航节点；`children` 为一级节点的子菜单（最多两级）。`href` 为服务端解析后的路由地址（url 原样、article → `/articles/{slug}`、page → `/custom/{slug}`、category → `/categories/{slug}`）；目标不存在或未发布的节点连同子树被剔除。
+      required: [label, target_type, target_id, url, href, open_in_new_tab, children]
+      properties:
+        label: { type: string }
+        target_type: { $ref: '#/components/schemas/NavigationTargetType' }
+        target_id: { type: [integer, 'null'], format: int64 }
+        url: { type: [string, 'null'] }
+        href:
+          type: [string, 'null']
+          description: 解析后的可访问地址；url 类型与 url 相同，内部目标为按 slug 拼出的路由。
+        open_in_new_tab: { type: boolean }
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicNavigationNode'

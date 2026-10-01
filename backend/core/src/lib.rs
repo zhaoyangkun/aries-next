@@ -1,0 +1,16 @@
+pub mod ai;
+pub mod ai_prompts;
+pub mod auth;
+pub mod comments;
+pub mod content;
+pub mod galleries;
+pub mod health;
+pub mod jobs;
+pub mod journals;
+pub mod links;
+pub mod logs;
+pub mod media;
+pub mod navigation;
+pub mod pages;
+pub mod search;
+pub mod settings;

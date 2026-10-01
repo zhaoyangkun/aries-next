@@ -1,0 +1,70 @@
+# ============================================
+# 全局配置：对整个 Caddy 服务器生效，不绑定任何域名
+# 必须写在文件最前面
+# ============================================
+{
+    # ACME 账户邮箱（用于 Let's Encrypt 证书注册与到期提醒，
+    # 证书续期异常时 CA 会发邮件通知，建议填真实邮箱）
+    email 2295098032@qq.com
+
+    # 关闭 Admin API（默认监听 localhost:2019）
+    # 关闭后无法用 caddy reload 热加载配置，需重启 Caddy 生效
+    admin off
+}
+
+# ============================================
+# 公共片段（snippet）
+# 被多个站点通过 "import common" 复用，避免重复书写
+# 片段名可以自定义，但要和 import 的名字一致
+# ============================================
+(common) {
+    # 响应压缩：优先 zstd（速度快），不支持则回退 gzip（兼容性广）
+    encode zstd gzip
+
+    # 通用安全响应头，对所有响应生效
+    header {
+        # 禁止浏览器猜测内容类型，防止恶意文件被当脚本执行
+        X-Content-Type-Options nosniff
+
+        # 跳转时站外只发域名不发完整 URL，保护用户隐私
+        Referrer-Policy strict-origin-when-cross-origin
+
+        # 删除默认的 Server 响应头，隐藏服务器指纹
+        -Server
+    }
+}
+
+# 反代与 HTTPS 由 Caddy 全自动处理（ACME 申请/续期证书），只需把域名换成你的
+# Admin 与 API 同站点：静态文件由 Caddy 直出，/api/* 转发到 aries-server
+
+cangmang.xyz {
+    import common                        # 复用压缩与安全头
+	# 浏览器端公开 API 与媒体文件（/api/media/files/*）同源转发到后端；
+	# 密码文章解锁的 HttpOnly Cookie 也依赖这条同源链路
+	@api path /api/*
+	handle @api {
+		reverse_proxy aries-server:8088
+	}
+
+	handle {
+		reverse_proxy aries-web:3000
+	}
+}
+
+admin.cangmang.xyz {
+    import common                        # 复用压缩与安全头
+
+	root * /srv/admin
+
+	# API 同源转发；Caddy 默认透传 Origin 头，CSRF 防线不受影响
+	@api path /api/*
+	handle @api {
+		reverse_proxy aries-server:8088
+	}
+
+	# SPA Fallback
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

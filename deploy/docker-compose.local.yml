@@ -1,0 +1,10 @@
+# 本地测试 override：用预先 build 好的镜像替代源码构建，其余与 docker-compose.yml 一致。
+# 用法（仓库根目录）：docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml --env-file .env up -d
+# 注意：不要修改本文件与主文件中的服务名（Caddyfile、deploy.sh、backup.sh 都依赖 server/web/postgres 命名）。
+
+services:
+  server:
+    image: aries-server:0.0.2
+
+  web:
+    image: aries-web:0.0.2

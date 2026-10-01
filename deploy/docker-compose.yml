@@ -1,0 +1,72 @@
+name: aries
+
+# 拓扑：Caddy(80/443) ──> server:8088 / web:3000 / admin 静态文件
+# Postgres 一并编排，仅供单机自包含部署；生产也可指向外部实例（去掉本服务并改 DATABASE_HOST）
+# 本地用预构建镜像测试时请用 override 文件（见 deploy/docker-compose.local.yml），不要改服务名
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../apps/admin/dist:/srv/admin:ro
+      - caddy_data:/data        # 证书与 ACME 状态，务必持久化
+      - caddy_config:/config
+    depends_on:
+      - server
+      - web
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      SERVER_ADDR: 0.0.0.0:8088
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      # MEDIA_LOCAL_DIR / LOG_DIR 默认值已内置镜像（/var/lib/aries/{media,logs}），无需覆盖
+    volumes:
+      - aries:/var/lib/aries
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NITRO_HOST: 0.0.0.0
+      NITRO_PORT: 3000
+      # SSR/Server Route 直连后端的容器内网地址（Nuxt 私有 runtimeConfig，运行期注入，不进客户端产物）；
+      # 浏览器端请求固定走同源 /api（由 Caddy 转发到 server），与域名无关
+      NUXT_INTERNAL_API_BASE: http://server:8088/api/public
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aries
+      POSTGRES_PASSWORD: 19960331
+      POSTGRES_DB: aries
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aries -d aries"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  aries_data:
+  caddy_data:
+  caddy_config:

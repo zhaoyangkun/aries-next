@@ -1,0 +1,13 @@
+{
+  "name": "aries-next",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev:admin": "pnpm --filter @aries/admin dev",
+    "dev:web": "pnpm --filter @aries/web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --if-present -r test"
+  }
+}

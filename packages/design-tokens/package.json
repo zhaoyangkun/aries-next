@@ -1,0 +1,8 @@
+{
+  "name": "@aries/design-tokens",
+  "private": true,
+  "version": "0.1.0",
+  "exports": {
+    "./theme.css": "./theme.css"
+  }
+}
