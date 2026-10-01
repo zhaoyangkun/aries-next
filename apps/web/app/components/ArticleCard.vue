@@ -70,7 +70,8 @@ const dateText = computed(() => formatDate(props.article.published_at))
       class="post-thumb"
       :aria-label="article.title"
     >
-      <img :src="article.cover_url" :alt="article.title" loading="lazy" />
+      <!-- 列表展示面小：本地托管图片走 ?w= 按需缩略图，外部地址用原图 -->
+      <img :src="thumbUrl(article.cover_url, 480)" :alt="article.title" loading="lazy" />
     </NuxtLink>
   </article>
 </template>

@@ -39,6 +39,21 @@ export default defineNuxtConfig({
         'Content-Security-Policy': "frame-ancestors 'none'",
       },
     },
+    // 匿名静态页 SWR：SSR 结果缓存 60–300s，命中期间不再实时打后端 API，兼扛突发流量。
+    // 文章详情（/articles/**）刻意排除：SSR 按解锁 Cookie 渲染正文，共享缓存可能把
+    // 已解锁内容发给未解锁访客；搜索页（/search）动态性强，一并排除。
+    '/': { swr: 60 },
+    '/about': { swr: 300 },
+    '/archives': { swr: 300 },
+    '/categories': { swr: 300 },
+    '/categories/**': { swr: 300 },
+    '/tags': { swr: 300 },
+    '/tags/**': { swr: 300 },
+    '/journals': { swr: 300 },
+    '/links': { swr: 300 },
+    '/galleries': { swr: 300 },
+    '/galleries/**': { swr: 300 },
+    '/custom/**': { swr: 300 },
   },
   app: {
     head: {

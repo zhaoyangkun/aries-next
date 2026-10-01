@@ -139,6 +139,70 @@ async fn media_upload_list_update_usage_soft_delete_and_cleanup_flow() -> anyhow
     let (status, _, _) = app.get_raw("/api/media/files/2026/08/missing.png").await?;
     ensure!(status == StatusCode::NOT_FOUND, "unknown key must be 404");
 
+    // 按需缩略图：上传一张 400x200 大图，?w=100 应生成 100x50 小图并缓存，非法 w 回退原图。
+    let mut big_png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(400, 200, image::Rgb([9, 9, 9])))
+        .write_to(
+            &mut std::io::Cursor::new(&mut big_png),
+            image::ImageFormat::Png,
+        )?;
+    let uploaded = app
+        .admin_post_multipart(
+            "/api/admin/media",
+            vec![multipart_file("big.png", "image/png", big_png.clone())],
+            &cookie,
+        )
+        .await?;
+    ensure!(
+        uploaded.status == StatusCode::CREATED,
+        "upload failed: {}",
+        uploaded.body
+    );
+    let big_key = uploaded.body[0]["object_key"]
+        .as_str()
+        .context("object key")?
+        .to_owned();
+
+    let (status, headers, thumb) = app
+        .get_raw(&format!("{MEDIA_PUBLIC_BASE_URL}/{big_key}?w=100"))
+        .await?;
+    ensure!(status == StatusCode::OK, "thumbnail must be served");
+    ensure!(
+        thumb.len() < big_png.len(),
+        "thumbnail must be smaller than original"
+    );
+    let decoded = image::load_from_memory(&thumb).context("decode thumbnail")?;
+    ensure!(
+        decoded.width() == 100 && decoded.height() == 50,
+        "thumbnail must be 100x50, got {}x{}",
+        decoded.width(),
+        decoded.height()
+    );
+    ensure!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            == Some("image/png")
+    );
+    ensure!(
+        headers
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|value| value.contains("immutable"))
+    );
+    // 缓存命中：再次请求内容一致
+    let (status, _, thumb_again) = app
+        .get_raw(&format!("{MEDIA_PUBLIC_BASE_URL}/{big_key}?w=100"))
+        .await?;
+    ensure!(status == StatusCode::OK);
+    ensure!(thumb_again == thumb, "cached thumbnail must be identical");
+    // 非法 w 静默回退原图
+    let (status, _, bytes) = app
+        .get_raw(&format!("{MEDIA_PUBLIC_BASE_URL}/{big_key}?w=99999"))
+        .await?;
+    ensure!(status == StatusCode::OK);
+    ensure!(bytes == big_png, "invalid w must fall back to original");
+
     // 文章引用：cover + 正文图片，Usages 自动重建。
     let article = app
         .admin_post(
