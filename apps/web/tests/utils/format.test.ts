@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, formatDateParts, formatDateShort, thumbUrl } from '../../app/utils/format'
+import { formatDate, formatDateParts, formatDateShort, siteRunDays, thumbUrl } from '../../app/utils/format'
 
 // 用不带时区的本地时间字符串构造用例，避免 UTC 解析在不同时区下日期偏移导致断言不稳定
 describe('formatDate', () => {
@@ -57,6 +57,34 @@ describe('formatDateParts', () => {
 
   it('should return null for an invalid date string', () => {
     expect(formatDateParts('not-a-date')).toBeNull()
+  })
+})
+
+describe('siteRunDays', () => {
+  const now = new Date('2026-10-02T12:00:00Z')
+
+  it('computes whole days between created_at and now', () => {
+    expect(siteRunDays('2026-10-01T00:00:00Z', now)).toBe(1)
+    expect(siteRunDays('2026-09-02T12:00:00Z', now)).toBe(30)
+    expect(siteRunDays('2025-10-02T12:00:00Z', now)).toBe(365)
+  })
+
+  it('floors partial days', () => {
+    // 1 天 23 小时 → 1 天
+    expect(siteRunDays('2026-09-30T13:00:00Z', now)).toBe(1)
+  })
+
+  it('returns at least 1 day even for a brand-new site', () => {
+    expect(siteRunDays('2026-10-02T11:59:59Z', now)).toBe(1)
+    // 未来时间同样兜底为 1 天，避免出现「0 天 / 负数天」
+    expect(siteRunDays('2027-01-01T00:00:00Z', now)).toBe(1)
+  })
+
+  it('returns 0 for missing / invalid created_at', () => {
+    expect(siteRunDays(null, now)).toBe(0)
+    expect(siteRunDays(undefined, now)).toBe(0)
+    expect(siteRunDays('', now)).toBe(0)
+    expect(siteRunDays('not-a-date', now)).toBe(0)
   })
 })
 

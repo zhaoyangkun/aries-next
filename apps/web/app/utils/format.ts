@@ -29,6 +29,18 @@ export function formatDateParts(
 }
 
 /**
+ * 站点运行天数：`created_at`（RFC 3339）到 now 的整天数，按 UTC 毫秒差取整避免时区/DST 影响。
+ * 至少返回 1 天；created_at 缺失或非法时返回 0（调用方据此隐藏展示）。
+ * now 可注入固定值以保证单测与 SSR 行为确定。
+ */
+export function siteRunDays(createdAt: string | null | undefined, now: Date = new Date()): number {
+  if (!createdAt) return 0
+  const start = new Date(createdAt).getTime()
+  if (Number.isNaN(start)) return 0
+  return Math.max(1, Math.floor((now.getTime() - start) / 86_400_000))
+}
+
+/**
  * 媒体缩略图 URL：仅本站托管（/api/media/files 前缀）的图片追加 `?w=` 请求按需缩略图；
  * 外部/CDN 地址（含绝对 URL）无法走本站缩放，原样返回。
  */

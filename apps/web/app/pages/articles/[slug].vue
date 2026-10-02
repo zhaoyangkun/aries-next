@@ -42,6 +42,10 @@ const locked = computed(
   () => !!article.value && article.value.password_protected && !article.value.rendered_html,
 )
 
+// 阅读时长/字数：由后端渲染好的正文 HTML 统计（公开 API 不含 markdown_source），
+// SSR 与客户端输入一致，无 hydration 差异
+const reading = computed(() => readingTimeFromHtml(article.value?.rendered_html))
+
 // 浏览量上报：每会话每篇只上报一次，服务端另有 30 分钟滑动窗口去重
 watch(
   () => article.value?.slug,
@@ -135,6 +139,8 @@ useHead(
             </time>
             <span aria-hidden="true" class="text-border">·</span>
             <span>{{ article.visit_count }} 次阅读</span>
+            <span aria-hidden="true" class="text-border">·</span>
+            <span>约 {{ reading.minutes }} 分钟 · {{ reading.count }} 字</span>
             <template v-if="article.comment_count > 0">
               <span aria-hidden="true" class="text-border">·</span>
               <span>{{ article.comment_count }} 条评论</span>
@@ -231,6 +237,9 @@ useHead(
       <aside class="mt-10 hidden w-56 shrink-0 xl:sticky xl:top-24 xl:mt-0 xl:block">
         <ArticleToc />
       </aside>
+
+      <!-- 移动端目录抽屉：由浮动工具栏在 xl 以下视口唤出 -->
+      <TocDrawer />
     </div>
   </template>
 </template>

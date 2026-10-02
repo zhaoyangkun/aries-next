@@ -1,8 +1,14 @@
 @import "tailwindcss";
 @import "@aries/design-tokens/theme.css";
+/* 全量中文 WebFont：fontsource v5 自带按 unicode-range 切分的 woff2 分片，
+   浏览器按页面实际用字按需下载；本地 Lato 与 Noto Sans SC latin 子集（下方 @font-face）
+   声明在前，拉丁字符优先命中本地文件，中文落到 fontsource 分片 */
+@import "@fontsource/noto-sans-sc/400.css";
+@import "@fontsource/noto-sans-sc/500.css";
+@import "@fontsource/noto-sans-sc/700.css";
 
 /* 字体文件来自旧版 xue 主题（同一作者项目），woff2 放 public/fonts 下静态服务。
-   noto-sans-sc 为 latin 子集，中文字形按字体栈落到系统 Noto Sans SC / 雅黑 */
+   noto-sans-sc 为 latin 子集，中文字形由上方 @fontsource 全量分片覆盖 */
 @font-face {
   font-family: "Lato";
   font-style: normal;
@@ -631,7 +637,7 @@
 }
 
 .article-content img {
-  @apply mx-auto my-6 h-auto max-w-full rounded-md;
+  @apply mx-auto my-6 h-auto max-w-full cursor-zoom-in rounded-md;
 }
 
 .article-content table {

@@ -9,6 +9,8 @@ const FALLBACK_SITE: PublicSite = {
   logo_url: '',
   icp_text: '',
   default_cover_url: '',
+  // 后端暂不可用时没有建站时间，空串让 footer「已运行 X 天」按缺失处理（隐藏）
+  created_at: '',
 }
 
 export async function useSite(): Promise<Ref<PublicSite>> {

@@ -1,12 +1,24 @@
 <script setup lang="ts">
 // 展示端图片灯箱：移植自管理端 AppImageLightbox（滚轮缩放/拖拽平移/键盘操作），
 // 但 web 端没有 UI 库与图标库，按钮用原生元素 + 内联 SVG，并增加左右切换。
+// 两种数据源：图库条目 items（PublicGalleryItem）或通用图片 images（文章正文放大），
+// 内部统一归一化为 slides，caption 分别来自 alt+location 或显式 caption。
 import type { PublicGalleryItem } from '~/composables/usePublicApi'
+
+/** 通用图片模式入参（文章正文图片放大等场景） */
+export interface LightboxImage {
+  url: string
+  alt?: string
+  caption?: string
+}
 
 const props = defineProps<{
   open: boolean
-  items: PublicGalleryItem[]
   index: number
+  /** 图库模式：图库条目列表（原有用法，保持兼容） */
+  items?: PublicGalleryItem[]
+  /** 通用模式：任意图片列表；与 items 二选一，优先取 images */
+  images?: LightboxImage[]
 }>()
 
 const emit = defineEmits<{
@@ -28,11 +40,18 @@ const dragStartTranslateX = ref(0)
 const dragStartTranslateY = ref(0)
 const containerRef = ref<HTMLDivElement | null>(null)
 
-const current = computed(() => props.items[props.index])
+const current = computed(() => slides.value[props.index])
 const scalePercent = computed(() => Math.round(scale.value * 100))
-const caption = computed(() => {
-  const item = current.value
-  return item ? [item.alt, item.location].filter(Boolean).join(' · ') : ''
+const caption = computed(() => current.value?.caption ?? '')
+
+/** 统一后的播放列表：图库条目取 url/alt，caption 拼 alt · location；通用图片原样使用 */
+const slides = computed<LightboxImage[]>(() => {
+  if (props.images) return props.images
+  return (props.items ?? []).map((item) => ({
+    url: item.url,
+    alt: item.alt,
+    caption: [item.alt, item.location].filter(Boolean).join(' · '),
+  }))
 })
 
 function resetView() {
@@ -46,7 +65,7 @@ function close() {
 }
 
 function go(step: number) {
-  const next = (props.index + step + props.items.length) % props.items.length
+  const next = (props.index + step + slides.value.length) % slides.value.length
   emit('update:index', next)
 }
 
@@ -162,7 +181,7 @@ onBeforeUnmount(() => {
       >
         <!-- 顶栏：计数 + 关闭 -->
         <div class="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 py-3">
-          <span class="text-sm text-white/70">{{ index + 1 }} / {{ items.length }}</span>
+          <span class="text-sm text-white/70">{{ index + 1 }} / {{ slides.length }}</span>
           <button
             type="button"
             class="rounded-md p-2 text-white transition-colors hover:bg-white/10"
@@ -194,7 +213,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 左右切换（多图时显示） -->
-        <template v-if="items.length > 1">
+        <template v-if="slides.length > 1">
           <button
             type="button"
             class="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-2.5 text-white backdrop-blur transition-colors hover:bg-black/70"

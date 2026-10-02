@@ -45,6 +45,7 @@ describe('useSite', () => {
       logo_url: '',
       icp_text: '',
       default_cover_url: '',
+      created_at: '2026-01-01T00:00:00Z',
     }
     const fetchMock = vi.fn().mockResolvedValue(site)
     vi.stubGlobal('$fetch', fetchMock)
@@ -63,7 +64,7 @@ describe('useSite', () => {
 
     const result = await useSite()
 
-    // 兜底值必须保证整站可渲染：站点名固定为 Aries，其余字段为空串
+    // 兜底值必须保证整站可渲染：站点名固定为 Aries，created_at 为空串（footer 隐藏运行天数）
     expect(result.value).toEqual({
       site_name: 'Aries',
       site_description: '',
@@ -71,6 +72,7 @@ describe('useSite', () => {
       logo_url: '',
       icp_text: '',
       default_cover_url: '',
+      created_at: '',
     })
   })
 
@@ -84,6 +86,7 @@ describe('useSite', () => {
       logo_url: '',
       icp_text: '',
       default_cover_url: '',
+      created_at: '',
     })
     vi.stubGlobal('$fetch', fetchMock)
 

@@ -5,6 +5,22 @@ import type { PublicNavigationNode } from '~/composables/usePublicApi'
 const site = await useSite()
 const navigation = await useNavigation()
 const { toggleTheme } = useTheme()
+const { show: showSearchPalette } = useSearchPalette()
+
+// Ctrl/⌘+K：全局唤起搜索弹层（SearchPalette 自身管理关闭与焦点）
+onMounted(() => {
+  const onGlobalKey = (event: KeyboardEvent) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault()
+      showSearchPalette()
+    }
+  }
+  window.addEventListener('keydown', onGlobalKey)
+  onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
+})
+
+// 站点运行天数：created_at 缺失/非法时为 0，模板据此隐藏
+const runDays = computed(() => siteRunDays(site.value.created_at))
 
 // header 滚动后加毛玻璃与细边框；SSR 初始不带该 class，挂载后再读滚动位置，保证 Hydration 一致
 const scrolled = ref(false)
@@ -136,6 +152,9 @@ useHead(
       </div>
     </header>
     <main class="site-main"><slot /></main>
+    <!-- 右下角浮动工具栏 + 全局搜索弹层（状态经 useSearchPalette/useTocDrawer 共享） -->
+    <AppToolbar />
+    <SearchPalette />
     <footer class="site-footer">
       <!-- 页脚复用同一导航数据，只展示一级节点，避免页脚过重 -->
       <nav v-if="navItems.length > 0" class="site-footer-nav" aria-label="页脚导航">
@@ -150,6 +169,7 @@ useHead(
         <div class="flex flex-col gap-1">
           <span>© {{ new Date().getFullYear() }} {{ site.site_name }}</span>
           <span v-if="site.site_description">{{ site.site_description }}</span>
+          <span v-if="runDays > 0">本站已运行 {{ runDays }} 天</span>
         </div>
         <div class="flex items-center gap-4">
           <a

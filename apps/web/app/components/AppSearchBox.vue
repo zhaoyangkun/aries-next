@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 顶栏搜索框（桌面端）：输入防抖请求 /search/suggest 下拉建议，
-// Enter 进搜索页、↑↓ 选择建议、Esc 关闭；Ctrl/⌘+K 全局聚焦。
+// Enter 进搜索页、↑↓ 选择建议、Esc 关闭。
+// 全局 Ctrl/⌘+K 由 SearchPalette 承接（见 layouts/default.vue），此处不再监听。
 import type { PublicSearchSuggestion } from '~/composables/usePublicApi'
 
 const keyword = ref('')
@@ -71,20 +72,8 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-// Ctrl/⌘+K：全局聚焦搜索框（输入框自身的 keydown 之外，挂在 window 上）
-onMounted(() => {
-  const onGlobalKey = (event: KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-      event.preventDefault()
-      inputRef.value?.focus()
-      inputRef.value?.select()
-    }
-  }
-  window.addEventListener('keydown', onGlobalKey)
-  onBeforeUnmount(() => {
-    window.removeEventListener('keydown', onGlobalKey)
-    clearTimeout(timer)
-  })
+onBeforeUnmount(() => {
+  clearTimeout(timer)
 })
 </script>
 

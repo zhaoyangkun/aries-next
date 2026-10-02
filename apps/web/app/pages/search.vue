@@ -38,7 +38,14 @@ function submit() {
 }
 
 // —— 问 AI：纯客户端交互（点击触发 POST + SSE），不做 SSR 预取 ——
-const mode = ref<SearchMode>('articles')
+const mode = ref<SearchMode>(route.query.tab === 'ai' ? 'ask' : 'articles')
+// 支持 /search?q=xxx&tab=ai 直达问 AI（全局搜索弹层 ⌘/Ctrl+Enter 跳转到此）
+watch(
+  () => route.query.tab,
+  (tab) => {
+    mode.value = tab === 'ai' ? 'ask' : 'articles'
+  },
+)
 const question = ref('')
 const answer = ref('')
 const sources = ref<AskSource[]>([])
