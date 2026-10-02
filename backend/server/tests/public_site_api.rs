@@ -11,7 +11,8 @@ use axum::http::StatusCode;
 use common::TestApp;
 
 /// 期望的公开字段集合：与 `PublicSiteResponse` 一一对应，新增内部配置默认不得出现。
-const PUBLIC_SITE_KEYS: [&str; 6] = [
+const PUBLIC_SITE_KEYS: [&str; 7] = [
+    "created_at",
     "default_cover_url",
     "icp_text",
     "logo_url",
@@ -61,6 +62,15 @@ async fn public_site_returns_defaults_without_auth() -> anyhow::Result<()> {
         ] {
             ensure!(body[key] == "", "{key} should default to empty: {body}");
         }
+        // 建站时间由 Migration 预插行生成，必须是合法的时间戳字符串。
+        let created_at = body["created_at"]
+            .as_str()
+            .context("created_at should be a string")?;
+        ensure!(
+            time::OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
+                .is_ok(),
+            "created_at should be RFC 3339: {created_at}"
+        );
         Ok(())
     }
     .await;
@@ -98,7 +108,7 @@ async fn public_site_reflects_admin_updates_but_hides_internal_fields() -> anyho
             .await?;
         ensure!(updated.status == StatusCode::OK, "{}", updated.body);
 
-        // 公开端点精确回显六个公开字段。
+        // 公开端点精确回显七个公开字段。
         let body = get_public_site(&app).await?;
         ensure!(body["site_name"] == "Aries 博客");
         ensure!(body["site_description"] == "记录 Rust 与生活");

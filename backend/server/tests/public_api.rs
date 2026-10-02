@@ -101,6 +101,7 @@ async fn site_scenario(app: &TestApp) -> anyhow::Result<()> {
     keys.sort_unstable();
     ensure!(
         keys == [
+            "created_at",
             "default_cover_url",
             "icp_text",
             "logo_url",

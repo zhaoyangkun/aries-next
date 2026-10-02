@@ -224,6 +224,7 @@ pub struct SiteSettings {
     pub page_size_search: i32,
     pub comment_policy: CommentPolicy,
     pub comments_per_page: i32,
+    pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
 

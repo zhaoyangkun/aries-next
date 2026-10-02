@@ -21,6 +21,9 @@ struct PublicSiteResponse {
     logo_url: String,
     icp_text: String,
     default_cover_url: String,
+    /// 建站时间（展示端 footer「本站已运行 X 天」）。
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: time::OffsetDateTime,
 }
 
 async fn get_public_site(State(state): State<AppState>) -> Result<Response, ApiError> {
@@ -33,6 +36,7 @@ async fn get_public_site(State(state): State<AppState>) -> Result<Response, ApiE
             logo_url: settings.logo_url,
             icp_text: settings.icp_text,
             default_cover_url: settings.default_cover_url,
+            created_at: settings.created_at,
         },
         CACHE_AGGREGATE,
     ))

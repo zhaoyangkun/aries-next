@@ -4083,7 +4083,7 @@ components:
             updated_at: { type: string, format: date-time }
     PublicSiteResponse:
       type: object
-      required: [site_name, site_description, site_url, logo_url, icp_text, default_cover_url]
+      required: [site_name, site_description, site_url, logo_url, icp_text, default_cover_url, created_at]
       properties:
         site_name: { type: string }
         site_description: { type: string }
@@ -4091,6 +4091,7 @@ components:
         logo_url: { type: string }
         icp_text: { type: string }
         default_cover_url: { type: string }
+        created_at: { type: string, format: date-time, description: 建站时间（footer「本站已运行 X 天」的数据源） }
     PublicCategory:
       type: object
       required: [id, name, slug, description, article_count]

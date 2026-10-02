@@ -1840,6 +1840,11 @@ export interface components {
             logo_url: string;
             icp_text: string;
             default_cover_url: string;
+            /**
+             * Format: date-time
+             * @description 建站时间（footer「本站已运行 X 天」的数据源）
+             */
+            created_at: string;
         };
         PublicCategory: {
             /** Format: int64 */

@@ -28,6 +28,7 @@ struct SiteSettingsRow {
     page_size_search: i32,
     comment_policy: String,
     comments_per_page: i32,
+    created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
 
@@ -50,6 +51,7 @@ impl TryFrom<SiteSettingsRow> for SiteSettings {
                 .parse()
                 .map_err(|_| MediaError::InvalidCommentPolicy)?,
             comments_per_page: row.comments_per_page,
+            created_at: row.created_at,
             updated_at: row.updated_at,
         })
     }
@@ -57,7 +59,7 @@ impl TryFrom<SiteSettingsRow> for SiteSettings {
 
 const SETTINGS_COLUMNS: &str = "site_name, site_description, site_url, logo_url, icp_text, \
     default_cover_url, page_size_index, page_size_archive, page_size_search, \
-    comment_policy, comments_per_page, updated_at";
+    comment_policy, comments_per_page, created_at, updated_at";
 
 #[async_trait]
 impl SiteSettingsRepository for PostgresSiteSettingsRepository {
