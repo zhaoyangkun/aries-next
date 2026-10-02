@@ -727,11 +727,11 @@ impl ContentRepository for PostgresContentRepository {
             .bind(update.slug)
             .bind(update.title)
             .bind(update.summary)
-            .bind(update.ai_brief)
             .bind(update.cover_url)
             .bind(update.markdown_source)
             .bind(update.rendered_html)
-            .bind(update.seo_keywords);
+            .bind(update.seo_keywords)
+            .bind(update.ai_brief);
         // 占位符按绑定顺序编号，密码子句存在时才绑定 $11。
         let statement = if set_password {
             statement.bind(update.access_password_hash.flatten())
@@ -890,7 +890,6 @@ impl ContentRepository for PostgresContentRepository {
             .bind(metadata.slug)
             .bind(metadata.title)
             .bind(metadata.summary)
-            .bind(metadata.ai_brief)
             .bind(metadata.cover_url)
             .bind(revision.markdown_source)
             .bind(restore.rendered_html)
@@ -898,6 +897,7 @@ impl ContentRepository for PostgresContentRepository {
             .bind(metadata.access_password_hash)
             .bind(metadata.allow_comments)
             .bind(metadata.is_pinned)
+            .bind(metadata.ai_brief)
             .fetch_one(&mut *transaction)
             .await
             .map_err(map_sqlx)?;

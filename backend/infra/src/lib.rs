@@ -152,11 +152,53 @@ pub async fn ensure_schema(pool: &PgPool, schema: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 执行 SQLx Migration。
+///
+/// Migration 202608010001 使用 `citext` 扩展。并发集成测试共用同一数据库、各自跑
+/// Migration 时，多个事务同时 `CREATE EXTENSION IF NOT EXISTS` 会竞争（IF NOT EXISTS
+/// 不保证并发安全），且扩展对象会落入执行者 search_path 的首个 Schema（测试里是
+/// 随机 Schema，teardown 即被 DROP）。因此这里先取 search_path 的最后一项（测试
+/// 约定为 `{test_schema},{base}`，生产连接只有业务 Schema），在 autocommit 下把扩展
+/// 固定建到该 Schema，并对并发竞争做重试；Migration 内的 CREATE EXTENSION 随之恒为
+/// no-op，已应用库的行为不变。
 pub async fn run_migrations(pool: &PgPool) -> anyhow::Result<()> {
+    ensure_citext_extension(pool).await?;
     sqlx::migrate!("../../migrations")
         .run(pool)
         .await
         .context("failed to run PostgreSQL migrations")
+}
+
+async fn ensure_citext_extension(pool: &PgPool) -> anyhow::Result<()> {
+    let (search_path,): (String,) = sqlx::query_as("SHOW search_path")
+        .fetch_one(pool)
+        .await
+        .context("failed to read search_path before creating extensions")?;
+    let base_schema = search_path
+        .rsplit(',')
+        .next()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .context("search_path is empty")?
+        .trim_matches('"');
+
+    for attempt in 1..=5 {
+        let statement = format!(
+            "CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA \"{}\"",
+            base_schema.replace('"', "\"\"")
+        );
+        match sqlx::query(&statement).execute(pool).await {
+            Ok(_) => return Ok(()),
+            Err(error) if attempt < 5 => {
+                log::warn!("create citext extension attempt {attempt} failed: {error}; retrying");
+                tokio::time::sleep(std::time::Duration::from_millis(100 * attempt)).await;
+            }
+            Err(error) => {
+                return Err(error).context("failed to create citext extension");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn required_env(name: &str) -> anyhow::Result<String> {
