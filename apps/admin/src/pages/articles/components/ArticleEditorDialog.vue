@@ -239,9 +239,10 @@ async function createVditor() {
   if (!vditorEl.value || vditorInstance) return
   vditorInstance = new VditorCtor(vditorEl.value, {
     mode: 'ir',
-    // 运行期资产（lute / hljs / KaTeX / icons 等）全部走本地 public/vditor，
-    // 避免默认 unpkg CDN 国内不稳定导致编辑器卡加载。
-    cdn: '/vditor',
+    // 运行期资产（lute / hljs / KaTeX / icons 等）走 npmmirror（淘宝 npm 镜像，
+    // 国内访问最快且稳定）；默认 unpkg 国内超时会卡编辑器加载。
+    // 注意：升级 vditor 依赖时需同步下面的版本号。
+    cdn: 'https://registry.npmmirror.com/vditor/3.11.3/files',
     height: 420,
     toolbarConfig: { pin: true },
     cache: { enable: false },
