@@ -16,6 +16,8 @@ data/
 
 # 数据库备份 / 导出文件（含密码哈希等敏感数据）
 *.sql
+# 例外：SQLx Migration 是 Schema 的唯一来源，编译期（sqlx::migrate!）与 CI 都依赖，必须入库
+!migrations/*.sql
 
 # Migrator 导出的归档数据（真实业务数据）
 migration-archive-*.jsonl
