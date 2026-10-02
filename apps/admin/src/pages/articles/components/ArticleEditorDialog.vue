@@ -239,6 +239,9 @@ async function createVditor() {
   if (!vditorEl.value || vditorInstance) return
   vditorInstance = new VditorCtor(vditorEl.value, {
     mode: 'ir',
+    // 运行期资产（lute / hljs / KaTeX / icons 等）全部走本地 public/vditor，
+    // 避免默认 unpkg CDN 国内不稳定导致编辑器卡加载。
+    cdn: '/vditor',
     height: 420,
     toolbarConfig: { pin: true },
     cache: { enable: false },

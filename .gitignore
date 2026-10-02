@@ -28,6 +28,9 @@ migration-archive-*.jsonl
 # 代码索引工具目录
 /.codegraph/
 
+# Vditor 本地静态资产（由 apps/admin postinstall 从 node_modules 拷贝生成）
+/apps/admin/public/vditor/
+
 # 误建的 docker 构建参数文件（空文件，见根目录同名文件）
 /--build-arg
 /--provenance=false
