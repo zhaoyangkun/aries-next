@@ -22,6 +22,6 @@ function Build-Push([string]$Dockerfile, [string]$Image) {
     }
 }
 
-# Build-Push 'deploy/server.Dockerfile' 'registry.cn-hangzhou.aliyuncs.com/zhaoyangkun/aries-server'
+Build-Push 'deploy/server.Dockerfile' 'registry.cn-hangzhou.aliyuncs.com/zhaoyangkun/aries-server'
 Build-Push 'deploy/web.Dockerfile' 'registry.cn-hangzhou.aliyuncs.com/zhaoyangkun/aries-web'
 Write-Host '全部镜像构建并推送完成。'
