@@ -392,6 +392,12 @@ async fn access_scenario(app: &TestApp) -> anyhow::Result<()> {
     let set_cookie = unlocked.set_cookie.context("missing unlock cookie")?;
     ensure!(set_cookie.contains(&format!("aries_article_access_{protected_id}=")));
     ensure!(set_cookie.to_lowercase().contains("httponly"));
+    // 回归：Path 必须覆盖站点根。前端整页刷新后由 SSR 透传 Cookie 重新拉正文，
+    // 浏览器只把 Cookie 发给 URL Path 以 Cookie Path 为前缀的请求，缩到 API 子路径会让 SSR 永远收不到。
+    ensure!(
+        set_cookie.contains("Path=/"),
+        "unlock cookie must be visible to page requests: {set_cookie}"
+    );
     let access_cookie = set_cookie
         .split(';')
         .next()

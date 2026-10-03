@@ -745,8 +745,12 @@ async fn unlock_article(
     }
 
     let credential = access_credential(&state.config.bootstrap_secret, article.id, &password_hash);
+    // Path 必须放宽到站点根：前端整页刷新后由 SSR 透传 Cookie 重新拉取正文，
+    // 而浏览器只会把 Cookie 发给 URL Path 以 Cookie Path 为前缀的请求——
+    // 页面地址是 /articles/{slug}，缩到 API 子路径会导致 SSR 永远收不到解锁 Cookie。
+    // 按文章隔离由 Cookie 名（含 article_id）与 HMAC 凭据本身保证。
     let cookie = Cookie::build((access_cookie_name(article.id), credential))
-        .path(format!("/api/public/articles/{slug}"))
+        .path("/")
         .http_only(true)
         .secure(state.config.cookie_secure)
         .same_site(SameSite::Lax)
