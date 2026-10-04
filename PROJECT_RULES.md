@@ -191,6 +191,31 @@ AI 功能必须通过 Provider Adapter 接入，业务模块不能依赖具体 M
 
 HTTP 级 Contract Test 与主流程 E2E 位于 `backend/server/tests/`（共享 Harness 在 `backend/server/tests/common/mod.rs`），通过随机 PostgreSQL Schema 隔离运行，需设置 `ARIES_RUN_DATABASE_TESTS=1` 并提供可用数据库。`tests/contract` 与 `tests/e2e` 目录已预留给跨进程场景，当前为空。
 
+### 本地跑 DB 测试的标准姿势
+
+必须优先使用一次性的 Docker 容器，而不是本机开发库：
+
+```bash
+# 1. 起容器（--rm 退出即删，端口避开本机开发实例的 5432/5433）
+docker run -d --rm --name aries-test-pg \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=aries_test \
+  -p 55432:5432 postgres:17
+
+# 2. 跑测试（ARIES_RUN_DATABASE_TESTS=1 不设则 DB 测试静默跳过，等于没验证）
+ARIES_RUN_DATABASE_TESTS=1 DATABASE_HOST=localhost DATABASE_PORT=55432 \
+  DATABASE_USERNAME=postgres DATABASE_PASSWORD=postgres DATABASE_NAME=aries_test \
+  DATABASE_SCHEMA=public cargo test --workspace
+
+# 3. 清理：连容器带数据一起删掉，测试 Harness 的随机 Schema 也已在测试结束时 DROP
+docker rm -f aries-test-pg
+```
+
+理由：
+
+- **与 CI 一致**：GitHub Actions 用的是全新 `postgres:17` 实例；扩展未安装、migration 未应用等故障只在干净库上复现，长期使用的本机开发库处于"脏"状态会掩盖失败。
+- **不碰真实数据**：即使 Harness 有缺陷，污染的也是容器内的临时库。
+- **可重复**：每次从零开始，结果不依赖本机库的历史状态。
+
 修复 Bug 时，优先增加一个能复现该 Bug 的测试。
 
 ## 11. Git 规范
