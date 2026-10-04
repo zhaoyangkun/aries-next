@@ -7,9 +7,10 @@ use aries_core::{
         Role, User, UserStatus,
     },
     content::{
-        Article, ArticleListQuery, ArticlePage, ArticleRevision, ArticleStatus, ArticleUpdate,
-        Category, CategoryKind, CategoryUpdate, ContentError, ContentRepository, NewArticle,
-        NewCategory, NewTag, RevisionMetadata, RevisionRestore, Tag, TagUpdate,
+        Article, ArticleListQuery, ArticlePage, ArticleRevision, ArticleSort, ArticleStatus,
+        ArticleUpdate, Category, CategoryKind, CategoryUpdate, ContentError, ContentRepository,
+        NewArticle, NewCategory, NewTag, RevisionMetadata, RevisionRestore, SortOrder, Tag,
+        TagUpdate,
     },
 };
 use aries_infra::ComrakMarkdownRenderer;
@@ -195,6 +196,7 @@ impl ContentRepository for MockContentRepository {
             password_protected: article.access_password_hash.is_some(),
             allow_comments: article.allow_comments,
             is_pinned: article.is_pinned,
+            sort_order: id as i32,
             version: 1,
             visit_count: 0,
             comment_count: 0,
@@ -322,7 +324,14 @@ impl ContentRepository for MockContentRepository {
     async fn list_articles(&self, query: ArticleListQuery) -> Result<ArticlePage, ContentError> {
         let page = query.page.max(1);
         let page_size = query.page_size.clamp(1, 100);
-        let items = self.articles.lock().unwrap().clone();
+        let mut items = self.articles.lock().unwrap().clone();
+        // 其余排序字段其他用例依赖插入序断言，这里只实现重排测试需要的 sort_order 排序。
+        if query.sort == ArticleSort::SortOrder {
+            items.sort_by_key(|article| article.sort_order);
+            if query.order == SortOrder::Desc {
+                items.reverse();
+            }
+        }
         let total = i64::try_from(items.len()).map_err(|_| ContentError::StoreUnavailable)?;
         let start =
             usize::try_from(page - 1).unwrap_or(0) * usize::try_from(page_size).unwrap_or(0);
@@ -419,6 +428,27 @@ impl ContentRepository for MockContentRepository {
             .lock()
             .unwrap()
             .retain(|revision| revision.article_id != article_id);
+        Ok(())
+    }
+
+    async fn reorder_articles(&self, ordered_ids: Vec<i64>) -> Result<(), ContentError> {
+        // 与 PostgreSQL 实现一致的下锚语义，供 HTTP 层契约测试：
+        // 新区块 = [min - len, min)，块内顺序即入参顺序。
+        let mut articles = self.articles.lock().unwrap();
+        let min = articles
+            .iter()
+            .filter(|article| ordered_ids.contains(&article.id))
+            .map(|article| article.sort_order)
+            .min()
+            .ok_or(ContentError::NotFound)?;
+        let base = min - ordered_ids.len() as i32;
+        for (position, id) in ordered_ids.iter().enumerate() {
+            let article = articles
+                .iter_mut()
+                .find(|article| article.id == *id)
+                .ok_or(ContentError::NotFound)?;
+            article.sort_order = base + position as i32;
+        }
         Ok(())
     }
 
@@ -1481,6 +1511,90 @@ async fn list_supports_sort_parameters_and_pagination_total() {
     assert!(body.contains("\"total\":3"));
     assert!(body.contains("\"page\":2"));
     assert_eq!(body.matches("\"id\":").count(), 1);
+}
+
+#[tokio::test]
+async fn reorder_articles_updates_sort_order_and_validates_input() {
+    let app = test_app(Role::Editor);
+
+    // 创建三篇文章并记录 id。
+    let mut ids = Vec::new();
+    for index in 0..3 {
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/admin/articles",
+                serde_json::json!({
+                    "title": format!("Sortable {index}"),
+                    "markdown_source": "# x"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = response_body(response).await;
+        let id: i64 = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+            .as_i64()
+            .unwrap();
+        ids.push(id);
+    }
+
+    // 非法入参：空列表 / 重复 id / 超上限 → 400。
+    for payload in [
+        serde_json::json!({ "article_ids": [] }),
+        serde_json::json!({ "article_ids": [ids[0], ids[0]] }),
+        serde_json::json!({ "article_ids": (0..501).collect::<Vec<i64>>() }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request("PUT", "/api/admin/articles/reorder", payload))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // 不存在 id → 404。
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/reorder",
+            serde_json::json!({ "article_ids": [ids[0], i64::MAX] }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    // 倒序重排 → 204；sort_order 升序列表现即为倒序。
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/reorder",
+            serde_json::json!({ "article_ids": [ids[2], ids[1], ids[0]] }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let response = app
+        .clone()
+        .oneshot(get_request(
+            "/api/admin/articles?sort=sort_order&order=asc&page_size=10",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_body(response).await;
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let listed: Vec<i64> = value["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(listed, vec![ids[2], ids[1], ids[0]]);
 }
 
 fn json_request(method: &str, uri: &str, payload: serde_json::Value) -> Request<Body> {

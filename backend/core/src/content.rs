@@ -109,6 +109,8 @@ pub struct Article {
     pub password_protected: bool,
     pub allow_comments: bool,
     pub is_pinned: bool,
+    /// 手动排序值；公开列表按 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`。
+    pub sort_order: i32,
     pub version: i64,
     pub visit_count: i64,
     pub comment_count: i64,
@@ -163,6 +165,8 @@ pub enum ArticleSort {
     CreatedAt,
     PublishedAt,
     Title,
+    /// 手动排序值（`sort_order ASC`），配合「排序」模式的拖拽/箭头调整。
+    SortOrder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -487,6 +491,13 @@ pub trait ContentRepository: Send + Sync {
     ) -> Result<Article, ContentError>;
     /// 仅允许物理删除 `recycled` 状态的文章，其他状态返回 `NotRecycled`。
     async fn delete_article(&self, article_id: i64) -> Result<(), ContentError>;
+    /// 原子批量重排：按入参顺序重写 `sort_order`。
+    /// 语义：取这批文章当前 `sort_order` 的最小值 `base`，把 `base - len + 序位`
+    /// 依次赋给入参条目——这批文章整体落到原槽位区间正前方的一个连续新区块，
+    /// 块内顺序即入参顺序。块内值严格递增互不冲突；未入参文章的相对位置不受影响。
+    /// 对全表 `sort_order` 相同（如全部为默认值 0）的数据也有效：新区块值全部小于
+    /// `base`，因此批内顺序立即可见。
+    async fn reorder_articles(&self, ordered_ids: Vec<i64>) -> Result<(), ContentError>;
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError>;
     async fn find_revision(
         &self,
@@ -715,6 +726,7 @@ mod tests {
             password_protected: false,
             allow_comments: true,
             is_pinned: false,
+            sort_order: 0,
             version: 1,
             visit_count: 0,
             comment_count: 0,
@@ -751,6 +763,7 @@ mod tests {
             password_protected: false,
             allow_comments: true,
             is_pinned: false,
+            sort_order: 0,
             version: 1,
             visit_count: 0,
             comment_count: 0,

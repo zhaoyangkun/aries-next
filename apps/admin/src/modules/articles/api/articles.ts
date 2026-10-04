@@ -19,7 +19,7 @@ export type ArticlePage = ArticlePageResponse
 export type ArticleRevision = ArticleRevisionResponse
 
 // Query 参数与请求 Payload 暂无对应命名 Schema（sort/order 为内联枚举），保持手写。
-export type ArticleSort = 'updated_at' | 'created_at' | 'published_at' | 'title'
+export type ArticleSort = 'updated_at' | 'created_at' | 'published_at' | 'title' | 'sort_order'
 export type ArticleSortOrder = 'asc' | 'desc'
 
 // 待迁：与 CreateArticleRequest 的差异在于 summary/markdown_source 在编辑器里恒为必填，
@@ -92,6 +92,14 @@ export const articlesApi = {
   // 物理删除：仅 recycled 状态的文章允许删除，其余状态 Backend 返回 409。
   async remove(articleId: number) {
     await api.delete(`/api/admin/articles/${articleId}`)
+  },
+
+  /**
+   * 批量重排文章手动排序值（下锚语义）。ids 为当前可视列表按期望顺序全量提交
+   * （典型：排序模式下当前页的完整有序 id）；幂等，重复提交同一列表结果一致。
+   */
+  async reorder(articleIds: number[]) {
+    await api.put('/api/admin/articles/reorder', { article_ids: articleIds })
   },
 
   async changeStatus(

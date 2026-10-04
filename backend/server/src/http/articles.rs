@@ -11,7 +11,7 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,7 @@ pub fn router() -> Router<AppState> {
             get(get_article).put(update_article).delete(delete_article),
         )
         .route("/articles/{id}/status", axum::routing::patch(change_status))
+        .route("/articles/reorder", put(reorder_articles))
         .route("/articles/{id}/revisions", get(list_revisions))
         .route(
             "/articles/{id}/revisions/{rev}/restore",
@@ -554,6 +555,7 @@ async fn restore_revision(
     Json(request): Json<RestoreRevisionRequest>,
 ) -> Result<Json<ArticleResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
+    current.require(Permission::ManageContent)?;
     state
         .content
         .find_article(article_id)
@@ -594,12 +596,61 @@ async fn restore_revision(
     Ok(Json(article.into()))
 }
 
+#[derive(Debug, Deserialize)]
+struct ReorderArticlesRequest {
+    /// 期望的新顺序（当前可视列表按展示顺序全量提交）。
+    article_ids: Vec<i64>,
+}
+
+/// 批量重排文章手动排序值（下锚语义）：这批文章整体落到原 sort_order 槽位区间正前方的
+/// 连续新区块，块内顺序即入参顺序；未入参文章（其他页/被过滤）的相对位置不受影响。
+/// 典型 payload 是「排序」模式下当前页的完整有序 id 列表；上下箭头等价于提交两两交换后的列表。
+async fn reorder_articles(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<ReorderArticlesRequest>,
+) -> Result<StatusCode, ApiError> {
+    current.require(Permission::ManageContent)?;
+    let ids = request.article_ids;
+    if ids.is_empty() || ids.len() > 500 {
+        return Err(ApiError::bad_request(
+            "INVALID_REORDER_INPUT",
+            "Reorder list must contain 1 to 500 article ids",
+        ));
+    }
+    let mut unique = ids.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    if unique.len() != ids.len() {
+        return Err(ApiError::bad_request(
+            "INVALID_REORDER_INPUT",
+            "Reorder list contains duplicate article ids",
+        ));
+    }
+    state.content.reorder_articles(ids.clone()).await?;
+    state
+        .auth
+        .write_audit(AuditEvent {
+            actor_user_id: Some(current.user.id),
+            action: "article.reordered".to_owned(),
+            target_type: "article".to_owned(),
+            target_id: None,
+            metadata: serde_json::json!({
+                "count": ids.len(),
+                "article_ids": ids,
+            }),
+        })
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// 非法排序参数静默回退默认值，列表接口不因排序参数报错。
 fn parse_sort(sort: Option<&str>, order: Option<&str>) -> (ArticleSort, SortOrder) {
     let sort = match sort {
         Some("created_at") => ArticleSort::CreatedAt,
         Some("published_at") => ArticleSort::PublishedAt,
         Some("title") => ArticleSort::Title,
+        Some("sort_order") => ArticleSort::SortOrder,
         _ => ArticleSort::UpdatedAt,
     };
     let order = match order {

@@ -268,10 +268,10 @@ paths:
           schema: { $ref: '#/components/schemas/ArticleStatus' }
         - name: sort
           in: query
-          description: 排序字段白名单；非法值静默回退 `updated_at`。
+          description: 排序字段白名单；非法值静默回退 `updated_at`。`sort_order` 为手动排序值（「排序」模式的拖拽/箭头调整）。
           schema:
             type: string
-            enum: [updated_at, created_at, published_at, title]
+            enum: [updated_at, created_at, published_at, title, sort_order]
             default: updated_at
         - name: order
           in: query
@@ -319,6 +319,36 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/admin/articles/reorder:
+    put:
+      tags: [Admin Articles]
+      operationId: reorderAdminArticles
+      description: 批量重排文章手动排序值（`sort_order`，下锚语义）。这批文章整体落到原 `sort_order` 槽位区间正前方的连续新区块，块内顺序即入参顺序；未入参文章的相对位置不受影响。典型 payload 是「排序」模式下当前页的完整有序 id 列表（1–500 个，不得重复）；上下箭头等价于提交两两交换后的列表。幂等，重复提交同一列表结果一致。
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderArticlesRequest'
+      responses:
+        '204':
+          description: 排序已更新（无响应体）。
+        '400':
+          description: 入参为空、含重复 id 或超过 500 个（`INVALID_REORDER_INPUT`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/admin/articles/preview:
     post:
       tags: [Admin Articles]
@@ -3838,6 +3868,17 @@ components:
         id: { type: integer, format: int64 }
         name: { type: string }
         slug: { type: string }
+    ReorderArticlesRequest:
+      type: object
+      additionalProperties: false
+      required: [article_ids]
+      properties:
+        article_ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: integer, format: int64 }
+          description: 期望的新顺序（当前可视列表按展示顺序全量提交，不得重复）。
     CreateArticleRequest:
       type: object
       additionalProperties: false

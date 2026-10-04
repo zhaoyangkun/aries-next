@@ -279,6 +279,10 @@ impl ContentRepository for UnusedContentRepository {
         Err(ContentError::StoreUnavailable)
     }
 
+    async fn reorder_articles(&self, _ordered_ids: Vec<i64>) -> Result<(), ContentError> {
+        Err(ContentError::StoreUnavailable)
+    }
+
     async fn find_article(&self, _article_id: i64) -> Result<Option<Article>, ContentError> {
         Err(ContentError::StoreUnavailable)
     }

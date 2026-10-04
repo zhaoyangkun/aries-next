@@ -44,6 +44,7 @@ struct ArticleRow {
     password_protected: bool,
     allow_comments: bool,
     is_pinned: bool,
+    sort_order: i32,
     version: i64,
     visit_count: i64,
     comment_count: i64,
@@ -73,6 +74,7 @@ impl TryFrom<ArticleRow> for Article {
             password_protected: row.password_protected,
             allow_comments: row.allow_comments,
             is_pinned: row.is_pinned,
+            sort_order: row.sort_order,
             version: row.version,
             visit_count: row.visit_count,
             comment_count: row.comment_count,
@@ -87,7 +89,8 @@ const ARTICLE_COLUMNS: &str = "id, author_id, category_id, status, slug::text AS
     summary, ai_brief, cover_url, markdown_source, rendered_html, seo_keywords, \
     COALESCE((SELECT array_agg(tag_id ORDER BY tag_id) FROM article_tags \
         WHERE article_id = articles.id), ARRAY[]::bigint[]) AS tag_ids, \
-    access_password_hash IS NOT NULL AS password_protected, allow_comments, is_pinned, version, \
+    access_password_hash IS NOT NULL AS password_protected, allow_comments, is_pinned, sort_order, \
+    version, \
     visit_count, comment_count, published_at, created_at, updated_at";
 
 #[derive(Debug, FromRow)]
@@ -273,6 +276,7 @@ impl ContentRepository for PostgresContentRepository {
             ArticleSort::CreatedAt => "created_at",
             ArticleSort::PublishedAt => "published_at",
             ArticleSort::Title => "title",
+            ArticleSort::SortOrder => "sort_order",
         };
         let sort_direction = match query.order {
             SortOrder::Asc => "ASC",
@@ -810,6 +814,37 @@ impl ContentRepository for PostgresContentRepository {
         transaction.commit().await.map_err(map_sqlx)
     }
 
+    /// 下锚重排：这批文章整体落到原 sort_order 槽位区间正前方的连续新区块
+    /// （base = 批内最小 sort_order，新值 = base - len + 序位），块内顺序即入参顺序。
+    /// 块内值严格递增互不冲突；未入参文章的相对位置不受影响；
+    /// 全表同值（如默认 0）时新区块全部小于 base，批内顺序同样立即可见。
+    async fn reorder_articles(&self, ordered_ids: Vec<i64>) -> Result<(), ContentError> {
+        if ordered_ids.is_empty() {
+            return Ok(());
+        }
+        let positions: Vec<i32> = (0..ordered_ids.len() as i32).collect();
+        // base 取批内最小 sort_order 减去批长，新区间 [base, base+len) 落在原区间正前方
+        // 且与批外任何 ≥ 原最小值的槽位错开；批内严格递增，无自冲突。
+        let result = logged_query(
+            "WITH base AS (SELECT MIN(sort_order) - $3 AS v FROM articles WHERE id = ANY($1)), \
+             newpos AS (SELECT u.id, u.ord FROM unnest($1::bigint[], $2::int4[]) AS u(id, ord)) \
+             UPDATE articles SET sort_order = (SELECT v FROM base) + newpos.ord \
+             FROM newpos WHERE articles.id = newpos.id",
+        )
+        .bind(&ordered_ids)
+        .bind(&positions)
+        .bind(ordered_ids.len() as i32)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        // 入参混入不存在/重复 id 时行数必然对不上，保持 NotFound 语义且不产生部分写入
+        // （单条 UPDATE 语句自身是原子的）。
+        if result.rows_affected() != ordered_ids.len() as u64 {
+            return Err(ContentError::NotFound);
+        }
+        Ok(())
+    }
+
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError> {
         let rows = logged_query_as::<RevisionRow>(
             "SELECT article_id, revision_no, markdown_source, metadata_snapshot, operator_id, \
@@ -1228,6 +1263,139 @@ mod tests {
         let scenario_result = async {
             crate::run_migrations(&test_pool).await?;
             run_repository_scenario(&test_pool).await
+        }
+        .await;
+
+        test_pool.close().await;
+        let cleanup_result = logged_query(&format!("DROP SCHEMA \"{test_schema}\" CASCADE"))
+            .execute(&admin_pool)
+            .await
+            .context("failed to remove isolated content test schema");
+        admin_pool.close().await;
+
+        scenario_result?;
+        cleanup_result?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn postgresql_repository_reorder_articles_keeps_slots() -> anyhow::Result<()> {
+        if std::env::var("ARIES_RUN_DATABASE_TESTS").as_deref() != Ok("1") {
+            return Ok(());
+        }
+        let _ = dotenvy::dotenv();
+        let base_config = crate::PostgresConfig::from_env()?;
+        let admin_pool = crate::connect_postgres(&base_config).await?;
+        let test_schema = format!("aries_test_{}", Uuid::now_v7().simple());
+        logged_query(&format!("CREATE SCHEMA \"{test_schema}\""))
+            .execute(&admin_pool)
+            .await
+            .context("failed to create isolated content test schema")?;
+        let test_config = crate::PostgresConfig {
+            options: base_config.options.clone(),
+            schema: format!("{test_schema},{}", base_config.schema()),
+            slow_query_ms: 0,
+        };
+        let test_pool = crate::connect_postgres(&test_config).await?;
+        let scenario_result = async {
+            crate::run_migrations(&test_pool).await?;
+            let user_id = logged_query_scalar::<i64>(
+                "INSERT INTO users \
+                 (username, email, password_hash, display_name, role, status) \
+                 VALUES ('editor', 'editor@example.com', 'hash', 'Editor', 'editor', 'active') \
+                 RETURNING id",
+            )
+            .fetch_one(&test_pool)
+            .await?;
+            let repository = PostgresContentRepository::new(test_pool.clone());
+            let rendered = "<p>x</p>".to_owned();
+            let mut ids = Vec::new();
+            for index in 0..4 {
+                let article = repository
+                    .create_article(NewArticle {
+                        author_id: user_id,
+                        category_id: None,
+                        slug: format!("reorder-{index}"),
+                        title: format!("Reorder {index}"),
+                        summary: String::new(),
+                        ai_brief: None,
+                        cover_url: None,
+                        markdown_source: "x".to_owned(),
+                        rendered_html: rendered.clone(),
+                        seo_keywords: Vec::new(),
+                        access_password_hash: None,
+                        allow_comments: true,
+                        is_pinned: false,
+                        tag_ids: Vec::new(),
+                    })
+                    .await?;
+                ids.push(article.id);
+            }
+            // 初始 sort_order 全部为默认值 0（不可区分槽位）。
+            // 全量倒序重排：新区块 [-4,-3,-2,-1] 全部小于 0，批内顺序立即可见。
+            repository
+                .reorder_articles(vec![ids[3], ids[2], ids[1], ids[0]])
+                .await?;
+            let page = repository
+                .list_articles(ArticleListQuery {
+                    page: 1,
+                    page_size: 10,
+                    sort: ArticleSort::SortOrder,
+                    order: SortOrder::Asc,
+                    ..ArticleListQuery::default()
+                })
+                .await?;
+            let listed: Vec<i64> = page.items.iter().map(|article| article.id).collect();
+            ensure!(listed == vec![ids[3], ids[2], ids[1], ids[0]]);
+
+            // 部分批重排：制造可区分槽位后，批 [id2(30), id0(10)] 换序
+            // 落到新区间 [8,9]——id1(20)/id3(40) 的值与相对位置严格不变。
+            logged_query("UPDATE articles SET sort_order = id * 10")
+                .execute(&test_pool)
+                .await?;
+            repository.reorder_articles(vec![ids[2], ids[0]]).await?;
+            let after = repository
+                .list_articles(ArticleListQuery {
+                    page: 1,
+                    page_size: 10,
+                    sort: ArticleSort::SortOrder,
+                    order: SortOrder::Asc,
+                    ..ArticleListQuery::default()
+                })
+                .await?;
+            let orders: Vec<(i64, i32)> = after
+                .items
+                .iter()
+                .map(|article| (article.id, article.sort_order))
+                .collect();
+            ensure!(
+                orders == vec![(ids[2], 8), (ids[0], 9), (ids[1], 20), (ids[3], 40)],
+                "below-base reorder violated: {orders:?}"
+            );
+
+            // 混入不存在 id：NotFound，且不产生部分写入。
+            ensure!(matches!(
+                repository.reorder_articles(vec![ids[1], i64::MAX]).await,
+                Err(ContentError::NotFound)
+            ));
+            let unchanged = repository
+                .list_articles(ArticleListQuery {
+                    page: 1,
+                    page_size: 10,
+                    sort: ArticleSort::SortOrder,
+                    order: SortOrder::Asc,
+                    ..ArticleListQuery::default()
+                })
+                .await?;
+            ensure!(
+                unchanged
+                    .items
+                    .iter()
+                    .map(|article| article.id)
+                    .collect::<Vec<_>>()
+                    == orders.iter().map(|(id, _)| *id).collect::<Vec<_>>()
+            );
+            Ok(())
         }
         .await;
 

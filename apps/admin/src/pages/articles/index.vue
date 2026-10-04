@@ -2,9 +2,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ColumnDef, RowSelectionState } from '@tanstack/vue-table'
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   EllipsisIcon,
   FileTextIcon,
   FileUpIcon,
+  GripVerticalIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -77,12 +80,34 @@ const deleteConfirmOpen = ref(false)
 const pendingDelete = ref<AdminArticle | null>(null)
 const deleting = ref(false)
 
+// 「排序」模式（sort_order 升序）下展示拖拽手柄与上下箭头；切到该模式固定升序。
+const reorderMode = computed(() => sort.value === 'sort_order')
+const reordering = ref(false)
+const dragIndex = ref<number | null>(null)
+watch(sort, (field) => {
+  if (field === 'sort_order') order.value = 'asc'
+})
+
 const hasActiveFilter = computed(
   () => Boolean(keyword.value.trim()) || status.value !== 'all' || categoryId.value !== null || tagId.value !== null,
 )
 
 // 表格列定义；排序与分页走后端，AppDataTable 只负责呈现与交互状态。
-const articleColumns: ColumnDef<AdminArticle, unknown>[] = [
+// 「排序」模式下在最前面临时插入拖拽/箭头列，退出后隐藏。
+const reorderColumn: ColumnDef<AdminArticle, unknown> = {
+  id: 'reorder',
+  header: '排序',
+  enableHiding: false,
+  meta: { headerClass: 'w-24', cellClass: 'w-24' },
+}
+
+const articleColumns = computed<ColumnDef<AdminArticle, unknown>[]>(() =>
+  reorderMode.value
+    ? [reorderColumn, ...staticArticleColumns]
+    : staticArticleColumns,
+)
+
+const staticArticleColumns: ColumnDef<AdminArticle, unknown>[] = [
   {
     id: 'title',
     accessorKey: 'title',
@@ -232,8 +257,60 @@ async function loadArticles() {
   }
 }
 
-async function loadTaxonomy() {
+// 按期望顺序提交重排：先乐观更新本地列表，成功后刷新对齐服务端状态，失败回滚。
+async function saveReorder(ordered: AdminArticle[]) {
+  if (reordering.value) return
+  reordering.value = true
+  operationError.value = ''
+  const previous = articles.value
+  articles.value = ordered
   try {
+    await articlesApi.reorder(ordered.map((article) => article.id))
+    await loadArticles()
+  }
+  catch (requestError) {
+    articles.value = previous
+    operationError.value = getApiError(requestError, '排序保存失败')
+  }
+  finally {
+    reordering.value = false
+    dragIndex.value = null
+  }
+}
+
+// 上下箭头：与相邻条目交换；页首/页尾跨页边界不可用。
+function moveBy(index: number, delta: -1 | 1) {
+  const target = index + delta
+  if (target < 0 || target >= articles.value.length) return
+  const next = [...articles.value]
+  ;[next[index], next[target]] = [next[target], next[index]]
+  void saveReorder(next)
+}
+
+function handleDragStart(index: number, event: DragEvent) {
+  dragIndex.value = index
+  event.dataTransfer?.setData('text/plain', String(index))
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function handleDragOver(index: number, event: DragEvent) {
+  if (dragIndex.value === null || dragIndex.value === index) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+}
+
+function handleDrop(index: number, event: DragEvent) {
+  event.preventDefault()
+  const from = dragIndex.value
+  dragIndex.value = null
+  if (from === null || from === index) return
+  const next = [...articles.value]
+  const [moved] = next.splice(from, 1)
+  next.splice(index, 0, moved)
+  void saveReorder(next)
+}
+
+async function loadTaxonomy() {  try {
     const [loadedCategories, loadedTags] = await Promise.all([
       articlesApi.listCategories(),
       articlesApi.listTags(),
@@ -396,6 +473,7 @@ function authorText(article: AdminArticle) {
               <option value="published_at">按发布时间</option>
               <option value="created_at">按创建时间</option>
               <option value="title">按标题</option>
+              <option value="sort_order">按排序（可拖拽）</option>
             </select>
             <select v-model="order" aria-label="排序方向"
               class="flex h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
@@ -412,6 +490,44 @@ function authorText(article: AdminArticle) {
             :empty-title="hasActiveFilter ? '没有匹配的文章' : '还没有文章'"
             :empty-description="hasActiveFilter ? '尝试修改关键词、筛选条件或切换文章状态。' : '创建第一篇草稿，开始整理站点内容。'"
             @update:sort="handleSort" @row-click="openEditEditor" @retry="loadArticles">
+            <template #cell-reorder="{ row }">
+              <div
+                class="flex h-full items-center gap-0.5"
+                @dragover="handleDragOver(articles.indexOf(row), $event)"
+                @drop="handleDrop(articles.indexOf(row), $event)"
+                @dragend="dragIndex = null"
+              >
+                <button
+                  type="button"
+                  class="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+                  :disabled="reordering"
+                  draggable="true"
+                  aria-label="拖拽排序"
+                  @click.stop
+                  @dragstart="handleDragStart(articles.indexOf(row), $event)"
+                >
+                  <GripVerticalIcon class="size-4" />
+                </button>
+                <button
+                  type="button"
+                  class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                  :disabled="articles.indexOf(row) === 0 || reordering"
+                  :aria-label="`上移《${row.title}》`"
+                  @click.stop="moveBy(articles.indexOf(row), -1)"
+                >
+                  <ArrowUpIcon class="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                  :disabled="articles.indexOf(row) === articles.length - 1 || reordering"
+                  :aria-label="`下移《${row.title}》`"
+                  @click.stop="moveBy(articles.indexOf(row), 1)"
+                >
+                  <ArrowDownIcon class="size-3.5" />
+                </button>
+              </div>
+            </template>
             <template #cell-title="{ row }">
               <div class="min-w-0 py-1">
                 <p class="truncate font-medium">{{ row.title }}</p>
