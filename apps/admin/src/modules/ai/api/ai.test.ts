@@ -204,6 +204,7 @@ describe('getAiErrorMessage', () => {
     expect(getAiErrorMessage('AI_RATE_LIMITED')).toContain('频繁')
     expect(getAiErrorMessage('AI_PROVIDER_TIMEOUT')).toContain('超时')
     expect(getAiErrorMessage('AI_INVALID_OUTPUT')).toContain('格式无效')
+    expect(getAiErrorMessage('INVALID_AI_INPUT')).toContain('长度上限')
     expect(getAiErrorMessage('WHATEVER')).toBe('AI 请求失败，请稍后重试')
   })
 })

@@ -32,8 +32,10 @@ use super::{auth::CurrentUser, error::ApiError};
 const AI_RATE_LIMIT: usize = 10;
 const AI_RATE_WINDOW: Duration = Duration::from_secs(60);
 /// 输入长度上限：防止超长正文刷 Token 费用。
+/// 正文类功能（摘要/SEO/标签/导读）上限按字符计：中文技术长文（含代码块）常超 2 万字，
+/// 60k 字符约对应主流模型 60k Token 量级的输入上限，超出应明确报错而非静默截断。
 const MAX_SNIPPET_LENGTH: usize = 8_000;
-const MAX_CONTENT_LENGTH: usize = 20_000;
+const MAX_CONTENT_LENGTH: usize = 60_000;
 
 pub fn router() -> Router<AppState> {
     Router::new()

@@ -96,6 +96,8 @@ export function getAiErrorMessage(code: string): string {
       return 'AI 服务响应超时，请稍后重试'
     case 'AI_INVALID_OUTPUT':
       return 'AI 输出格式无效，请重新生成'
+    case 'INVALID_AI_INPUT':
+      return '内容超出 AI 处理长度上限（约 6 万字符），请缩短正文或仅选中片段使用改写'
     case 'AI_PROVIDER_FAILED':
       return 'AI 服务调用失败，请稍后重试'
     default:

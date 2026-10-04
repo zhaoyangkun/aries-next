@@ -5051,7 +5051,7 @@ components:
       required: [title, content]
       properties:
         title: { type: string }
-        content: { type: string, description: 正文 Markdown；标题 + 正文合计不超过 20000 字符 }
+        content: { type: string, description: 正文 Markdown；标题 + 正文合计不超过 60000 字符 }
     AiUsageItem:
       type: object
       description: AI 请求审计记录；不存完整 Prompt。
