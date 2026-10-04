@@ -4,6 +4,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
+# 包内现有 aries-server 与 openapi-export 两个 bin：默认运行主服务，
+# 导出工具显式 --bin openapi-export 调用。
+default-run = "aries-server"
 
 [dependencies]
 anyhow.workspace = true
