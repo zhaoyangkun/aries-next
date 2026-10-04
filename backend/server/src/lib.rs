@@ -149,10 +149,25 @@ pub fn build_app(state: AppState) -> anyhow::Result<Router> {
         // spec 由宏静态生成，序列化失败属于编程错误，启动期即失败优于静默空文档。
         let spec = serde_json::to_value(openapi::ApiDoc::openapi())
             .expect("OpenAPI spec serialization failed");
-        router = router.merge(Router::<AppState>::from(utoipa_scalar::Scalar::with_url(
-            "/api/docs",
-            spec,
-        )));
+        // utoipa-scalar 默认模板走 jsdelivr，国内访问不稳定；改用 npmmirror（阿里 CDN）
+        // 的固定版本 standalone.js。版本升级时同步更新此 URL（并确认文件 200）。
+        const SCALAR_HTML: &str = r#"<!doctype html>
+<html>
+<head>
+    <title>$title</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+</head>
+<body>
+<script id="api-reference" type="application/json">$spec</script>
+<script src="https://registry.npmmirror.com/@scalar/api-reference/1.72.4/files/dist/browser/standalone.js"></script>
+</body>
+</html>"#;
+        router = router.merge(Router::<AppState>::from(
+            utoipa_scalar::Scalar::with_url("/api/docs", spec)
+                .custom_html(SCALAR_HTML)
+                .title("Aries Next API"),
+        ));
     }
 
     Ok(router

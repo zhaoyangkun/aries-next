@@ -67,6 +67,10 @@ async fn openapi_docs_mounts_only_when_enabled() {
         body.contains("aries_admin_session"),
         "spec missing security scheme"
     );
+    assert!(
+        body.contains("registry.npmmirror.com/@scalar/api-reference"),
+        "Scalar UI must load from the domestic npmmirror CDN, not jsdelivr"
+    );
     assert_eq!(
         headers
             .get(axum::http::header::X_CONTENT_TYPE_OPTIONS)
