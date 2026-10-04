@@ -18,8 +18,8 @@ pub struct ServerConfig {
     pub slow_request_ms: u64,
     /// ERROR 尖峰阈值：最近 5 分钟 ERROR 日志数达到即打 WARN（未来可挂通知通道），0 关闭。
     pub log_error_spike_threshold: u64,
-    /// 是否挂载 OpenAPI 文档（Scalar UI，spec 内嵌页面）到 /api/docs。默认关闭：
-    /// 文档会暴露全部端点结构，生产环境按需显式开启。
+    /// 是否挂载 OpenAPI 文档（Scalar UI，spec 内嵌页面）到 /api/docs。
+    /// 默认非 production 开启、production 关闭（文档会暴露全部端点结构）。
     pub openapi_docs_enabled: bool,
 }
 
@@ -78,9 +78,18 @@ impl ServerConfig {
             .unwrap_or_else(|_| "10".to_owned())
             .parse::<u64>()
             .context("LOG_ERROR_SPIKE_THRESHOLD must be a non-negative integer")?;
+        // 文档默认在非 production 环境开启（本地开发随时可看），production 默认关闭，
+        // 需显式 OPENAPI_DOCS=true 打开。
         let openapi_docs_enabled = parse_bool(
             "OPENAPI_DOCS",
-            env::var("OPENAPI_DOCS").ok().as_deref().unwrap_or("false"),
+            env::var("OPENAPI_DOCS")
+                .ok()
+                .as_deref()
+                .unwrap_or(if app_env == "production" {
+                    "false"
+                } else {
+                    "true"
+                }),
         )?;
 
         Ok(Self {
@@ -141,6 +150,20 @@ fn parse_bool(name: &str, value: &str) -> anyhow::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_bool_accepts_only_true_false_aliases() {
+        assert!(parse_bool("X", "true").unwrap());
+        assert!(parse_bool("X", "1").unwrap());
+        assert!(!parse_bool("X", "false").unwrap());
+        assert!(!parse_bool("X", "0").unwrap());
+        let error = parse_bool("OPENAPI_DOCS", "maybe").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("OPENAPI_DOCS must be true or false")
+        );
+    }
 
     #[test]
     fn origin_rejects_paths_and_non_http_schemes() {
