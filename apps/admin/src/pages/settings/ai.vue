@@ -211,12 +211,12 @@ function tokenText(item: AiUsageItem) {
                 <div class="grid gap-2">
                   <label for="ai-base-url" class="text-sm font-medium leading-none">Base URL</label>
                   <Input id="ai-base-url" v-model="form.base_url" type="url" :placeholder="baseUrlPlaceholder" :disabled="loading || saving" />
-                  <p class="text-xs text-muted-foreground">{{ baseUrlHint }}</p>
                 </div>
                 <div class="grid gap-2">
                   <label for="ai-model" class="text-sm font-medium leading-none">Model</label>
                   <Input id="ai-model" v-model="form.model" :placeholder="modelPlaceholder" :disabled="loading || saving" />
                 </div>
+                <p class="-mt-2 text-xs text-muted-foreground sm:col-span-2">{{ baseUrlHint }}</p>
               </div>
               <div class="grid max-w-sm gap-2">
                 <label for="ai-api-key" class="text-sm font-medium leading-none">
