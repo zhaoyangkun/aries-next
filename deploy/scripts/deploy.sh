@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# 一键部署：环境检查 →（可选）构建 Admin → docker compose up -d --build → 等待就绪。
+# 一键部署：环境检查 → docker compose up -d --build → 等待就绪。
+# Admin SPA 由 server 镜像构建阶段编入 Binary（/admin/ 直出），无需单独构建产物。
 #
 # 用法：
 #   deploy/scripts/deploy.sh
-#   deploy/scripts/deploy.sh --build-admin --admin-domain https://www.example.com
 #   deploy/scripts/deploy.sh --timeout 600
+#   deploy/scripts/deploy.sh -- server web
 #
 # 说明：
 #   - 必须在装有 Docker 的主机上执行（生产机或已配置远程 Docker Context 的开发机）。
-#   - --build-admin 会先调用 deploy/scripts/build-admin.sh 生成 apps/admin/dist。
-#   - 默认对全部服务 up -d --build；只想重建部分服务时把服务名放在 -- 之后，例如：
-#       deploy/scripts/deploy.sh -- server web
+#   - 默认对全部服务 up -d --build；只想重建部分服务时把服务名放在 -- 之后。
+#   - 本地调试 Admin 用 pnpm dev:admin；把新构建的 dist 编入本地二进制用
+#     deploy/scripts/build-admin.sh && cargo build -p aries-server。
 #   - 可在任意目录执行，脚本自行定位仓库根。
 set -euo pipefail
 
@@ -20,24 +21,14 @@ cd "$ROOT"
 COMPOSE_FILE="deploy/docker-compose.yml"
 ENV_FILE=".env"
 TIMEOUT=300
-BUILD_ADMIN=0
-ADMIN_DOMAIN=""
 EXTRA_SERVICES=()
 
 usage() {
-  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --build-admin)
-      BUILD_ADMIN=1
-      shift
-      ;;
-    --admin-domain)
-      ADMIN_DOMAIN="${2:?--admin-domain 需要参数}"
-      shift 2
-      ;;
     --timeout)
       TIMEOUT="${2:?--timeout 需要参数（秒）}"
       shift 2
@@ -117,21 +108,7 @@ require_env_var "DATABASE_PASSWORD"
 require_env_var "BOOTSTRAP_SECRET"
 require_env_var "ADMIN_ORIGINS"
 
-if [[ ! -d apps/admin/dist ]]; then
-  echo "警告：apps/admin/dist 不存在，Caddy 将提供空目录（Admin 404）。" >&2
-  echo "      可先运行：deploy/scripts/build-admin.sh --domain https://<公开站域名>" >&2
-fi
-
 echo "==> 前置条件通过"
-
-if [[ "$BUILD_ADMIN" -eq 1 ]]; then
-  echo "==> 构建 Admin 静态产物"
-  if [[ -n "$ADMIN_DOMAIN" ]]; then
-    deploy/scripts/build-admin.sh --domain "$ADMIN_DOMAIN"
-  else
-    deploy/scripts/build-admin.sh
-  fi
-fi
 
 echo "==> 构建并启动服务：docker compose up -d --build ${EXTRA_SERVICES[*]:-全部服务}"
 compose up -d --build ${EXTRA_SERVICES[@]+"${EXTRA_SERVICES[@]}"}
@@ -148,4 +125,4 @@ ADMIN_ORIGIN="$(grep '^ADMIN_ORIGINS=' "$ENV_FILE" | head -1 | cut -d= -f2- | cu
 echo
 echo "部署完成。验收："
 echo "  curl -fsS ${ADMIN_ORIGIN}/api/health/ready"
-echo "  浏览器访问 Admin 与公开站，按 docs/docker-deployment.md「首次部署」做 Smoke Test"
+echo "  浏览器访问 ${ADMIN_ORIGIN}/admin/ 与公开站，按 docs/docker-deployment.md「首次部署」做 Smoke Test"

@@ -131,6 +131,9 @@ pub fn build_app(state: AppState) -> anyhow::Result<Router> {
             "/api/media/files/{*path}",
             get(http::media::serve_media_file),
         )
+        .route("/admin", get(http::admin_spa::redirect_to_admin))
+        .route("/admin/", get(http::admin_spa::serve_root))
+        .route("/admin/{*path}", get(http::admin_spa::serve))
         .nest("/api/admin", http::admin_router(state.clone()))
         .nest("/api/public", http::public::router())
         .with_state(state)

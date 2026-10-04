@@ -1,6 +1,7 @@
 name: aries
 
-# 拓扑：Caddy(80/443) ──> server:8088 / web:3000 / admin 静态文件
+# 拓扑：Caddy(80/443) ──> server:8088（/api/* 与 /admin/*，Admin SPA 编入 Binary）
+#                        └─> web:3000（Nuxt 公开站）
 # Postgres 一并编排，仅供单机自包含部署；生产也可指向外部实例（去掉本服务并改 DATABASE_HOST）
 # 本地用预构建镜像测试时请用 override 文件（见 deploy/docker-compose.local.yml），不要改服务名
 
@@ -14,7 +15,6 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../apps/admin/dist:/srv/admin:ro
       - caddy_data:/data        # 证书与 ACME 状态，务必持久化
       - caddy_config:/config
     depends_on:

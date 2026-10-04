@@ -1,3 +1,4 @@
+pub mod admin_spa;
 pub mod ai;
 pub mod articles;
 pub mod audit;

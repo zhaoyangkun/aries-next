@@ -30,6 +30,7 @@ getrandom = "0.3"
 hmac = "0.12"
 http-body-util = "0.1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
+include_dir = "0.7"
 log = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
 futures-util = { version = "0.3", default-features = false }

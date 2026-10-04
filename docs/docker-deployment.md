@@ -1,8 +1,8 @@
 # Docker Compose 生产部署
 
-> 最后验证日期：2026-09-25（对照 `deploy/` 下 Compose、Dockerfile、Caddyfile、`apps/web/nuxt.config.ts`、`apps/admin/src/composables/use-public-site-url.ts`、`.env.example`、`backend/server/src/config.rs` 与 `logging.rs` 核对；原 `deployment.md` 已于本日期并入本文，环境变量与安全项以本文为唯一权威来源）
+> 最后验证日期：2026-10-03（对照 `deploy/` 下 Compose、Dockerfile、Caddyfile、`apps/web/nuxt.config.ts`、`apps/admin/src/router/index.ts`、`backend/server/src/http/admin_spa.rs`、`.env.example`、`backend/server/src/config.rs` 与 `logging.rs` 核对；Admin SPA 自本日期起由 aries-server 编入 Binary 在 `/admin/` 下直出，不再使用单独域名与静态目录挂载）
 
-**回答什么问题**：如何用 `deploy/` 下的 Docker Compose 编排，在一台 Linux 主机上从零部署完整生产环境——**要做的事按什么顺序做、每一步怎么做**；三个产物（Server 镜像、Web 镜像、Admin 静态文件）分别怎么构建——全部产物构建期不含任何域名，镜像一次构建、任意域名部署；`.env` 每个变量的含义、约束与容器内覆盖关系；HTTPS、安全加固、上线验收、备份与回滚。
+**回答什么问题**：如何用 `deploy/` 下的 Docker Compose 编排，在一台 Linux 主机上从零部署完整生产环境——**要做的事按什么顺序做、每一步怎么做**；两个产物（Server 镜像——内含 Admin SPA、Web 镜像）分别怎么构建——全部产物构建期不含任何域名，镜像一次构建、任意域名部署；`.env` 每个变量的含义、约束与容器内覆盖关系；HTTPS、安全加固、上线验收、备份与回滚。
 **写给谁**：部署与运维人员。所有步骤可直接照做；环境变量的权威来源是 `.env.example` 与各模块的 `from_env` 实现，本文解释含义与取值约束。Bare-metal（Systemd + Nginx）拓扑见 `production-deployment.md`，其环境变量与安全约定与本文一致。
 
 **这篇文档怎么用**：
@@ -35,16 +35,16 @@
 第一次部署不用慌，按下面九步从上往下做，做完一步勾一步（括号里是该步骤的细节所在小节；第 5 步起有脚本自动代劳）。日常更新代码则跳过清单，直接看「更新与回滚」。
 
 - [ ] **1. 主机与网络**：Linux + Docker Engine/Compose Plugin，构建期内存 ≥ 4 GB，磁盘 ≥ 10 GB，80/443 端口对公网开放（[前置准备](#前置准备)）
-- [ ] **2. DNS**：`www` 与 `admin` 两个 A 记录解析到主机公网 IP，**先解析再启动**（[前置准备](#前置准备)）
+- [ ] **2. DNS**：站点域名（如 `www`）A 记录解析到主机公网 IP，**先解析再启动**（[前置准备](#前置准备)）
 - [ ] **3. 编写 `.env`**：Server 运行时变量 + Compose 插值变量，含强密码与 ≥ 24 字符的 `BOOTSTRAP_SECRET`（[环境变量配置](#环境变量配置env)）
-- [ ] **4. 构建并上传 Admin 产物**：`apps/admin/dist` 保持仓库相对路径上传到主机（[构建详解](#构建详解)）
-- [ ] **5. 启动全栈**：`deploy/scripts/deploy.sh --build-admin`，等待四服务就绪（[自动化脚本](#自动化脚本deployscripts)）
+- [ ] **4.（可选）准备 Admin 产物**：仅在用本地 `cargo build` 跑服务端时才需要 `deploy/scripts/build-admin.sh`；Docker 部署时 Admin 由 server 镜像构建阶段自动编译编入，**本步可跳过**（[构建详解](#构建详解)）
+- [ ] **5. 启动全栈**：`deploy/scripts/deploy.sh`，等待四服务就绪（[自动化脚本](#自动化脚本deployscripts)）
 - [ ] **6. 创建首个 Owner**：`BOOTSTRAP_SECRET` 调 bootstrap 接口（[首次部署](#首次部署)）
 - [ ] **7. Smoke Test 与上线验收**：按[上线验收清单](#上线验收清单)逐项打勾
 - [ ] **8. 配置每日备份 cron**：数据库 + 媒体 Volume，归档异地复制（[备份与恢复](#备份与恢复)）
 - [ ] **9. 观察期后开启 HSTS**：全站 HTTPS 稳定运行一段时间再开（[安全加固](#安全加固)）
 
-> 时间预算：首次部署大约需要「镜像拉取几分钟 + Rust 全量编译 10–40 分钟（仅首次）+ Nuxt 构建 2–5 分钟」，进度过半时你在等的几乎一定是 Rust 编译，属正常现象。
+> 时间预算：首次部署大约需要「镜像拉取几分钟 + Admin SPA 构建 1–3 分钟 + Rust 全量编译 10–40 分钟（仅首次）+ Nuxt 构建 2–5 分钟」，进度过半时你在等的几乎一定是 Rust 编译，属正常现象。
 
 ## 部署形态
 
@@ -54,7 +54,7 @@ graph TB
 
     subgraph Host["单台 Linux 主机 · Compose 栈 aries"]
         Caddy["caddy（镜像 caddy:2）<br/>唯一对公网发布 80/443"]
-        Server["server（aries-server）<br/>监听 8088，仅容器网络"]
+        Server["server（aries-server）<br/>监听 8088，仅容器网络<br/>/api/* 与 /admin/*（Admin SPA 编入 Binary，内存直出）"]
         Web["web（Nuxt SSR / node）<br/>监听 3000，仅容器网络"]
         PG[("postgres（postgres:17）<br/>监听 5432，仅容器网络")]
 
@@ -65,26 +65,21 @@ graph TB
         end
     end
 
-    AdminDist["apps/admin/dist<br/>Admin SPA 静态产物<br/>（开发机 / CI 构建，只读挂载）"]
-
     User -->|"HTTPS"| Caddy
-    Caddy -->|"www 域名：SSR 站点"| Web
-    Caddy -->|"两个域名的 /api/*：公开 API 与媒体"| Server
-    Caddy -->|"admin 域名：静态文件 + /api/*"| Server
-    Caddy --- AdminDist
+    Caddy -->|"站点域名：SSR 站点"| Web
+    Caddy -->|"站点域名的 /api/* 与 /admin/*"| Server
     Web -->|"NUXT_INTERNAL_API_BASE（容器内网直连）"| Server
     Server -->|"SQL"| PG
 
     Caddy -.-> V1
     PG -.-> V2
     Server -.-> V3
-    Server -.-> V4
 ```
 
 要点：
 
 - **只有 Caddy 发布端口**（80/443 映射到宿主机），`server`、`web`、`postgres` 仅存在于 Compose 内部网络，公网无法直连——数据库不暴露是最重要的一层防护。
-- **Admin 没有容器**：它是纯静态文件，构建后由 Caddy 从只读 Volume 直接服务；API 请求同源转发到 `server`，因此 `VITE_API_BASE_URL` 留空即可，也不用为 Admin 配额外的 CORS Origin。
+- **Admin 没有独立容器和域名**：SPA 构建产物由 `include_dir` 编入 `aries-server` Binary，运行时从内存直出，挂载在**站点域名的 `/admin/`** 下（`backend/server/src/http/admin_spa.rs`）；`/api/admin/*` 与 `/admin/*` 同源，Session Cookie（Path 限定 `/api/admin`）天然匹配，无需额外的 Origin/CORS 配置。
 - **镜像与域名完全解耦**：`web` 容器内 SSR 经 `NUXT_INTERNAL_API_BASE`（容器内网地址，`docker-compose.yml` 内置）直连 `server`，浏览器端请求固定走**同源** `/api`（由 Caddy 转发）——换域名只改 DNS 与 Caddyfile，不重建任何镜像。所有需要公网绝对地址的场景（Canonical/OG/Sitemap）优先取站点设置里的 `site_url`（Admin 后台可改），其次 `NUXT_PUBLIC_SITE_URL` 环境变量，最后回退请求来源。
 - Compose 项目名 `aries`，所有资源带前缀（容器 `aries-server-1`、Volume `aries_pgdata` 等）；`docker compose` 命令必须始终带 `-f deploy/docker-compose.yml`，否则会找不到。
 
@@ -100,39 +95,41 @@ graph TB
 
 ### DNS（先解析，再启动）
 
-| 记录                    | 指向        | 用途                  |
-| ----------------------- | ----------- | --------------------- |
-| `www.example.com` A   | 主机公网 IP | 公开站（Nuxt SSR）    |
-| `admin.example.com` A | 主机公网 IP | Admin SPA + Admin API |
+| 记录                  | 指向        | 用途               |
+| --------------------- | ----------- | ------------------ |
+| `www.example.com` A | 主机公网 IP | 公开站（Nuxt SSR） |
+
+Admin 不再使用单独域名，访问入口是 `https://www.example.com/admin/`（由 aries-server 直出），无需第二条 DNS 记录。
 
 Caddy 首次收到请求时才发起 ACME 申请；DNS 未解析或 80 端口不可达会导致反复重试直至触发 Let's Encrypt 速率限制，所以务必先解析好。
 
 ## 构建详解
 
-栈里有三个产物，构建方式各不相同，先总览：
+栈里有两个镜像产物，构建方式各不相同，先总览：
 
-| 产物            | 在哪构建                              | 方式                                                              | 构建期固化变量             | 运行时变量                                                       |
-| --------------- | ------------------------------------- | ----------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------- |
-| `server` 镜像 | 任意装 Docker 的主机（含生产机）      | `deploy/server.Dockerfile` 多阶段（Rust 编译 → slim 运行时）   | 无（环境变量全部运行期注入） | `env_file` 的全部 Server 变量                                    |
-| `web` 镜像    | 同上                                  | `deploy/web.Dockerfile` 多阶段（pnpm 构建 Nuxt → node 运行时） | **无**（域名相关配置全部运行期注入，见下） | `NITRO_HOST` / `NITRO_PORT` / `NUXT_INTERNAL_API_BASE` |
-| Admin 静态产物  | 开发机或 CI（**不进 Compose**） | `pnpm --filter @aries/admin build`                              | 无（唯一可选的 `VITE_API_BASE_URL` 仅在 API 非同源部署时需要） | 无（纯静态）                                                     |
+| 产物          | 在哪构建                         | 方式                                                                       | 构建期固化变量             | 运行时变量                                                       |
+| ------------- | -------------------------------- | -------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------- |
+| `server` 镜像 | 任意装 Docker 的主机（含生产机） | `deploy/server.Dockerfile` 多阶段（Admin SPA 构建 → Rust 编译 → slim 运行时） | 无（环境变量全部运行期注入） | `env_file` 的全部 Server 变量                                    |
+| `web` 镜像    | 同上                             | `deploy/web.Dockerfile` 多阶段（pnpm 构建 Nuxt → node 运行时）           | **无**（域名相关配置全部运行期注入，见下） | `NITRO_HOST` / `NITRO_PORT` / `NUXT_INTERNAL_API_BASE` |
 
 **核心规则**：这套架构里**没有任何域名参数在构建期固化**，镜像构建一次可以给别人用、可以任意换域名。原理：
 
-- 浏览器端请求一律走**同源** `/api`（Caddy 按域名转发到 `server`），不需要知道任何域名；
+- 浏览器端请求一律走**同源** `/api`（Caddy 按路径转发到 `server`），不需要知道任何域名；Admin SPA 固定挂载在 `/admin/`（vite 构建参数 `--base=/admin/`），同样与域名无关；
 - `web` 容器内的服务端渲染（SSR 与 sitemap/rss 等 Server Route）经私有 Runtime Config `internalApiBase` 直连 `server`，由 Compose `environment:` 在**运行期**注入——私有段不会内联进客户端 Bundle；
 - 需要公网绝对地址的 SEO 场景（Canonical/OG/Sitemap）从**站点设置 `site_url`**（数据库存储，Admin 后台可改）或运行期环境变量 `NUXT_PUBLIC_SITE_URL` 读取；
 - Admin 的「打开公开站」入口同样运行期从站点设置读取（`apps/admin/src/composables/use-public-site-url.ts`）。
 
 ### Server 镜像：`deploy/server.Dockerfile`
 
-两阶段构建：
+三阶段构建：
 
-1. **Builder 阶段**（`rust:bookworm`）：
+1. **Admin 构建阶段**（`node:24-bookworm-slim`）：corepack 激活 pnpm 11.9.0（与根 `packageManager` 一致），`pnpm install --frozen-lockfile && pnpm --filter @aries/admin build:embedded`。`build:embedded` 即 `vite build --base=/admin/`，让产物内资源引用全部带 `/admin/` 前缀，与服务端挂载路径一致；产物**不含任何域名**。
+2. **Builder 阶段**（`rust:bookworm`）：
    - 构建上下文是**仓库根**（`docker-compose.yml` 中 `build.context: ..`），`COPY . .` 把整个 Workspace（`backend/`、`migrations/`、`Cargo.toml`、`Cargo.lock` 等）拷进镜像——`migrations/` 必须在内，因为 Server 启动时要执行 SQLx Migration。
+   - `COPY --from=admin-builder /build/apps/admin/dist ./apps/admin/dist`：Admin SPA 产物落在 `include_dir!` 读取的位置，随 `cargo build` 编入 Binary（该 COPY 必须在 cargo 构建之前）。本地 `cargo build` 则直接复用仓库里已构建的 `apps/admin/dist`；若从未构建，`build.rs` 会自动写一个占位 `index.html` 保证可编译。
    - Rust 工具链使用镜像预装的 latest stable（不设 `rust-toolchain.toml`：channel=stable 会被 rustup 当成别名再下载一遍，国内网络下构建会卡在 Downloading components）。
-   - `cargo build --release -p aries-server` 只编译 Server 及其依赖（不含 migrator），产物约几十 MB 的二进制。
-2. **运行时阶段**（`debian:bookworm-slim`）：
+   - `cargo build --release -p aries-server` 只编译 Server 及其依赖（不含 migrator），产物约几十 MB 的二进制（内含 Admin SPA 静态资源）。
+3. **运行时阶段**（`debian:bookworm-slim`）：
    - 只安装 `ca-certificates`：Server 运行期有出站 HTTPS 需求（AI Provider SSE、SMTP、旧图床媒体下载），slim 镜像默认没有 CA 根证书，缺了会导致一切 TLS 出站失败。
    - 采用 postgres / mysql 官方镜像同款的降权模式：容器以 root 启动 `docker-entrypoint.sh`（`deploy/docker-entrypoint.sh`），修复 `/var/lib/aries` 属主后经 `gosu` 降权到非 root 用户 `aries`（uid 10001）运行——bind mount / named volume 都无需手工处理属主，运行态进程被攻破也拿不到 root；`docker run --user` 显式指定用户时自动跳过修复直接执行。
    - 预创建 `/var/lib/aries/media` 与 `/var/lib/aries/logs` 并 `chown` 给 `aries`——所有运行时数据收在单根目录 `/var/lib/aries` 下，Compose 只需挂一个 `aries_data` Volume（named volume 首次挂载继承镜像内目录属主，天然解决非 root 写权限）。
@@ -147,22 +144,26 @@ Caddy 首次收到请求时才发起 ACME 申请；DNS 未解析或 80 端口不
    - **无构建参数**：`apps/web/nuxt.config.ts` 中后端地址属于私有 Runtime Config（`internalApiBase`，默认 `http://localhost:8088/api/public` 仅供本地开发），运行期由环境变量 `NUXT_INTERNAL_API_BASE` 覆盖（Nuxt 对 `runtimeConfig` 的内建机制），Compose 已注入容器内网地址 `http://server:8088/api/public`。
 2. **运行时阶段**（`node:24-alpine`）：只 `COPY --from=builder /build/apps/web/.output`，即 Nitro 服务端产物；`node .output/server/index.mjs` 直接起 SSR Server。选 Alpine 而非 `bookworm-slim`：`.output` 为纯 JS（无原生模块），musl 版 Node 可安全运行，镜像从 ~335 MB 降到 ~247 MB（底座 241 MB 已是官方 Node 镜像的下限）。`NITRO_HOST=0.0.0.0` 必须在容器内监听全部网卡（Compose `environment:` 已内置），监听 `127.0.0.1` 会导致 Caddy 连接被拒。
 
-### Admin 静态产物（不进 Compose）
+### Admin SPA（编入 server 镜像，/admin/ 直出）
 
-Admin 是纯 SPA，没有服务器进程，Caddy 直接从只读挂载的 `apps/admin/dist` 提供文件。产物**不含任何域名**：「打开公开站」入口在运行期从站点设置 `site_url` 读取（`use-public-site-url.ts`，未配置时隐藏入口），换域名只需在 Admin「站点设置」里改 `site_url`，无需重新构建。每个部署方在开发机或 CI 上构建后，把 `apps/admin/dist` 上传到主机仓库目录（保持 `apps/admin/dist` 相对路径不变，Caddy 挂载的就是这个路径）。
+Admin 是纯 SPA，没有独立容器与域名：构建产物经 `include_dir` 编入 `aries-server` Binary，运行时由 `backend/server/src/http/admin_spa.rs` 从内存直出，挂载在**站点域名的 `/admin/`** 下。产物**不含任何域名**（vite `--base=/admin/` 只影响挂载前缀；「打开公开站」入口在运行期从站点设置 `site_url` 读取，未配置时隐藏入口），换域名只需在 Admin「站点设置」里改 `site_url`，无需重新构建。
+
+Docker 部署时 Admin 由 server 镜像的 Admin 构建阶段自动编译，**不需要任何手工步骤**。以下仅在本地用 `cargo build/run` 跑服务端时才需要：
 
 ```bash
-# 在仓库根执行；无参数、无域名变量
-pnpm --filter @aries/admin build
+# 在仓库根执行；固定 --base=/admin/，与服务端挂载路径一致
+deploy/scripts/build-admin.sh
+# 然后重新编译服务端，产物才会更新
+cargo build -p aries-server
 ```
 
-唯一例外：如果 API 与 Admin **不同源**部署（不走 Caddy 同源转发），才需要设置 `VITE_API_BASE_URL`（写入 `apps/admin/.env`，已 Git 忽略，模板见 `apps/admin/.env.example`）：
+唯一例外：如果 API 与 Admin **不同源**部署（不走同源转发），才需要设置 `VITE_API_BASE_URL`（写入 `apps/admin/.env`，已 Git 忽略，模板见 `apps/admin/.env.example`）：
 
 ```bash
 deploy/scripts/build-admin.sh --api-base https://api.example.com
 ```
 
-构建脚本实际是 `vue-tsc -b && vite build`（先全量类型检查再打包），类型错误会阻断产物生成。
+构建脚本实际是 `vue-tsc -b && vite build`（先全量类型检查再打包），类型错误会阻断产物生成。本地从未构建 Admin 时服务端的 `build.rs` 会写入占位 `index.html`，`cargo test/clippy` 不受影响，访问 `/admin/` 会看到构建提示。
 
 ### 构建注意要点汇总
 
@@ -195,7 +196,7 @@ deploy/scripts/build-admin.sh --api-base https://api.example.com
   两个要点：① **Docker 的裸模式（如 `node_modules`）只匹配上下文根目录的同名项，不匹配子目录**（与 `.gitignore` 不同，已在本机实测），目录类排除必须写成 `**/node_modules` 这种显式形式；② `migrations/`、`Cargo.lock`、`pnpm-lock.yaml`、`package.json`、`pnpm-workspace.yaml` **不能**被忽略（Server 启动与可复现构建依赖它们）。
 - **层缓存与更新构建**：`git pull` 后 `up -d --build`，`COPY . .` 之后的层在源码变化时必然重建，但 Rust 的依赖编译与 Nuxt 的 `pnpm install` 无单独缓存层——依赖没变也会重跑。想加速可在 Dockerfile 中先把 `Cargo.toml`/`Cargo.lock` 或 `pnpm-lock.yaml` 拷入做依赖层（当前未做，属已知取舍）。
 - **Migrator 不在任何镜像里**：数据迁移工具 `aries-migrator` 是独立二进制，在开发机/CI 针对目标库运行（见 `migration-runbook.md`），不要试图在 `server` 容器里跑迁移；其专用环境变量见下文「迁移工具」表。
-- **国内构建加速**：两个 Dockerfile 均内置可选开关 `--build-arg USE_CN_MIRROR=1`——`server.Dockerfile` 切换 crates sparse 索引到 rsproxy 与 Debian 软件源到 USTC，`web.Dockerfile` 切换 corepack 下载源与 npm registry 到 npmmirror；不传该参数则保持官方源，行为不变（生产/CI 构建不受影响）。
+- **国内构建加速**：两个 Dockerfile 均内置可选开关 `--build-arg USE_CN_MIRROR=1`——`server.Dockerfile` 切换 crates sparse 索引到 rsproxy、Debian 软件源到 USTC，Admin 构建阶段与 `web.Dockerfile` 一样切换 corepack 下载源与 npm registry 到 npmmirror；不传该参数则保持官方源，行为不变（生产/CI 构建不受影响）。
 - **版本一致性**：Rust 使用 `rust:bookworm` 镜像的 latest stable（与 CI 一致），pnpm 版本由根 `packageManager` 字段锁定，构建机无需预装对应工具链；但本地 `pnpm install` 升级过依赖就必须提交 lockfile，否则 `--frozen-lockfile` 构建失败。
 
 ## 环境变量配置（`.env`）
@@ -206,7 +207,7 @@ deploy/scripts/build-admin.sh --api-base https://api.example.com
 # ===== Server 运行时（env_file → server 容器）=====
 APP_ENV=production
 BOOTSTRAP_SECRET=<至少 24 字符的随机串，仅用于创建首个 Owner>
-ADMIN_ORIGINS=https://admin.example.com
+ADMIN_ORIGINS=https://www.example.com
 SESSION_TTL_HOURS=12
 SESSION_COOKIE_SECURE=true            # 要求 Admin 只走 HTTPS，配好证书前别急着开
 DATABASE_HOST=postgres                # 容器网络内主机名；本项也可删掉，Compose 已强制覆盖
@@ -237,7 +238,7 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 | --- | --- | --- |
 | `APP_ENV` | `development` | `production` 时控制台日志切为 JSON，`SESSION_COOKIE_SECURE` 默认改为 `true` |
 | `SERVER_ADDR` | `0.0.0.0:8088` | 监听地址，必须是合法的 `host:port`；容器内必须 `0.0.0.0`（Compose 已覆盖） |
-| `ADMIN_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | 逗号分隔的精确 Origin 白名单；每项只能包含 Scheme 与 Authority，不允许 Path、Query；至少一项；生产必须含 `https://admin.example.com`；兼容别名 `ADMIN_ORIGIN` |
+| `ADMIN_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | 逗号分隔的精确 Origin 白名单；每项只能包含 Scheme 与 Authority，不允许 Path、Query；至少一项；生产必须含站点域名的 HTTPS Origin（Admin 挂在 `/admin/` 下后浏览器 Origin 即主站，如 `https://www.example.com`）；兼容别名 `ADMIN_ORIGIN` |
 | `BOOTSTRAP_SECRET` | 无（**必填**） | 少于 24 字符时启动失败；只通过 Secret Manager 或部署环境注入，不写入 Image、Repository 或部署日志 |
 | `SESSION_TTL_HOURS` | `12` | 整数，允许 1–720 |
 | `SESSION_COOKIE_SECURE` | `production` 为 `true`，否则 `false` | 只接受 `true` / `false` / `1` / `0`；`true` 要求 Admin 只通过 HTTPS 访问 |
@@ -318,20 +319,19 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 
 **`caddy`（唯一对公网暴露的服务）**
 
-| 配置                            | 取值                                    | 说明                                                               |
-| ------------------------------- | --------------------------------------- | ------------------------------------------------------------------ |
-| `image`                       | `caddy:2`                             | 官方镜像，无需构建                                                 |
-| `ports`                       | `80:80`、`443:443`、`443:443/udp` | HTTP 重定向与 HTTPS；UDP 443 是 HTTP/3，可去掉                     |
-| `volumes: Caddyfile`          | 只读挂载                                | 反代与站点定义，改后需`caddy reload`（见下文）                   |
-| `volumes: ../apps/admin/dist` | 只读挂载到`/srv/admin`                | Admin SPA 静态文件                                                 |
-| `volumes: caddy_data`         | `/data`                               | **证书与 ACME 账户状态**，删了会重新申请（触发速率限制风险） |
-| `depends_on`                  | `server`、`web`                     | 仅启动顺序，不做健康等待（反代对后端宕机有内置重试）               |
+| 配置                     | 取值                             | 说明                                                               |
+| ------------------------ | -------------------------------- | ------------------------------------------------------------------ |
+| `image`                | `caddy:2`                      | 官方镜像，无需构建                                                 |
+| `ports`                | `80:80`、`443:443`、`443:443/udp` | HTTP 重定向与 HTTPS；UDP 443 是 HTTP/3，可去掉                     |
+| `volumes: Caddyfile`   | 只读挂载                         | 反代与站点定义，改后需`caddy reload`（见下文）                   |
+| `volumes: caddy_data`  | `/data`                        | **证书与 ACME 账户状态**，删了会重新申请（触发速率限制风险） |
+| `depends_on`           | `server`、`web`              | 仅启动顺序，不做健康等待（反代对后端宕机有内置重试）               |
 
-**`server`（aries-server）**
+**`server`（aries-server，内含 Admin SPA）**
 
 | 配置                                                             | 取值                 | 说明                                                                                                            |
-| ---------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `build.context: ..` + `dockerfile: deploy/server.Dockerfile` | 以仓库根为构建上下文 | Dockerfile 在`deploy/` 但 `COPY . .` 需要整个 Workspace（含 `backend/`、`migrations/`、`Cargo.toml`） |
+| ---------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `build.context: ..` + `dockerfile: deploy/server.Dockerfile` | 以仓库根为构建上下文 | 三阶段：Admin SPA 构建（node）→ Rust 编译（include_dir 把产物编入 Binary）→ slim 运行时                     |
 | `env_file: ../.env`                                            | 全部 Server 环境变量 | `environment:` 同名键优先                                                                                   |
 | `volumes: aries_data`                                          | `/var/lib/aries`     | 单根目录持久化（内含 `media/` 与 `logs/`）；`media/` 必须进备份                                                |
 | `depends_on.postgres.condition: service_healthy`               | 等 PG 就绪           | 避免启动竞态导致首次 Migration 失败                                                                             |
@@ -357,55 +357,41 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 
 ```caddyfile
 www.example.com {
-    @api path /api/*            # 浏览器端公开 API 与媒体文件（/api/media/files/*）
-    handle @api {
-        reverse_proxy server:8088   # 同源转发到后端；密码文章解锁的 HttpOnly Cookie 依赖这条链路
+    @backend path /api/* /admin/*    # 浏览器端公开 API、媒体文件与 Admin SPA
+    handle @backend {
+        reverse_proxy server:8088   # 同源转发到 aries-server；密码文章解锁 Cookie 与
+                                    # Admin Session Cookie（Path /api/admin）都依赖这条同源链路
     }
 
     handle {
         reverse_proxy web:3000      # 其余 SSR 站点整体转发给 web 容器（容器名即主机名）
     }
 }
-
-admin.example.com {
-    root * /srv/admin           # 静态文件根目录（compose 挂载）
-    encode zstd gzip            # 响应压缩，省带宽
-
-    @api path /api/*            # 匹配 API 请求
-    handle @api {
-        reverse_proxy server:8088   # 同源转发到 aries-server；Origin 头默认透传，CSRF 校验不受影响
-    }
-
-    handle {                    # 其余全部按 SPA 处理
-        try_files {path} /index.html   # 路由不存在时回退 index.html（vue-router 接管）
-        file_server
-    }
-}
 ```
 
-- `www` 站的 `/api/*` 转发是关键链路：浏览器端代码全部走同源 `/api/public`（与域名无关，镜像因此无需任何构建参数）；`server` 返回的相对媒体 URL（`/api/media/files/...`）也经它服务。
-- 改域名：替换两处 `example.com` 后 `caddy reload`（见下节）。
+- `/api/*` 与 `/admin/*` 转发是关键链路：浏览器端代码全部走同源 `/api/public`（与域名无关，镜像因此无需任何构建参数）；`server` 返回的相对媒体 URL（`/api/media/files/...`）也经它服务；Admin SPA 由 aries-server 在 `/admin/` 下直出（SPA 路由回退由 `admin_spa.rs` 处理，Caddy 无需 `try_files`）。
+- 改域名：替换 `example.com` 后 `caddy reload`（见下节）。
 - 生产建议去掉 `443:443/udp` 端口映射并删除 `encode` 之外的探索性改动；HSTS 等加固见「安全加固」一节。
 
 ## 自动化脚本（`deploy/scripts/`）
 
 三个脚本覆盖「构建 → 部署 → 备份」全生命周期，均可在任意目录执行（自行定位仓库根）、`set -euo pipefail` 严格模式、前置条件缺失即非零退出。需要 bash：Windows 开发机可用 Git Bash 跑 `build-admin.sh`；`deploy.sh` 与 `backup.sh` 应在目标 Docker 主机上运行。
 
-### `build-admin.sh`：构建 Admin 静态产物
+### `build-admin.sh`：本地构建 Admin SPA 并编入服务端
 
 ```bash
 deploy/scripts/build-admin.sh
 ```
 
-- 无参数、无域名变量：「打开公开站」入口运行期从站点设置 `site_url` 读取，构建产物与域名无关。
+- 固定带 `--base=/admin/`：产物由 aries-server 挂载在 `/admin/` 下，资源引用必须带该前缀；vite dev（`pnpm dev:admin`）不受影响。
 - `--api-base`：仅在 API 与 Admin 不同源部署时传入（写入 `apps/admin/.env` 的 `VITE_API_BASE_URL`，该文件已 Git 忽略）；缺省空串走同源 `/api/admin`。
-- 产物为 `apps/admin/dist`，部署时保持相对路径上传到主机仓库目录。
+- 产物为 `apps/admin/dist`；**本地 `cargo build/run` 需重新编译服务端才会更新**（`include_dir` 编译期嵌入）。Docker 部署不需要本脚本——server 镜像构建阶段会自动完成。
 
 ### `deploy.sh`：一键部署
 
 ```bash
-# 首次部署：环境检查 → 构建 Admin → up -d --build → 等待就绪
-deploy/scripts/deploy.sh --build-admin
+# 首次部署：环境检查 → up -d --build（Admin SPA 在 server 镜像内自动构建）→ 等待就绪
+deploy/scripts/deploy.sh
 
 # 日常更新（git pull 之后）
 deploy/scripts/deploy.sh
@@ -414,9 +400,9 @@ deploy/scripts/deploy.sh
 deploy/scripts/deploy.sh -- server web
 ```
 
-- 前置检查：`.env` 存在且 `DATABASE_PASSWORD` / `BOOTSTRAP_SECRET` / `ADMIN_ORIGINS` 非空；`apps/admin/dist` 缺失只警告不阻断（可后续补传）。
+- 前置检查：`.env` 存在且 `DATABASE_PASSWORD` / `BOOTSTRAP_SECRET` / `ADMIN_ORIGINS` 非空。
 - 就绪等待：`postgres` healthy、`server` / `web` / `caddy` running；超时（`--timeout`，默认 300s）打印对应服务最近日志并非零退出。
-- 结束后打印 `compose ps` 与基于 `ADMIN_ORIGINS` 推导的探活命令。
+- 结束后打印 `compose ps` 与基于 `ADMIN_ORIGINS` 推导的探活命令（Admin 入口为 `<站点域名>/admin/`）。
 
 ### `backup.sh`：每日备份
 
@@ -437,10 +423,10 @@ BACKUP_DIR=/var/backups/aries KEEP_DAYS=30 deploy/scripts/backup.sh
 
 ## 首次部署
 
-到这一步，主机、DNS、`.env`、Admin 产物都已就绪。懒人方式是一条命令（自动完成环境检查、构建与就绪等待）：
+到这一步，主机、DNS、`.env` 都已就绪。懒人方式是一条命令（自动完成环境检查、构建与就绪等待）：
 
 ```bash
-deploy/scripts/deploy.sh --build-admin
+deploy/scripts/deploy.sh
 ```
 
 想看清每一步发生了什么，就手动分步执行（在仓库根目录）：
@@ -453,7 +439,7 @@ docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 docker compose -f deploy/docker-compose.yml ps
 
 # 3. 经 Caddy 验证 API 链路（live=进程存活，ready=依赖就绪，供监控系统探活）
-curl -fsS https://admin.example.com/api/health/ready
+curl -fsS https://www.example.com/api/health/ready
 ```
 
 `server` 首次启动自动完成：创建 Schema → 执行全部 Migration → 开始监听；后台 Worker（媒体清理、元数据探测、session 清理等）随进程启动。
@@ -461,12 +447,12 @@ curl -fsS https://admin.example.com/api/health/ready
 创建首个 Owner（字段以 `docs/openapi.yaml` 为准）：
 
 ```bash
-curl -fsS -X POST https://admin.example.com/api/admin/auth/bootstrap \
+curl -fsS -X POST https://www.example.com/api/admin/auth/bootstrap \
   -H 'Content-Type: application/json' \
   -d '{"bootstrap_secret":"<BOOTSTRAP_SECRET>","login":"admin","password":"<strong-password>","display_name":"Admin"}'
 ```
 
-成功后用该账号登录 Admin——这是唯一一次「免登录入场券」，已有 User 后 bootstrap 接口永久关闭，请妥善保存账号密码。随后进入[上线验收清单](#上线验收清单)。
+成功后访问 `https://www.example.com/admin/` 用该账号登录——这是唯一一次「免登录入场券」，已有 User 后 bootstrap 接口永久关闭，请妥善保存账号密码。随后进入[上线验收清单](#上线验收清单)。
 
 ## HTTPS 与域名
 
@@ -483,11 +469,11 @@ docker compose -f deploy/docker-compose.yml exec caddy \
 docker compose -f deploy/docker-compose.yml exec caddy caddy list-certificates
 ```
 
-换域名只需要四处同步，**全部运行期完成、无需重建任何镜像**：Caddyfile 两处域名（`caddy reload`）、`.env` 的 `ADMIN_ORIGINS`（`up -d server`）、`site_settings` 里的 `site_url`（Admin 后台「站点设置」修改，Canonical/OG/Sitemap 与 Admin「打开公开站」自动跟随）、DNS 解析。
+换域名只需要四处同步，**全部运行期完成、无需重建任何镜像**：Caddyfile 的域名（`caddy reload`）、`.env` 的 `ADMIN_ORIGINS`（`up -d server`）、`site_settings` 里的 `site_url`（Admin 后台「站点设置」修改，Canonical/OG/Sitemap 与 Admin「打开公开站」自动跟随）、DNS 解析。
 
 Reverse Proxy 通用要求（Caddy 默认满足，改用其他 Proxy 时逐项确认）：
 
-- `/api/*` 转发到 `aries-server:8088`；Admin 静态文件与 API 使用同一站点（本拓扑即 `admin.example.com`），避免额外 Origin 配置。
+- `/api/*` 与 `/admin/*` 转发到 `aries-server:8088`；Admin SPA 与 API 使用同一站点（本拓扑即 `www.example.com`），避免额外 Origin 配置。
 - 保留浏览器发送的 `Origin` Header，不由 Proxy 覆盖或伪造——Admin 写请求的 CSRF 防线依赖它（Caddy 默认透传）。
 - HTTPS Termination 后将 HTTP 自动重定向到 HTTPS（Caddy 默认）；HSTS 见「安全加固」。
 - 不缓存 `/api/admin/*` 响应（Caddy 默认不缓存）；访问日志不得记录 Cookie、Password、Bootstrap Secret 或 Reset Token。
@@ -558,7 +544,7 @@ deploy/scripts/deploy.sh        # 等价于下面这条，另含前置检查与�
 ```
 
 - `server` 重建时自动执行新 Migration；`web` 镜像不含域名，`--build web` 只是代码更新，与域名配置无关。
-- 分组件更新：只更新后端 `up -d --build server`；只更新公开站 `up -d --build web`；**只更新 Admin 无需重启任何容器**——重新构建并覆盖 `apps/admin/dist` 即生效（Caddy 直读文件），注意清 CDN/浏览器缓存。
+- 分组件更新：只更新后端与 Admin `up -d --build server`（Admin SPA 编入 server 镜像，无独立产物）；只更新公开站 `up -d --build web`。
 - `.env` 改动按消费方生效：Server 变量 `up -d server`（重建容器）；`NUXT_PUBLIC_SITE_URL` 改动 `up -d web` 即可（运行期变量）；`DATABASE_PASSWORD` 改动需同时重建 `server` 与 `postgres`（且 postgres 数据目录已按旧密码初始化过的情况需要额外处理，见故障排查）。
 - 回滚约束：Migration 只前进不后退。若新 Migration 已执行后需要回退 Binary，先人工评估新旧代码与 Schema 兼容性（新增列/索引通常安全），不兼容时按 `migration-runbook.md` 手工编写逆向 SQL。**先备份、再升级**是硬前提。
 
@@ -581,11 +567,12 @@ docker compose -f deploy/docker-compose.yml logs --tail=50 <服务名>   # 它�
 | 浏览器端公开 API 404 / 媒体打不开          | 检查 Caddyfile 中 `www` 站的 `/api/*` 转发是否存在并 `caddy reload`                                                                                |
 | 浏览器访问域名提示证书错误/超时              | DNS 未指向本机、80/443 被防火墙拦截、宿主机已有服务占用端口（`ss -tlnp`）                                                                          |
 | ACME 反复失败「rate limit」                  | 在 DNS/端口修复前反复重试所致，等限速窗口（一般 1 小时）或先用 staging 环境调试                                                                      |
-| Admin 登录 403 / CORS 报错                   | `ADMIN_ORIGINS` 未含 `https://admin.example.com`（精确匹配，注意 https 与无尾斜杠），改后 `up -d server`                                       |
+| Admin 登录 403 / CORS 报错                   | `ADMIN_ORIGINS` 未含站点域名的 HTTPS Origin（精确匹配，注意 https 与无尾斜杠），改后 `up -d server`                                  |
+| `/admin/` 404 或白屏                          | 检查 Caddyfile 中 `/admin/*` 转发是否存在并 `caddy reload`；白屏多为浏览器持有旧 index.html，强刷即可（index.html 为 `no-cache`） |
 | 出站 HTTPS 请求全部失败（AI/邮件）           | 运行时镜像缺 CA 证书——确认构建自未改动的 `deploy/server.Dockerfile`（`ca-certificates` 安装步骤不能被删掉）                                     |
 | 媒体上传成功但访问 404                       | `media` Volume 未持久化（检查 compose 中挂载是否被删掉重建）                                                                                       |
 | 改 Caddyfile 不生效                          | 需 `caddy reload`（见 HTTPS 一节），不是重启 Caddy 容器                                                                                             |
 
 ## 改用 Nginx 反代
 
-将 `docker-compose.yml` 中的 `caddy` 服务整体替换为官方 `nginx` 镜像：挂载自行维护的 Nginx 配置（Server Block 写法参考 `production-deployment.md` 的「Nginx 与 HTTPS」一节，`proxy_pass` 目标改为容器名 `web:3000` 与 `server:8088`，两个 Server Block 都要配 `/api/` 前缀转发），证书改用 certbot 管理并挂载进容器。其余服务定义不变。代价是失去自动签证书能力，换来配置的最高可控性。
+将 `docker-compose.yml` 中的 `caddy` 服务整体替换为官方 `nginx` 镜像：挂载自行维护的 Nginx 配置（Server Block 写法参考 `production-deployment.md` 的「Nginx 与 HTTPS」一节，`proxy_pass` 目标改为容器名 `web:3000` 与 `server:8088`，站点块需同时配 `/api/` 与 `/admin/` 前缀转发），证书改用 certbot 管理并挂载进容器。其余服务定义不变。代价是失去自动签证书能力，换来配置的最高可控性。

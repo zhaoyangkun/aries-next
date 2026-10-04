@@ -1,4 +1,20 @@
 # syntax=docker/dockerfile:1
+# Admin SPA 构建阶段：产物编入 aries-server Binary（include_dir），
+# 运行时由 Axum 在 /admin/ 下从内存直出，无需单独域名/静态目录
+FROM node:24-bookworm-slim AS admin-builder
+# 国内构建加速（可选）：docker build --build-arg USE_CN_MIRROR=1 ...
+# 切换 corepack 下载源与 npm registry 到 npmmirror；不传或为空则保持官方源，构建行为不变
+ARG USE_CN_MIRROR=""
+RUN if [ -n "$USE_CN_MIRROR" ]; then \
+      npm config set registry https://registry.npmmirror.com; \
+      export COREPACK_NPM_REGISTRY=https://registry.npmmirror.com; \
+    fi \
+ && corepack enable && corepack prepare pnpm@11.9.0 --activate
+WORKDIR /build
+COPY . .
+# base=/admin/：产物由服务端挂在 /admin/ 下，资源引用必须带该前缀
+RUN pnpm install --frozen-lockfile && pnpm --filter @aries/admin build:embedded
+
 # 构建整个 Workspace 后仅保留 aries-server Binary
 FROM rust:bookworm AS builder
 # 国内构建加速（可选）：docker build --build-arg USE_CN_MIRROR=1 ...
@@ -9,6 +25,9 @@ RUN if [ -n "$USE_CN_MIRROR" ]; then \
     fi
 WORKDIR /build
 COPY . .
+# Admin SPA 产物（来自 admin-builder 阶段）编入 binary：include_dir 在编译期读取该目录，
+# 必须位于 cargo build 之前；本地构建则直接复用仓库里已构建的 apps/admin/dist
+COPY --from=admin-builder /build/apps/admin/dist ./apps/admin/dist
 # rust:bookworm 镜像预装 latest stable 工具链，直接用于构建（仓库不再带 rust-toolchain.toml：
 # channel=stable 会被 rustup 当成工具链别名再下载一遍，国内构建会卡在 Downloading components）。
 # 只构建 Server 及依赖

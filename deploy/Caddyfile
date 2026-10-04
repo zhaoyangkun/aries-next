@@ -35,36 +35,17 @@
 }
 
 # 反代与 HTTPS 由 Caddy 全自动处理（ACME 申请/续期证书），只需把域名换成你的
-# Admin 与 API 同站点：静态文件由 Caddy 直出，/api/* 转发到 aries-server
+# 公开站与 API 同站点；Admin SPA 由 aries-server 编入 Binary 在 /admin/ 下直出，
+# 无需单独域名——/api/* 与 /admin/* 同源转发到后端（Session Cookie 与解锁 Cookie 都依赖这条同源链路）
 
 cangmang.xyz {
     import common                        # 复用压缩与安全头
-	# 浏览器端公开 API 与媒体文件（/api/media/files/*）同源转发到后端；
-	# 密码文章解锁的 HttpOnly Cookie 也依赖这条同源链路
-	@api path /api/*
-	handle @api {
+	@backend path /api/* /admin/*
+	handle @backend {
 		reverse_proxy aries-server:8088
 	}
 
 	handle {
 		reverse_proxy aries-web:3000
-	}
-}
-
-admin.cangmang.xyz {
-    import common                        # 复用压缩与安全头
-
-	root * /srv/admin
-
-	# API 同源转发；Caddy 默认透传 Origin 头，CSRF 防线不受影响
-	@api path /api/*
-	handle @api {
-		reverse_proxy aries-server:8088
-	}
-
-	# SPA Fallback
-	handle {
-		try_files {path} /index.html
-		file_server
 	}
 }
