@@ -42,39 +42,55 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Deserialize)]
-struct LinkListParams {
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub(crate) struct LinkListParams {
+    /// 页码，从 1 开始。
     #[serde(default = "super::default_page")]
     page: u32,
+    /// 每页条数（1–100）。
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 按状态过滤：`active` / `inactive`。
     status: Option<String>,
+    /// 按友链分类过滤。
     category_id: Option<i64>,
+    /// 对标题与 URL 做模糊匹配；空白值被忽略。
     keyword: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct LinkPayload {
+/// 友情链接创建/更新请求体。
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct LinkPayload {
+    /// 可空（允许未分类）；须指向 kind 为 `link` 的分类。
     category_id: Option<i64>,
+    /// 标题。
     title: String,
+    /// 链接地址，仅允许 http/https，否则返回 400 `INVALID_LINK_URL`。
     url: String,
+    /// 图标地址，可空。
     icon_url: Option<String>,
     #[serde(default)]
     description: String,
+    /// `active` / `inactive`，缺省 `active`。
     #[serde(default)]
     status: Option<String>,
     #[serde(default)]
     sort_order: i32,
 }
 
-#[derive(Debug, Serialize)]
-struct LinkResponse {
+/// 友情链接响应体。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct LinkResponse {
     id: i64,
     category_id: Option<i64>,
+    /// 标题。
     title: String,
+    /// 链接地址，仅允许 http/https。
     url: String,
+    /// 图标地址，可空。
     icon_url: Option<String>,
     description: String,
+    /// `active` / `inactive`。
     status: String,
     sort_order: i32,
     created_at: OffsetDateTime,
@@ -98,21 +114,40 @@ impl From<Link> for LinkResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct LinkPageResponse {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct LinkPageResponse {
     items: Vec<LinkResponse>,
     total: i64,
     page: u32,
     page_size: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct CategoryPayload {
+/// 友链分类创建/更新请求体。
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct CategoryPayload {
     name: String,
+    /// 缺省时取 `name`。
     slug: Option<String>,
 }
 
-async fn list_links(
+/// 分页查询友情链接。
+#[utoipa::path(
+    get,
+    path = "/api/admin/links",
+    tag = "Admin Links",
+    operation_id = "listLinks",
+    summary = "分页查询友情链接",
+    description = "稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。",
+    security(("cookieAuth" = [])),
+    params(LinkListParams),
+    responses(
+        (status = 200, description = "友情链接分页结果", body = LinkPageResponse),
+        (status = 400, description = "status 参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn list_links(
     State(state): State<AppState>,
     current: CurrentUser,
     Query(params): Query<LinkListParams>,
@@ -141,7 +176,24 @@ async fn list_links(
     }))
 }
 
-async fn create_link(
+/// 创建友情链接。
+#[utoipa::path(
+    post,
+    path = "/api/admin/links",
+    tag = "Admin Links",
+    operation_id = "createLink",
+    summary = "创建友情链接",
+    description = "`url` 仅允许 http/https，否则返回 400 `INVALID_LINK_URL`；`status` 缺省为 `active`。",
+    security(("cookieAuth" = [])),
+    request_body(content = LinkPayload, content_type = "application/json", description = "友情链接字段"),
+    responses(
+        (status = 201, description = "返回新建的友情链接", body = LinkResponse),
+        (status = 400, description = "URL 非法或 status 非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn create_link(
     State(state): State<AppState>,
     current: CurrentUser,
     Json(request): Json<LinkPayload>,
@@ -169,7 +221,23 @@ async fn create_link(
     Ok((StatusCode::CREATED, Json(link.into())))
 }
 
-async fn get_link(
+/// 获取友情链接详情。
+#[utoipa::path(
+    get,
+    path = "/api/admin/links/{id}",
+    tag = "Admin Links",
+    operation_id = "getLink",
+    summary = "获取友情链接详情",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "友情链接 ID")),
+    responses(
+        (status = 200, description = "友情链接详情", body = LinkResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "友情链接不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_link(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(link_id): Path<i64>,
@@ -183,7 +251,26 @@ async fn get_link(
     Ok(Json(link.into()))
 }
 
-async fn update_link(
+/// 全量更新友情链接。
+#[utoipa::path(
+    put,
+    path = "/api/admin/links/{id}",
+    tag = "Admin Links",
+    operation_id = "updateLink",
+    summary = "全量更新友情链接",
+    description = "`url` 仅允许 http/https；`status` 缺省为 `active`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "友情链接 ID")),
+    request_body(content = LinkPayload, content_type = "application/json", description = "友情链接字段"),
+    responses(
+        (status = 200, description = "返回更新后的友情链接", body = LinkResponse),
+        (status = 400, description = "URL 非法或 status 非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "友情链接不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn update_link(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(link_id): Path<i64>,
@@ -215,7 +302,23 @@ async fn update_link(
     Ok(Json(link.into()))
 }
 
-async fn delete_link(
+/// 软删除友情链接。
+#[utoipa::path(
+    delete,
+    path = "/api/admin/links/{id}",
+    tag = "Admin Links",
+    operation_id = "deleteLink",
+    summary = "软删除友情链接",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "友情链接 ID")),
+    responses(
+        (status = 204, description = "友情链接已删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "友情链接不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_link(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(link_id): Path<i64>,
@@ -230,7 +333,21 @@ async fn delete_link(
 // Link Categories（kind = link）
 // ============================================================
 
-async fn list_link_categories(
+/// 返回 kind 为 `link` 的友链分类列表。
+#[utoipa::path(
+    get,
+    path = "/api/admin/links/categories",
+    tag = "Admin Links",
+    operation_id = "listLinkCategories",
+    summary = "友链分类列表",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "友链分类列表", body = Vec<super::taxonomy::CategoryResponse>),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn list_link_categories(
     State(state): State<AppState>,
     current: CurrentUser,
 ) -> Result<Json<Vec<CategoryResponse>>, ApiError> {
@@ -239,7 +356,25 @@ async fn list_link_categories(
     Ok(Json(categories.into_iter().map(Into::into).collect()))
 }
 
-async fn create_link_category(
+/// 创建友链分类。
+#[utoipa::path(
+    post,
+    path = "/api/admin/links/categories",
+    tag = "Admin Links",
+    operation_id = "createLinkCategory",
+    summary = "创建友链分类",
+    description = "Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    request_body(content = CategoryPayload, content_type = "application/json", description = "友链分类字段"),
+    responses(
+        (status = 201, description = "返回新建的友链分类", body = super::taxonomy::CategoryResponse),
+        (status = 400, description = "参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "slug 冲突（TAXONOMY_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn create_link_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Json(request): Json<CategoryPayload>,
@@ -261,7 +396,27 @@ async fn create_link_category(
     Ok((StatusCode::CREATED, Json(category.into())))
 }
 
-async fn update_link_category(
+/// 更新友链分类的 name/slug。
+#[utoipa::path(
+    put,
+    path = "/api/admin/links/categories/{id}",
+    tag = "Admin Links",
+    operation_id = "updateLinkCategory",
+    summary = "更新友链分类",
+    description = "唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "友链分类 ID")),
+    request_body(content = CategoryPayload, content_type = "application/json", description = "友链分类字段"),
+    responses(
+        (status = 200, description = "返回更新后的友链分类", body = super::taxonomy::CategoryResponse),
+        (status = 400, description = "参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "友链分类不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "slug 冲突（TAXONOMY_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn update_link_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(category_id): Path<i64>,
@@ -285,7 +440,25 @@ async fn update_link_category(
     Ok(Json(category.into()))
 }
 
-async fn delete_link_category(
+/// 物理删除友链分类。
+#[utoipa::path(
+    delete,
+    path = "/api/admin/links/categories/{id}",
+    tag = "Admin Links",
+    operation_id = "deleteLinkCategory",
+    summary = "删除友链分类",
+    description = "仍存在未删除的友链引用时返回 409 `TAXONOMY_IN_USE`（FK 为 `ON DELETE SET NULL`，回收站中的友链不阻塞删除）。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "友链分类 ID")),
+    responses(
+        (status = 204, description = "友链分类已删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "友链分类不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "分类仍被引用（TAXONOMY_IN_USE）", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_link_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(category_id): Path<i64>,

@@ -58,19 +58,23 @@ pub fn router() -> Router<AppState> {
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_REQUEST_BYTES))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct MediaAssetResponse {
     id: i64,
+    /// 存储 Provider：`local` / `s3` / `legacy_url`。
     provider: &'static str,
+    /// 服务端生成的不可预测 Key（`yyyy/mm/<uuid>.<ext>`），不含用户文件名。
     object_key: String,
     url: String,
     original_name: String,
     mime: String,
     size_bytes: i64,
+    /// 尺寸探测失败时为 `null`，由 `metadata_probe` 后台任务补探测。
     width: Option<i32>,
     height: Option<i32>,
     sha256: String,
     alt: String,
+    /// `active` / `deleted`；列表与详情只返回 `active`。
     status: &'static str,
     uploaded_by: i64,
     #[serde(with = "time::serde::rfc3339")]
@@ -105,7 +109,7 @@ impl MediaAssetResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct MediaPageResponse {
     items: Vec<MediaAssetResponse>,
     total: i64,
@@ -113,52 +117,90 @@ struct MediaPageResponse {
     page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct MediaUsageResponse {
     id: i64,
     asset_id: i64,
+    /// 引用方类型：`article_cover` / `article_content` / `gallery_item`。
     target_type: &'static str,
     target_id: i64,
     #[serde(with = "time::serde::rfc3339")]
     created_at: time::OffsetDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 struct MediaListParams {
     #[serde(default = "super::default_page")]
     page: u32,
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 按 `original_name` 模糊匹配。
     keyword: Option<String>,
+    /// 按存储 Provider 过滤：`local` / `s3` / `legacy_url`。
     provider: Option<String>,
     mime: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct UpdateMediaRequest {
+    /// 替换说明文字；缺省为空串。
     #[serde(default)]
     alt: String,
+    /// 替换原始文件名；缺省或空串表示不改动。
     original_name: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct RemoteUploadRequest {
+    /// 待抓取的远端图片 URL（仅 http/https）。
     url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct BatchDeleteMediaRequest {
+    /// 待删除的资产 ID 列表，单次 1–100 个（服务端去重）。
     #[serde(default)]
     ids: Vec<i64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(description = "批量删除的部分成功结果；三个列表均按 ID 升序，且互不相交。")]
 struct BatchDeleteMediaResponse {
+    /// 成功软删除的 ID。
     deleted: Vec<i64>,
+    /// 仍被内容引用、保持 active 的 ID。
     referenced: Vec<i64>,
+    /// 不存在或已删除的 ID。
     not_found: Vec<i64>,
 }
 
+/// `POST /api/admin/media` 的 Multipart 表单；实际字段名为 `file[]`（兼容 `file`），
+/// 每批 1–5 个文件，单文件 ≤ 5MB。
+#[derive(utoipa::ToSchema)]
+#[allow(dead_code)]
+struct UploadMediaForm {
+    /// 待上传图片文件（jpg/jpeg/png/gif/bmp/webp）。
+    #[schema(value_type = Vec<String>, format = Binary)]
+    file: Vec<String>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/admin/media",
+    tag = "Admin Media",
+    operation_id = "listMedia",
+    summary = "分页查询媒体资产列表",
+    description = "仅返回 `active` 资产；稳定排序 `created_at DESC, id DESC`。",
+    security(("cookieAuth" = [])),
+    params(MediaListParams),
+    responses(
+        (status = 200, description = "媒体资产分页列表", body = MediaPageResponse),
+        (status = 400, description = "Provider 过滤值非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -196,6 +238,24 @@ async fn list_media(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/media/{id}",
+    tag = "Admin Media",
+    operation_id = "getMedia",
+    summary = "获取单个媒体资产详情",
+    description = "已软删除的资产返回 404。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "媒体资产 ID"),
+    ),
+    responses(
+        (status = 200, description = "资产详情", body = MediaAssetResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -206,6 +266,26 @@ async fn get_media(
     Ok(Json(MediaAssetResponse::from_asset(asset, None)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/media/{id}",
+    tag = "Admin Media",
+    operation_id = "updateMedia",
+    summary = "更新媒体资产元数据",
+    description = "仅允许更新 `alt` 与 `original_name`；文件内容、Hash、URL 创建后不可变。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "媒体资产 ID"),
+    ),
+    request_body(description = "待更新的元数据", content = UpdateMediaRequest),
+    responses(
+        (status = 200, description = "资产已更新", body = MediaAssetResponse),
+        (status = 400, description = "字段超长", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn update_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -248,6 +328,25 @@ async fn update_media(
     Ok(Json(MediaAssetResponse::from_asset(asset, None)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/admin/media/{id}",
+    tag = "Admin Media",
+    operation_id = "deleteMedia",
+    summary = "软删除媒体资产",
+    description = "仍存在引用时返回 409 并携带 Usages 摘要。物理删除由 `media_cleanup` 后台任务在零引用后执行。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "媒体资产 ID"),
+    ),
+    responses(
+        (status = 204, description = "已软删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "资产仍被内容引用（MEDIA_IN_USE）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn delete_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -295,6 +394,22 @@ async fn delete_media(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/media/batch-delete",
+    tag = "Admin Media",
+    operation_id = "batchDeleteMedia",
+    summary = "批量软删除媒体资产",
+    description = "部分成功语义：被引用的资产保持 active 并归入 `referenced`；不存在或已删除的 ID 归入 `not_found`。单次 1–100 个 ID（服务端去重）。有实际删除时自动入队 `media_cleanup` 任务。",
+    security(("cookieAuth" = [])),
+    request_body(description = "待删除的资产 ID 列表", content = BatchDeleteMediaRequest),
+    responses(
+        (status = 200, description = "逐项归类结果（deleted / referenced / not_found 均按 ID 升序）", body = BatchDeleteMediaResponse),
+        (status = 400, description = "空批次或超过 100 个 ID（INVALID_BATCH_DELETE）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn batch_delete_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -342,6 +457,24 @@ async fn batch_delete_media(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/media/{id}/usages",
+    tag = "Admin Media",
+    operation_id = "listMediaUsages",
+    summary = "列出媒体资产的引用",
+    description = "返回引用该资产的内容列表（封面 / 正文 / 图库条目）。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "媒体资产 ID"),
+    ),
+    responses(
+        (status = 200, description = "资产的引用列表", body = Vec<MediaUsageResponse>),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_media_usages(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -371,6 +504,22 @@ struct IncomingFile {
     bytes: Bytes,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/media",
+    tag = "Admin Media",
+    operation_id = "uploadMedia",
+    summary = "本地上传媒体文件",
+    description = "Multipart 字段名 `file[]`，每批 1–5 个文件，单文件 ≤ 5MB；扩展名白名单 jpg/jpeg/png/gif/bmp/webp，并校验 Magic Bytes 与声明 MIME。响应恒为数组。",
+    security(("cookieAuth" = [])),
+    request_body(content = UploadMediaForm, content_type = "multipart/form-data", description = "待上传文件批次"),
+    responses(
+        (status = 201, description = "全部文件已入库；同内容 Hash 的资产带 `duplicate_of` 提示", body = Vec<MediaAssetResponse>),
+        (status = 400, description = "文件为空/超限/类型不允许或 Multipart 非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn upload_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -399,6 +548,22 @@ async fn upload_media(
     Ok((StatusCode::CREATED, Json(responses)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/media/remote",
+    tag = "Admin Media",
+    operation_id = "uploadRemoteMedia",
+    summary = "抓取远端图片并入库",
+    description = "SSRF 防护：仅 http/https，拒绝内网与环回地址，Redirect 最多 3 次且逐跳重校验，Body ≤ 5MB，超时 10s。",
+    security(("cookieAuth" = [])),
+    request_body(description = "远端图片 URL", content = RemoteUploadRequest),
+    responses(
+        (status = 201, description = "远端文件已下载并入库", body = MediaAssetResponse),
+        (status = 400, description = "URL 非法、地址被禁止或抓取失败", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn upload_remote(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -754,7 +919,7 @@ struct ImportItem {
 }
 
 /// 预览响应剥离正文，避免大字段反复传输。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ImportPreview {
     index: usize,
     file_name: String,
@@ -764,6 +929,7 @@ struct ImportPreview {
     tags: Vec<String>,
     category: Option<String>,
     warnings: Vec<String>,
+    /// Slug 已被现有文章占用时需要在 Commit 时给出 skip/rename 策略。
     slug_conflict: bool,
 }
 
@@ -783,46 +949,77 @@ impl From<&ImportItem> for ImportPreview {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ImportJobResponse {
     job_id: i64,
+    /// `pending` / `running` / `done` / `failed`。
     status: &'static str,
     items: Vec<ImportPreview>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct CommitImportRequest {
     /// 仅冲突项需要显式策略；未列出的冲突项默认 skip。
     #[serde(default)]
     items: Vec<CommitStrategy>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct CommitStrategy {
+    /// 导入预览项的序号。
     index: usize,
+    /// `skip`（跳过）或 `rename`（自动改名落库）。
     strategy: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct CommitResultResponse {
     created: Vec<CreatedArticleSummary>,
+    /// 因 Slug 冲突被跳过的 Slug。
     skipped: Vec<String>,
+    /// 因冲突自动改名的 Slug 映射。
     renamed: Vec<RenamedSlug>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct CreatedArticleSummary {
     id: i64,
     title: String,
     slug: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct RenamedSlug {
     from: String,
     to: String,
 }
 
+/// `POST /api/admin/articles/imports` 的 Multipart 表单；实际字段名为 `file[]`（兼容 `file`），
+/// 1–10 个 `.md` 文件，单文件 ≤ 2MB。
+#[derive(utoipa::ToSchema)]
+#[allow(dead_code)]
+struct ImportMarkdownForm {
+    /// 待导入的 Markdown 文件（.md / .markdown）。
+    #[schema(value_type = Vec<String>, format = Binary)]
+    file: Vec<String>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/articles/imports",
+    tag = "Admin Media",
+    operation_id = "importMarkdown",
+    summary = "批量导入 Markdown 文章",
+    description = "Multipart 字段名 `file[]`，1–10 个 `.md` 文件，单文件 ≤ 2MB；解析 YAML Front Matter（title/slug/tags/category/summary）并生成 Slug 冲突预览，结果存入 Background Job。",
+    security(("cookieAuth" = [])),
+    request_body(content = ImportMarkdownForm, content_type = "multipart/form-data", description = "待导入的 Markdown 文件批次"),
+    responses(
+        (status = 201, description = "导入预览已生成", body = ImportJobResponse),
+        (status = 400, description = "文件类型/大小/编码不合法或 Multipart 非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn import_markdown(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -873,6 +1070,24 @@ async fn import_markdown(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/imports/{id}",
+    tag = "Admin Media",
+    operation_id = "getImport",
+    summary = "获取 Markdown 导入预览",
+    description = "返回导入预览（标题、Slug、警告、冲突标记）；非导入类型的 Job 返回 404。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "导入 Job ID"),
+    ),
+    responses(
+        (status = 200, description = "导入预览", body = ImportJobResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "导入 Job 不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_import(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -888,6 +1103,27 @@ async fn get_import(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/imports/{id}/commit",
+    tag = "Admin Media",
+    operation_id = "commitImport",
+    summary = "提交 Markdown 导入",
+    description = "按逐篇策略落库；冲突项未指定策略时一律 skip，绝不静默覆盖已有文章。Job 只允许 Commit 一次。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "导入 Job ID"),
+    ),
+    request_body(description = "冲突项的逐篇处理策略", content = CommitImportRequest),
+    responses(
+        (status = 200, description = "导入完成，Job 置为 Done", body = CommitResultResponse),
+        (status = 400, description = "策略非法（INVALID_IMPORT_STRATEGY）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "导入 Job 不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "Job 已处理过（IMPORT_ALREADY_COMMITTED / IMPORT_SLUG_EXHAUSTED）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn commit_import(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -1309,6 +1545,23 @@ pub async fn sync_article_media_usages(
 /// `GET /api/media/files/{*path}`：本地存储直接发文件，远端存储 Redirect 到公开 URL。
 /// `?w=<width>` 请求缩略图（16–1200）：仅本地存储的 jpeg/png/webp 生效，
 /// 首次请求生成并落盘缓存（见 `aries_infra::thumbnail`）；其余情况静默回退原图。
+#[utoipa::path(
+    get,
+    path = "/api/media/files/{path}",
+    tag = "Public Media",
+    operation_id = "serveMediaFile",
+    summary = "匿名访问媒体文件",
+    description = "Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider 307 Redirect 到公开 URL。Path 做路径穿越校验。`?w=<width>` 请求按需缩略图（16–1200，仅 Local Provider 的 jpeg/png/webp，首次生成后落盘缓存且同样 immutable）；缺省、非法值或不支持的类型静默回退原图。",
+    params(
+        ("path" = String, Path, description = "媒体 Object Key（如 `2026/09/<uuid>.png`）"),
+        MediaFileParams,
+    ),
+    responses(
+        (status = 200, description = "文件内容；Content-Type 按入库时的 MIME", content_type = "application/octet-stream"),
+        (status = 307, description = "S3 Provider 时 Redirect 到公开 URL"),
+        (status = 404, description = "文件不存在或路径非法", body = crate::openapi::ErrorResponse),
+    )
+)]
 pub async fn serve_media_file(
     State(state): State<AppState>,
     Path(path): Path<String>,
@@ -1374,7 +1627,8 @@ pub async fn serve_media_file(
         .into_response())
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct MediaFileParams {
     /// 缩略图目标宽度（16–1200 的整数）；缺省或非法时返回原图。
     pub w: Option<String>,

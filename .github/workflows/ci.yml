@@ -55,7 +55,7 @@ jobs:
       - name: OpenAPI 漂移检查
         # 与 openapi_docs.rs 中 exported_yaml_matches_committed_generated_file 等价：
         # 代码注解与提交的生成物脱节时尽早失败，提示重新导出。
-        run: cargo run -p aries-server --bin openapi-export --quiet | diff - docs/openapi.generated.yaml
+        run: cargo run -p aries-server --bin openapi-export --quiet | diff - docs/openapi.yaml
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

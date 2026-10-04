@@ -173,7 +173,7 @@ useHead(
         </div>
 
         <!-- 后端已完成 comrak 渲染与 ammonia 消毒，可直接输出 -->
-        <HighlightedContent :html="article.rendered_html" />
+        <HighlightedContent :html="article.rendered_html ?? ''" />
 
         <!-- 相关阅读：未开启或 Embedding 未配置时后端 404、无相近文章时为空数组，两者都不渲染 -->
         <section v-if="relatedArticles.length > 0" class="mt-14 border-t pt-10" aria-label="相关阅读">

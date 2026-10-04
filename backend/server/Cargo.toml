@@ -36,7 +36,8 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
-utoipa = { version = "5", features = ["yaml"] }
+# time：DTO 中的 OffsetDateTime；uuid：Session 等 DTO 的 Uuid 字段
+utoipa = { version = "5", features = ["yaml", "time", "uuid"] }
 utoipa-scalar = { version = "0.4", features = ["axum"] }
 uuid.workspace = true
 

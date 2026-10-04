@@ -13,7 +13,7 @@
 | `migration-runbook.md` | 操作 | Production Cutover 与 Rollback 操作手册 |
 | `production-deployment.md` | 操作 | 生产部署手册（Bare-metal：Systemd、Nginx、HTTPS、备份与回滚） |
 | `docker-deployment.md` | 操作 | 部署唯一权威文档（Docker Compose、环境变量与安全项、自动化脚本、备份与回滚；原 `deployment.md` 已并入） |
-| `openapi.yaml` | 参考 | API 契约（唯一权威来源，禁止手写副本） |
+| `openapi.yaml` | 参考 | API 契约（utoipa 注解自动生成的机器生成物，禁止手工编辑；重新导出见 `backend/server/src/openapi.rs` 头注释） |
 | `adr/` | 概念 | 架构决策记录（Architecture Decision Record） |
 
 文档类型借鉴 Diátaxis 框架：**概念**（解释为什么）、**操作**（怎么做一件事）、**参考**（精确查阅）。写新文档前先想清楚它属于哪一类。
@@ -31,5 +31,5 @@
 ## 维护规则
 
 - 架构变化必须新增 ADR（见 `adr/0001` 的格式），而不是直接改写旧结论。
-- API 契约变化只改 `openapi.yaml`；其他文档引用它，不复制端点细节。
+- API 契约变化只改 `backend/server/src/http/` 下的 utoipa 注解并重新导出 `openapi.yaml`（其他文档引用它，不复制端点细节）；CI 漂移检查保证注解与生成物永不脱节。
 - 功能完成后更新对应 Phase 文档的状态标记，并在文末记录与原计划的关键偏差。

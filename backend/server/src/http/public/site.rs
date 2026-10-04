@@ -13,7 +13,11 @@ pub fn router() -> Router<AppState> {
 }
 
 /// 只投影公开安全的字段；`site_settings` 表未来新增的内部配置默认不出现在这里。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "PublicSiteResponse",
+    description = "站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。"
+)]
 struct PublicSiteResponse {
     site_name: String,
     site_description: String,
@@ -26,6 +30,17 @@ struct PublicSiteResponse {
     created_at: time::OffsetDateTime,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/site",
+    tag = "Public Site",
+    operation_id = "getPublicSite",
+    summary = "公开站点信息",
+    description = "site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。",
+    responses(
+        (status = 200, description = "公开站点信息", body = PublicSiteResponse),
+    )
+)]
 async fn get_public_site(State(state): State<AppState>) -> Result<Response, ApiError> {
     let settings = state.site_settings.get().await?;
     Ok(json_with_cache(

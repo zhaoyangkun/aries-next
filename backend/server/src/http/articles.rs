@@ -42,17 +42,25 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct ArticleListParams {
+    /// 页码，从 1 开始。
     #[serde(default = "super::default_page")]
     page: u32,
+    /// 每页条数。
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 标题/摘要关键字过滤。
     keyword: Option<String>,
+    /// 按状态过滤：`draft` / `published` / `recycled`。
     status: Option<String>,
+    /// 按分类 ID 过滤。
     category_id: Option<i64>,
+    /// 按标签 ID 过滤。
     tag_id: Option<i64>,
+    /// 排序字段白名单；非法值静默回退 `updated_at`。`sort_order` 为手动排序值（「排序」模式的拖拽/箭头调整）。
     sort: Option<String>,
+    /// 排序方向；非法值静默回退 `desc`。稳定 Tie-breaker 恒为 `id DESC`。
     order: Option<String>,
 }
 
@@ -65,66 +73,95 @@ where
     Option::<String>::deserialize(deserializer).map(Some)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct CreateArticleRequest {
+    /// 文章标题（Trim 后非空，最长 200 字符）。
     title: String,
+    /// URL 别名；缺省回退为标题。
     slug: Option<String>,
+    /// 摘要，最长 500 字符。
     #[serde(default)]
     summary: String,
+    /// AI 导读（TL;DR），由 `/api/admin/ai/editor/brief` 生成；不超过 500 字符。
     ai_brief: Option<String>,
+    /// Markdown 原文，最长 1,000,000 字符。
     #[serde(default)]
     markdown_source: String,
+    /// 所属分类 ID。
     category_id: Option<i64>,
+    /// 封面图 URL。
     cover_url: Option<String>,
+    /// SEO 关键字（Trim、排序、去重，最多 20 个，单个最长 50 字符）。
     #[serde(default)]
     seo_keywords: Vec<String>,
+    /// 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。
+    /// 新建时字段缺省或显式 `null` 都视为无密码；字符串表示设置新密码，
+    /// Trim 后少于 6 个字符返回 400 `INVALID_ACCESS_PASSWORD`。
     #[serde(default, deserialize_with = "deserialize_nullable_string")]
     access_password: Option<Option<String>>,
+    /// 是否允许评论，默认 `true`。
     #[serde(default = "default_true")]
     allow_comments: bool,
+    /// 是否置顶，默认 `false`。
     #[serde(default)]
     is_pinned: bool,
+    /// 关联标签 ID 列表。
     #[serde(default)]
     tag_ids: Vec<i64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct UpdateArticleRequest {
+    /// 文章标题（Trim 后非空，最长 200 字符）。
     title: String,
+    /// URL 别名；缺省时保持现有值。
     slug: Option<String>,
+    /// 摘要，最长 500 字符。
     #[serde(default)]
     summary: String,
-    /// 三层语义：缺省不改动、显式 null 清除、字符串设置（同 access_password）。
+    /// AI 导读（TL;DR）；三层语义：缺省不改动、显式 null 清除、字符串设置。
     #[serde(default, deserialize_with = "deserialize_nullable_string")]
     ai_brief: Option<Option<String>>,
+    /// Markdown 原文，最长 1,000,000 字符。
     #[serde(default)]
     markdown_source: String,
+    /// 所属分类 ID。
     category_id: Option<i64>,
+    /// 封面图 URL。
     cover_url: Option<String>,
+    /// SEO 关键字（Trim、排序、去重，最多 20 个，单个最长 50 字符）。
     #[serde(default)]
     seo_keywords: Vec<String>,
+    /// 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。
+    /// 三层语义：缺省不改动、显式 `null` 清除、字符串设置新密码（Trim 后少于 6 个字符返回 400）。
     #[serde(default, deserialize_with = "deserialize_nullable_string")]
     access_password: Option<Option<String>>,
+    /// 是否允许评论，默认 `true`。
     #[serde(default = "default_true")]
     allow_comments: bool,
+    /// 是否置顶，默认 `false`。
     #[serde(default)]
     is_pinned: bool,
+    /// 关联标签 ID 列表。
     #[serde(default)]
     tag_ids: Vec<i64>,
+    /// 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
     expected_version: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct PreviewArticleRequest {
+    /// Markdown 原文，最长 1,000,000 字符。
     markdown_source: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct RestoreRevisionRequest {
+    /// 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
     expected_version: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 enum ArticleStatusCommand {
     Publish,
@@ -150,43 +187,70 @@ impl ArticleStatusCommand {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ChangeArticleStatusRequest {
+    /// 状态流转命令：`publish`（发布，draft → published）、`recycle`（回收）、`recover`（还原为草稿）。
     command: ArticleStatusCommand,
+    /// 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
     expected_version: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ArticlePageResponse {
+    /// 当前页文章列表。
     items: Vec<ArticleResponse>,
+    /// 命中总数（稳定 Total 语义，与分页无关）。
     total: i64,
+    /// 当前页码，从 1 开始。
     page: u32,
+    /// 每页条数。
     page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ArticleResponse {
+    /// 文章 ID。
     id: i64,
+    /// 作者用户 ID。
     author_id: i64,
+    /// 所属分类 ID。
     category_id: Option<i64>,
+    /// 文章状态：`draft` / `published` / `recycled`。
+    #[schema(value_type = String, example = "published")]
     status: ArticleStatus,
+    /// URL 别名。
     slug: String,
+    /// 文章标题。
     title: String,
+    /// 摘要。
     summary: String,
+    /// AI 导读（TL;DR）；更新时字段缺省表示不改动，显式 null 清除。
     ai_brief: Option<String>,
+    /// 封面图 URL。
     cover_url: Option<String>,
+    /// Markdown 原文。
     markdown_source: String,
+    /// 服务端渲染并 Sanitization 后的 HTML。
     rendered_html: String,
+    /// SEO 关键字列表。
     seo_keywords: Vec<String>,
+    /// 关联标签 ID 列表。
     tag_ids: Vec<i64>,
+    /// 是否设置了访问密码（任何响应都不回显密码或哈希）。
     password_protected: bool,
+    /// 是否允许评论。
     allow_comments: bool,
+    /// 是否置顶。
     is_pinned: bool,
+    /// 乐观锁版本号：每次更新递增。
     version: i64,
+    /// 发布时间；草稿为 `null`。
     #[serde(with = "time::serde::rfc3339::option")]
     published_at: Option<time::OffsetDateTime>,
+    /// 创建时间（RFC 3339）。
     #[serde(with = "time::serde::rfc3339")]
     created_at: time::OffsetDateTime,
+    /// 更新时间（RFC 3339）。
     #[serde(with = "time::serde::rfc3339")]
     updated_at: time::OffsetDateTime,
 }
@@ -218,28 +282,44 @@ impl From<Article> for ArticleResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PreviewArticleResponse {
+    /// 经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML。
     rendered_html: String,
 }
 
-/// Revision 响应不回显 `access_password_hash`，只暴露是否受密码保护。
-#[derive(Debug, Serialize)]
+/// Revision 响应不回显 `access_password`，只暴露是否受密码保护。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct RevisionResponse {
+    /// 版本号，从 1 开始递增。
     revision_no: i64,
+    /// 当时标题。
     title: String,
+    /// 当时 URL 别名。
     slug: String,
+    /// 当时摘要。
     summary: String,
+    /// 当时 AI 导读（TL;DR）。
     ai_brief: Option<String>,
+    /// 当时分类 ID。
     category_id: Option<i64>,
+    /// 当时封面图 URL。
     cover_url: Option<String>,
+    /// 当时 SEO 关键字列表。
     seo_keywords: Vec<String>,
+    /// 当时关联标签 ID 列表。
     tag_ids: Vec<i64>,
+    /// 当时是否设置了访问密码（不回显密码哈希）。
     password_protected: bool,
+    /// 当时是否允许评论。
     allow_comments: bool,
+    /// 当时是否置顶。
     is_pinned: bool,
+    /// 当时 Markdown 原文。
     markdown_source: String,
+    /// 操作者用户 ID。
     operator_id: i64,
+    /// 版本创建时间（RFC 3339）。
     #[serde(with = "time::serde::rfc3339")]
     created_at: time::OffsetDateTime,
 }
@@ -266,6 +346,21 @@ impl From<ArticleRevision> for RevisionResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/articles",
+    tag = "Admin Articles",
+    operation_id = "listArticles",
+    summary = "分页查询文章列表",
+    description = "返回具备稳定 Total 语义的 Article Page。非法排序参数静默回退默认值，列表接口不因排序参数报错。",
+    security(("cookieAuth" = [])),
+    params(ArticleListParams),
+    responses(
+        (status = 200, description = "返回具备稳定 Total 语义的 Article Page", body = ArticlePageResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_articles(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -300,6 +395,22 @@ async fn list_articles(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/articles/{id}",
+    tag = "Admin Articles",
+    operation_id = "getArticle",
+    summary = "获取文章详情",
+    description = "返回 Article 的 Markdown 原文和当前版本。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    responses(
+        (status = 200, description = "返回 Article 的 Markdown 原文和当前版本", body = ArticleResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -314,6 +425,23 @@ async fn get_article(
     Ok(Json(article.into()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/articles",
+    tag = "Admin Articles",
+    operation_id = "createArticle",
+    summary = "创建文章（草稿）",
+    description = "在 HTTP 层完成 Markdown 渲染，Draft 写入 PostgreSQL 并自动同步媒体引用。",
+    security(("cookieAuth" = [])),
+    request_body(content = CreateArticleRequest, content_type = "application/json"),
+    responses(
+        (status = 201, description = "Draft 已写入 PostgreSQL", body = ArticleResponse),
+        (status = 400, description = "标题为空、内容超长、SEO 关键字非法或访问密码过短", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "Slug 冲突", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn create_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -378,6 +506,25 @@ async fn create_article(
     Ok((StatusCode::CREATED, Json(article.into())))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/articles/{id}",
+    tag = "Admin Articles",
+    operation_id = "updateArticle",
+    summary = "更新文章",
+    description = "乐观锁更新：expected_version 必须等于当前 version。`access_password` 与 `ai_brief` 三层语义：缺省不改动、显式 null 清除、字符串设置。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    request_body(content = UpdateArticleRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "返回保存后的 Article 和新版本号", body = ArticleResponse),
+        (status = 400, description = "标题为空、内容超长、SEO 关键字非法或访问密码过短", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "版本冲突或 Slug 冲突（ARTICLE_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn update_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -467,6 +614,25 @@ async fn enqueue_article_embed(state: &AppState, article_id: i64) {
     }
 }
 
+#[utoipa::path(
+    patch,
+    path = "/api/admin/articles/{id}/status",
+    tag = "Admin Articles",
+    operation_id = "changeStatus",
+    summary = "流转文章状态",
+    description = "通过 `publish` / `recycle` / `recover` 命令做状态机流转；乐观锁校验 expected_version。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    request_body(content = ChangeArticleStatusRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "返回状态流转后的 Article 和新版本号", body = ArticleResponse),
+        (status = 400, description = "非法状态迁移", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "版本冲突或非法状态迁移（ARTICLE_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn change_status(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -501,6 +667,22 @@ async fn change_status(
     Ok(Json(article.into()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/articles/preview",
+    tag = "Admin Articles",
+    operation_id = "previewArticle",
+    summary = "预览 Markdown 渲染结果",
+    description = "返回经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML，不落库。",
+    security(("cookieAuth" = [])),
+    request_body(content = PreviewArticleRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "返回渲染并 Sanitization 后的 HTML", body = PreviewArticleResponse),
+        (status = 400, description = "内容超长（ARTICLE_CONTENT_TOO_LONG）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn preview_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -512,6 +694,23 @@ async fn preview_article(
     Ok(Json(PreviewArticleResponse { rendered_html }))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/admin/articles/{id}",
+    tag = "Admin Articles",
+    operation_id = "deleteArticle",
+    summary = "物理删除文章",
+    description = "物理删除文章及其 Revision 与 Tag 关联；仅 `recycled` 状态允许删除，否则返回 409 `ARTICLE_NOT_RECYCLED`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    responses(
+        (status = 204, description = "Article 已物理删除（无响应体）"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "文章非 recycled 状态（ARTICLE_NOT_RECYCLED）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn delete_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -533,6 +732,22 @@ async fn delete_article(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/articles/{id}/revisions",
+    tag = "Admin Articles",
+    operation_id = "listRevisions",
+    summary = "查询文章 Revision 列表",
+    description = "按 `revision_no` 倒序返回 Revision 列表；响应不含密码哈希，只暴露 `password_protected`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    responses(
+        (status = 200, description = "返回 Article 的 Revision 列表", body = Vec<RevisionResponse>),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_revisions(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -548,6 +763,27 @@ async fn list_revisions(
     Ok(Json(revisions.into_iter().map(Into::into).collect()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/articles/{id}/revisions/{rev}/restore",
+    tag = "Admin Articles",
+    operation_id = "restoreRevision",
+    summary = "恢复指定 Revision",
+    description = "将指定 Revision 的 Markdown 与元数据写回文章（`status`/`published_at` 不回滚）；恢复前会自动为当前版本留档新 Revision。版本冲突返回 409 `ARTICLE_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    params(
+        ("id" = i64, Path, description = "文章 ID"),
+        ("rev" = i64, Path, description = "Revision 版本号，从 1 开始"),
+    ),
+    request_body(content = RestoreRevisionRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "返回恢复后的 Article 和新版本号", body = ArticleResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "Article 或 Revision 不存在（ARTICLE_NOT_FOUND / REVISION_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "版本冲突（ARTICLE_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn restore_revision(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -596,7 +832,7 @@ async fn restore_revision(
     Ok(Json(article.into()))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ReorderArticlesRequest {
     /// 期望的新顺序（当前可视列表按展示顺序全量提交）。
     article_ids: Vec<i64>,
@@ -605,6 +841,23 @@ struct ReorderArticlesRequest {
 /// 批量重排文章手动排序值（下锚语义）：这批文章整体落到原 sort_order 槽位区间正前方的
 /// 连续新区块，块内顺序即入参顺序；未入参文章（其他页/被过滤）的相对位置不受影响。
 /// 典型 payload 是「排序」模式下当前页的完整有序 id 列表；上下箭头等价于提交两两交换后的列表。
+#[utoipa::path(
+    put,
+    path = "/api/admin/articles/reorder",
+    tag = "Admin Articles",
+    operation_id = "reorderArticles",
+    summary = "批量重排文章手动排序值",
+    description = "批量重排文章手动排序值（`sort_order`，下锚语义）：这批文章整体落到原 `sort_order` 槽位区间正前方的连续新区块，块内顺序即入参顺序；未入参文章的相对位置不受影响。典型 payload 是「排序」模式下当前页的完整有序 id 列表（1–500 个，不得重复）；幂等，重复提交同一列表结果一致。",
+    security(("cookieAuth" = [])),
+    request_body(content = ReorderArticlesRequest, content_type = "application/json"),
+    responses(
+        (status = 204, description = "排序已更新（无响应体）"),
+        (status = 400, description = "入参为空、含重复 id 或超过 500 个（INVALID_REORDER_INPUT）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn reorder_articles(
     State(state): State<AppState>,
     current: CurrentUser,

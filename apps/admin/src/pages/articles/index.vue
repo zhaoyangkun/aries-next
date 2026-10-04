@@ -536,7 +536,7 @@ function authorText(article: AdminArticle) {
             </template>
             <template #cell-status="{ row }">
               <Badge :variant="row.status === 'published' ? 'default' : 'secondary'">
-                {{ statusText(row.status) }}
+                {{ statusText(row.status as ArticleStatus) }}
               </Badge>
             </template>
             <template #cell-author="{ row }">{{ authorText(row) }}</template>

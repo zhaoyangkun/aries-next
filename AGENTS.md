@@ -27,7 +27,7 @@ backend/migrator   # aries-migrator：MySQL → PostgreSQL ETL 工具（prefligh
 apps/admin         # @aries/admin：Vue 3 管理端 SPA（页面在 src/pages/ 下按文件路由生成；本包特有约定见 apps/admin/AGENTS.md）
 apps/web           # @aries/web：Nuxt 4 SSR 公开站
 packages/design-tokens  # @aries/design-tokens：两端共享的 Brand Token（仅导出 theme.css）
-packages/api-client     # @aries/api-client：由 docs/openapi.yaml 生成的共享类型（openapi-typescript，`generate` 脚本可重新生成；admin/web 从这里派生 DTO 类型）
+packages/api-client     # @aries/api-client：由 docs/openapi.yaml（utoipa 注解生成的机器生成物）派生的共享类型（openapi-typescript，`generate` 脚本可重新生成；admin/web 从这里派生 DTO 类型）
 migrations         # PostgreSQL 版本化 SQLx Migration（如 202608010001_initial_content.sql）
 deploy             # Docker Compose 生产部署（Caddy 反代 + 多阶段构建；deploy/scripts/ 提供 build-admin/deploy/backup 自动化脚本，可选）
 docs               # 架构、ADR、数据映射、Phase 规划、OpenAPI Contract（openapi.yaml）
@@ -95,7 +95,7 @@ pnpm build        # 递归构建 apps 与 packages
 
 - Database Query 用参数化 SQL，禁止拼接用户输入。
 - 所有 PostgreSQL 结构变更只通过 `migrations/` 下的 SQLx Migration，禁止启动时自动建表。
-- API Contract 变化必须同步更新 `docs/openapi.yaml` 和前端 API Client；公开接口不得返回密码、Token、内部路径、未发布内容或供应商密钥。
+- API Contract 由 utoipa 代码注解生成（`docs/openapi.yaml` 是机器生成物，禁止手改）：端点变化必须同步更新 `backend/server/src/http/` 下的注解、重新导出并更新前端 API Client；公开接口不得返回密码、Token、内部路径、未发布内容或供应商密钥。
 - 密钥只从环境变量读取；生产配置、密码、Token 不得提交 Git。
 - 文档遵循 `docs/README.md` 的写作与维护规范：中文为主、专有名词英文、中英文间空格、标识符用反引号、事实与代码一致。
 - Git：English Conventional Commits，一个 Commit 一个逻辑主题；不使用 `git reset --hard` 或覆盖他人修改的命令。

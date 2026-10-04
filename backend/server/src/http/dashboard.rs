@@ -16,7 +16,11 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/dashboard", get(get_dashboard))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "DashboardResponse",
+    description = "Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务。"
+)]
 struct DashboardResponse {
     articles: ArticleStats,
     comments: CommentStats,
@@ -24,22 +28,35 @@ struct DashboardResponse {
     recent_failed_jobs: Vec<FailedJobResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "ArticleStats", description = "文章计数统计。")]
 struct ArticleStats {
+    /// 全部文章数（不含软删除）。
     total: i64,
+    /// 草稿数。
     draft: i64,
+    /// 已发布数。
     published: i64,
+    /// 回收站数。
     recycled: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "CommentStats", description = "评论计数统计。")]
 struct CommentStats {
+    /// 全部评论数。
     total: i64,
+    /// 待审核数。
     pending: i64,
+    /// 今日新增数。
     today: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "FailedJob",
+    description = "最近失败的后台任务（status = failed）。"
+)]
 struct FailedJobResponse {
     id: i64,
     kind: String,
@@ -63,6 +80,20 @@ impl From<&BackgroundJob> for FailedJobResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/dashboard",
+    tag = "Admin Dashboard",
+    operation_id = "getDashboard",
+    summary = "Dashboard 聚合统计",
+    description = "Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务，一次请求完成。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "聚合统计", body = DashboardResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 dashboard:view 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_dashboard(
     State(state): State<AppState>,
     current: CurrentUser,

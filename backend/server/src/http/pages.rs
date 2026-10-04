@@ -28,22 +28,31 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Deserialize)]
-struct PageListParams {
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub(crate) struct PageListParams {
+    /// 页码，从 1 开始。
     #[serde(default = "super::default_page")]
     page: u32,
+    /// 每页条数（1–100）。
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 按状态过滤：`draft` / `published`。
     status: Option<String>,
+    /// 对标题与 Slug 做模糊匹配；空白值被忽略。
     keyword: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct PagePayload {
+/// 自定义页面创建/更新请求体。
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct PagePayload {
+    /// 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。
     slug: String,
+    /// 页面标题。
     title: String,
+    /// Markdown 正文，服务端渲染为 `content_html` 后入库。
     #[serde(default)]
     content_markdown: String,
+    /// `draft` / `published`，缺省 `draft`。
     #[serde(default)]
     status: Option<String>,
     #[serde(default)]
@@ -51,13 +60,17 @@ struct PagePayload {
 }
 
 /// 页面 DTO：不返回内部字段（当前无敏感列，但保持 DTO/Domain 分离约定）。
-#[derive(Debug, Serialize)]
-struct PageResponse {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct PageResponse {
     id: i64,
+    /// 1–160 个小写字母、数字或连字符。
     slug: String,
     title: String,
+    /// Markdown 源文。
     content_markdown: String,
+    /// 服务端渲染后的 HTML。
     content_html: String,
+    /// `draft` / `published`。
     status: String,
     sort_order: i32,
     created_by: Option<i64>,
@@ -82,15 +95,32 @@ impl From<Page> for PageResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct PagePageResponse {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct PagePageResponse {
     items: Vec<PageResponse>,
     total: i64,
     page: u32,
     page_size: u32,
 }
 
-async fn list_pages(
+/// 分页查询自定义页面。
+#[utoipa::path(
+    get,
+    path = "/api/admin/pages",
+    tag = "Admin Pages",
+    operation_id = "listPages",
+    summary = "分页查询自定义页面",
+    description = "稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。",
+    security(("cookieAuth" = [])),
+    params(PageListParams),
+    responses(
+        (status = 200, description = "自定义页面分页结果", body = PagePageResponse),
+        (status = 400, description = "status 参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn list_pages(
     State(state): State<AppState>,
     current: CurrentUser,
     Query(params): Query<PageListParams>,
@@ -118,7 +148,25 @@ async fn list_pages(
     }))
 }
 
-async fn create_page(
+/// 创建自定义页面。
+#[utoipa::path(
+    post,
+    path = "/api/admin/pages",
+    tag = "Admin Pages",
+    operation_id = "createPage",
+    summary = "创建自定义页面",
+    description = "`content_html` 由服务端 Render Markdown 后入库。Slug 冲突返回 409 `SLUG_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    request_body(content = PagePayload, content_type = "application/json", description = "页面字段"),
+    responses(
+        (status = 201, description = "返回新建的页面", body = PageResponse),
+        (status = 400, description = "参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "Slug 冲突（SLUG_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn create_page(
     State(state): State<AppState>,
     current: CurrentUser,
     Json(request): Json<PagePayload>,
@@ -147,7 +195,23 @@ async fn create_page(
     Ok((StatusCode::CREATED, Json(page.into())))
 }
 
-async fn get_page(
+/// 获取自定义页面详情。
+#[utoipa::path(
+    get,
+    path = "/api/admin/pages/{id}",
+    tag = "Admin Pages",
+    operation_id = "getPage",
+    summary = "获取自定义页面详情",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "页面 ID")),
+    responses(
+        (status = 200, description = "页面详情", body = PageResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "页面不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_page(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(page_id): Path<i64>,
@@ -161,7 +225,27 @@ async fn get_page(
     Ok(Json(page.into()))
 }
 
-async fn update_page(
+/// 全量更新自定义页面。
+#[utoipa::path(
+    put,
+    path = "/api/admin/pages/{id}",
+    tag = "Admin Pages",
+    operation_id = "updatePage",
+    summary = "全量更新自定义页面",
+    description = "`content_html` 由服务端重新 Render。Slug 冲突返回 409 `SLUG_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "页面 ID")),
+    request_body(content = PagePayload, content_type = "application/json", description = "页面字段"),
+    responses(
+        (status = 200, description = "返回更新后的页面", body = PageResponse),
+        (status = 400, description = "参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "页面不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "Slug 冲突（SLUG_CONFLICT）", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn update_page(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(page_id): Path<i64>,
@@ -193,7 +277,24 @@ async fn update_page(
     Ok(Json(page.into()))
 }
 
-async fn delete_page(
+/// 软删除自定义页面。
+#[utoipa::path(
+    delete,
+    path = "/api/admin/pages/{id}",
+    tag = "Admin Pages",
+    operation_id = "deletePage",
+    summary = "软删除自定义页面",
+    description = "删除后同 Slug 可重新创建。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "页面 ID")),
+    responses(
+        (status = 204, description = "页面已删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "页面不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_page(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(page_id): Path<i64>,

@@ -285,8 +285,8 @@ const hasFilter = computed(
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm font-medium">{{ comment.author_name }}</span>
-                <Badge :variant="statusMeta[comment.status].variant">
-                  {{ statusMeta[comment.status].label }}
+                <Badge :variant="statusMeta[comment.status as CommentStatus].variant">
+                  {{ statusMeta[comment.status as CommentStatus].label }}
                 </Badge>
                 <Badge v-if="comment.is_admin_reply" variant="outline">管理员回复</Badge>
                 <span class="text-xs tabular-nums text-muted-foreground">{{ formatTime(comment.created_at) }}</span>
@@ -392,8 +392,8 @@ const hasFilter = computed(
         </DialogHeader>
         <div v-if="detailComment" class="grid gap-4 py-2 text-sm">
           <div class="flex flex-wrap items-center gap-2">
-            <Badge :variant="statusMeta[detailComment.status].variant">
-              {{ statusMeta[detailComment.status].label }}
+            <Badge :variant="statusMeta[detailComment.status as CommentStatus].variant">
+              {{ statusMeta[detailComment.status as CommentStatus].label }}
             </Badge>
             <span class="font-mono text-xs text-muted-foreground">{{ detailComment.author_email }}</span>
             <span class="text-xs text-muted-foreground">文章 #{{ detailComment.target_id }}</span>
@@ -412,7 +412,7 @@ const hasFilter = computed(
               <Badge :class="aiRiskMeta[detailComment.ai_risk].badgeClass">
                 {{ aiRiskMeta[detailComment.ai_risk].label }}
               </Badge>
-              <span v-if="detailComment.ai_confidence !== null" class="tabular-nums text-muted-foreground">
+              <span v-if="detailComment.ai_confidence != null" class="tabular-nums text-muted-foreground">
                 置信度 {{ Math.round(detailComment.ai_confidence * 100) }}%
               </span>
             </div>

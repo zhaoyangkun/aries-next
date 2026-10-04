@@ -49,24 +49,31 @@ pub fn router() -> Router<AppState> {
 /// 公开评论 DTO：永不包含 email/ip/ua；管理员回复的头像取站点 Logo（无则 null）。
 /// `website` 是访客自己提交的公开展示信息（对齐 Twikoo：昵称渲染成外链），
 /// 入库前已经过 http/https 校验，可直接回传。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(no_recursion)]
 struct PublicCommentResponse {
     id: i64,
+    /// 直接父评论 ID；根评论为 null。回复的回复平铺在同一根下，保持两级展示。
     parent_id: Option<i64>,
     nickname: String,
+    /// 访客头像为 Email SHA-256 拼 Cravatar URL；管理员回复取站点 Logo（未配置时为 null）。
     avatar_url: Option<String>,
+    /// 访客自填的主页链接（仅 http/https）；管理员回复为 null。
     website: Option<String>,
+    /// 服务端渲染并 Sanitize 后的 HTML，可安全直出。
     content_html: String,
     is_admin: bool,
     created_at: OffsetDateTime,
+    /// 回复列表（仅根评论有子级）。
     children: Vec<PublicCommentResponse>,
 }
 
 /// 提交成功的响应：附带当前 status，前端据此提示「待审核」。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicCommentCreatedResponse {
     #[serde(flatten)]
     comment: PublicCommentResponse,
+    /// 初始状态：`pending`（需审核）或 `approved`（自动通过），取决于站点评论策略。
     status: String,
 }
 
@@ -122,15 +129,17 @@ fn to_public_comment(
 // 已批准评论树
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct CommentListParams {
     #[serde(default = "crate::http::default_page")]
     page: u32,
+    /// 缺省时取站点设置 `comments_per_page`。
     #[serde(default)]
     page_size: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(description = "已批准评论树分页；分页只作用于根评论，`total` 为根评论总数。")]
 struct PublicCommentPageResponse {
     items: Vec<PublicCommentResponse>,
     total: i64,
@@ -138,6 +147,22 @@ struct PublicCommentPageResponse {
     page_size: u32,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/articles/{slug}/comments",
+    tag = "Public Comments",
+    operation_id = "listArticleComments",
+    summary = "文章已批准评论树",
+    description = "匿名可访问；只返回已发布文章的 `approved` 评论，组织为两级树（根评论的 `children` 为回复，回复下的回复平铺在同一根下）。分页只作用于根评论，回复整组跟随所属根；根评论按创建时间升序。文章不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(
+        ("slug" = String, Path, description = "文章 Slug"),
+        CommentListParams,
+    ),
+    responses(
+        (status = 200, description = "已批准评论树分页", body = PublicCommentPageResponse),
+        (status = 404, description = "文章不存在、未发布或分页越界（PAGE_OUT_OF_RANGE）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_article_comments(
     state: State<AppState>,
     slug: Path<String>,
@@ -146,6 +171,22 @@ async fn list_article_comments(
     list_approved_comments(state, slug, params, CommentTargetType::Article).await
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/pages/{slug}/comments",
+    tag = "Public Comments",
+    operation_id = "listPageComments",
+    summary = "页面已批准评论树",
+    description = "匿名可访问；与 `listArticleComments` 同语义，目标为已发布页面（Page）。页面不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(
+        ("slug" = String, Path, description = "页面 Slug"),
+        CommentListParams,
+    ),
+    responses(
+        (status = 200, description = "已批准评论树分页", body = PublicCommentPageResponse),
+        (status = 404, description = "页面不存在、未发布或分页越界（PAGE_OUT_OF_RANGE）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_page_comments(
     state: State<AppState>,
     slug: Path<String>,
@@ -216,21 +257,37 @@ async fn list_approved_comments(
 // 访客提交
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    description = "访客发表评论；`target_type` 支持 `article` / `page`，按 `target_slug` 定位已发布目标。`website` 可选且仅允许 http/https。"
+)]
 struct CreateCommentRequest {
+    /// 评论目标类型；公开提交仅接受 `article` / `page`。
     target_type: String,
+    /// 已发布文章 / 页面的 Slug。
     target_slug: String,
+    /// 昵称，长度 1–60 字符。
     nickname: String,
+    /// 邮箱（只入库不出 API），最大 254 字符。
     email: String,
+    /// 个人主页，可选且仅允许 http/https。
     website: Option<String>,
+    /// Markdown 源文本，长度 1–2000 字符。
     content: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    description = "回复评论；规则同 CreateCommentRequest（目标继承被回复评论），只允许回复 `approved` 状态的评论。"
+)]
 struct ReplyCommentRequest {
+    /// 昵称，长度 1–60 字符。
     nickname: String,
+    /// 邮箱（只入库不出 API），最大 254 字符。
     email: String,
+    /// 个人主页，可选且仅允许 http/https。
     website: Option<String>,
+    /// Markdown 源文本，长度 1–2000 字符。
     content: String,
 }
 
@@ -354,6 +411,23 @@ async fn prepare_submission(
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/public/comments",
+    tag = "Public Comments",
+    operation_id = "createComment",
+    summary = "访客发表评论",
+    description = "目标只允许已发布文章（`article`）或已发布页面（`page`），按 `target_slug` 定位。初始状态由站点评论策略决定：`moderated` → `pending`、`auto_approve` → `approved`、`closed` → 403 `COMMENTS_CLOSED`。Markdown 由服务端渲染并 Sanitize；Email/IP/UA 只存 Hash，不出现在任何响应中。同一客户端 60 秒最多 3 条（429 `RATE_LIMITED`）；相同 Email + 目标 + 内容 5 分钟内重复提交返回 409 `COMMENT_DUPLICATE`。",
+    request_body(content = CreateCommentRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。", body = PublicCommentCreatedResponse),
+        (status = 400, description = "昵称/邮箱/主页/内容校验失败", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "站点评论已关闭（COMMENTS_CLOSED）", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "评论目标不存在或未发布（COMMENT_TARGET_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "重复提交（COMMENT_DUPLICATE）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "提交过于频繁（RATE_LIMITED）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn create_comment(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -403,6 +477,24 @@ async fn create_comment(
     Ok(json_with_cache(&body, CACHE_NO_STORE))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/public/comments/{id}/replies",
+    tag = "Public Comments",
+    operation_id = "replyComment",
+    summary = "访客回复评论",
+    description = "只允许回复 `approved` 状态的评论，其余一律 404 `COMMENT_NOT_FOUND`（不泄露未审核评论的存在）。回复回复时新评论挂到同一根下，保持两级展示。校验、限流与策略规则同 `POST /api/public/comments`。",
+    params(("id" = i64, Path, description = "被回复的评论 ID")),
+    request_body(content = ReplyCommentRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。", body = PublicCommentCreatedResponse),
+        (status = 400, description = "昵称/邮箱/主页/内容校验失败", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "站点评论已关闭（COMMENTS_CLOSED）", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "被回复的评论不存在（COMMENT_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "重复提交（COMMENT_DUPLICATE）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "提交过于频繁（RATE_LIMITED）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn reply_comment(
     State(state): State<AppState>,
     Path(comment_id): Path<i64>,

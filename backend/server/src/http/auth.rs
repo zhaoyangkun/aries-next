@@ -42,23 +42,31 @@ pub fn router() -> Router<AppState> {
         .route("/auth/password/reset", post(reset_password))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct BootstrapStatusResponse {
+    /// 是否已创建首个 User。
     initialized: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct BootstrapRequest {
+    /// 一次性引导密钥（环境变量 BOOTSTRAP_SECRET，≥ 24 字符）。
     bootstrap_secret: String,
+    /// 登录用户名：3–30 位字母、数字、下划线或短横线。
     username: String,
+    /// 邮箱地址。
     email: String,
+    /// 显示名：1–60 字符。
     display_name: String,
+    /// 初始密码：10–128 字符。
     password: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct LoginRequest {
+    /// 用户名或邮箱。
     login: String,
+    /// 密码。
     password: String,
 }
 
@@ -82,25 +90,35 @@ impl<S: Send + Sync> OptionalFromRequestParts<S> for ClientPeer {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ForgotPasswordRequest {
+    /// 邮箱地址。
     email: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ResetPasswordRequest {
+    /// Password Reset Token。
     token: String,
+    /// 新密码：10–128 字符。
     password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct UserResponse {
+    /// User ID。
     id: i64,
+    /// 登录用户名。
     username: String,
+    /// 邮箱地址。
     email: String,
+    /// 显示名。
     display_name: String,
+    /// 头像 URL，未设置时为 null。
     avatar_url: Option<String>,
+    /// 角色：owner / editor / moderator。
     role: String,
+    /// 该角色拥有的权限标识列表。
     permissions: Vec<&'static str>,
 }
 
@@ -130,14 +148,17 @@ impl From<&User> for UserResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct SessionResponse {
+    /// 当前 User 视图。
     user: UserResponse,
+    /// Session 过期时间（UTC）。
     expires_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct MessageResponse {
+    /// 人类可读结果信息。
     message: &'static str,
 }
 
@@ -190,6 +211,18 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/bootstrap/status",
+    tag = "Admin Auth",
+    operation_id = "bootstrapStatus",
+    summary = "查询系统初始化状态",
+    description = "返回是否已创建首个 User；未初始化时前端应引导进入 Bootstrap 流程。",
+    responses(
+        (status = 200, description = "是否已创建首个 User", body = BootstrapStatusResponse),
+        (status = 500, description = "数据库查询失败", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn bootstrap_status(
     State(state): State<AppState>,
 ) -> Result<Json<BootstrapStatusResponse>, ApiError> {
@@ -198,6 +231,22 @@ async fn bootstrap_status(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/bootstrap",
+    tag = "Admin Auth",
+    operation_id = "bootstrap",
+    summary = "创建首个 Owner 并完成初始化",
+    description = "校验一次性 bootstrap_secret 后创建首个 Owner User，并签发 Session Cookie。仅限未初始化时调用，限流 5 次/15 分钟。",
+    request_body = BootstrapRequest,
+    responses(
+        (status = 200, description = "创建首个 Owner 并签发 Session Cookie", body = SessionResponse),
+        (status = 400, description = "用户名、邮箱、显示名或密码不合法", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "bootstrap_secret 无效", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "系统已初始化", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn bootstrap(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -262,6 +311,21 @@ async fn bootstrap(
     issue_session(&state, jar, &headers, user).await
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/auth/login",
+    tag = "Admin Auth",
+    operation_id = "login",
+    summary = "管理员登录",
+    description = "用户名或邮箱 + 密码认证；成功后撤销旧 Session、签发新 Session Cookie（HttpOnly，Path 限定 /api/admin）。账号维度 5 次/15 分钟、IP 维度 30 次/15 分钟双重限流，未命中用户也执行一次 Argon2id 以掩盖账号枚举的时间差异。",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "认证成功并签发 Session Cookie", body = SessionResponse),
+        (status = 401, description = "用户名或密码错误，或账号已被禁用", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "Origin 校验失败", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -362,6 +426,20 @@ async fn login(
     issue_session(&state, jar, &headers, credentials.user).await
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/auth/logout",
+    tag = "Admin Auth",
+    operation_id = "logout",
+    summary = "管理员登出",
+    description = "撤销当前 Session 并清除 Session Cookie，返回 204。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 204, description = "撤销当前 Session 并清除 Cookie"),
+        (status = 401, description = "未认证或 Session 已失效", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "Origin 校验失败", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn logout(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -382,6 +460,19 @@ async fn logout(
     Ok((remove_session_cookie(jar, &state), StatusCode::NO_CONTENT))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/auth/session",
+    tag = "Admin Auth",
+    operation_id = "getSession",
+    summary = "查询当前会话",
+    description = "返回当前 Session 对应的 User 视图与 Session 过期时间；无有效 Session Cookie 时返回 401。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "当前 Session 与 User 视图", body = SessionResponse),
+        (status = 401, description = "未认证或 Session 已失效", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn session(current: CurrentUser) -> Json<SessionResponse> {
     Json(SessionResponse {
         user: UserResponse::from(&current.user),
@@ -389,6 +480,21 @@ async fn session(current: CurrentUser) -> Json<SessionResponse> {
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/auth/password/forgot",
+    tag = "Admin Auth",
+    operation_id = "forgotPassword",
+    summary = "请求密码重置",
+    description = "无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。Phase 05 接入 Email Adapter 前不会发送 Email，Reset Token 不落库明文。",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 202, description = "无论账号是否存在都返回相同响应", body = MessageResponse),
+        (status = 400, description = "邮箱格式不合法", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "Origin 校验失败", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn forgot_password(
     State(state): State<AppState>,
     Json(request): Json<ForgotPasswordRequest>,
@@ -433,6 +539,21 @@ async fn forgot_password(
     ))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/auth/password/reset",
+    tag = "Admin Auth",
+    operation_id = "resetPassword",
+    summary = "重置密码",
+    description = "凭 Password Reset Token 设置新密码，成功后撤销该 User 的全部 Session，返回 204；Token 无效或已过期时返回 400。每 Token 维度 3 次/15 分钟限流。",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 204, description = "更新 Password 并撤销该 User 的全部 Session"),
+        (status = 400, description = "Token 无效或已过期，或新密码不合法", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "Origin 校验失败", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn reset_password(
     State(state): State<AppState>,
     Json(request): Json<ResetPasswordRequest>,

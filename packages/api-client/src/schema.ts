@@ -4,14 +4,118 @@
  */
 
 export interface paths {
-    "/api/health/live": {
+    "/api/admin/ai/editor/brief": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getLiveness"];
+        get?: never;
+        put?: never;
+        /**
+         * 根据标题与正文生成 AI 导读 TL;DR（SSE 流式）
+         * @description 输出 150 字以内 TL;DR 纯文本；事件序列与门禁同 `aiEditorRewrite`；导读由前端写入文章 `ai_brief` 字段随文保存。
+         */
+        post: operations["aiEditorBrief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/editor/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 建议 slug/keywords/description（SSE 流式）
+         * @description Provider 被要求输出 JSON，服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端自行解析 delta 拼接的 JSON 文本。
+         */
+        post: operations["aiEditorMetadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/editor/rewrite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 改写选中的 Markdown 片段（SSE 流式）
+         * @description 需要 `content:manage` 权限与 `editor_assist` 功能开关。事件序列：`start`（feature/model/prompt_version）→ `delta` × N（`{text}`）→ `usage`（可选，token 用量）→ `done`；失败时以 `error`（`{code}`：`AI_PROVIDER_FAILED` / `AI_PROVIDER_TIMEOUT` / `AI_RATE_LIMITED` / `AI_INVALID_OUTPUT`）终止。每用户每分钟限 10 次。每次请求落 `ai_requests` 审计并写 Audit（不含完整 Prompt）。
+         */
+        post: operations["aiEditorRewrite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/editor/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 根据标题与正文生成摘要草稿（SSE 流式）
+         * @description 需要 `content:manage` 权限与 `editor_assist` 功能开关；事件序列与门禁同 `aiEditorRewrite`。
+         */
+        post: operations["aiEditorSummary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/editor/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 根据标题与正文推荐文章标签（SSE 流式）
+         * @description Provider 被要求输出 JSON（形如 `{"tags": ["标签"]}`），服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端按名称匹配现有标签或新建后选中。
+         */
+        post: operations["aiEditorTags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 拉取当前 Provider 账号的可用模型列表
+         * @description 只要求已保存 api_key，不要求总开关已启用或 model 已配置；OpenAI 兼容协议还要求已保存 base_url。每用户限流 10 次/分钟。
+         */
+        get: operations["listAiModels"];
         put?: never;
         post?: never;
         delete?: never;
@@ -20,159 +124,19 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/health/ready": {
+    "/api/admin/ai/usage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getReadiness"];
+        /**
+         * AI 请求用量审计分页查询
+         * @description 需要 `settings:manage` 权限；可按 `feature` 过滤，按创建时间倒序。`operator_user_id` 为 null 表示系统触发（评论自动审核）。
+         */
+        get: operations["listAiUsage"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/bootstrap/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getBootstrapStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/bootstrap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["bootstrapOwner"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["loginAdmin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["logoutAdmin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/auth/session": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminSession"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/auth/password/forgot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["requestPasswordReset"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/auth/password/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["resetPassword"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminProfile"];
-        put: operations["updateAdminProfile"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/profile/password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["updateAdminPassword"];
         post?: never;
         delete?: never;
         options?: never;
@@ -187,9 +151,37 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAdminArticles"];
+        /**
+         * 分页查询文章列表
+         * @description 返回具备稳定 Total 语义的 Article Page。非法排序参数静默回退默认值，列表接口不因排序参数报错。
+         */
+        get: operations["listArticles"];
         put?: never;
-        post: operations["createAdminArticleDraft"];
+        /**
+         * 创建文章（草稿）
+         * @description 在 HTTP 层完成 Markdown 渲染，Draft 写入 PostgreSQL 并自动同步媒体引用。
+         */
+        post: operations["createArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/articles/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 批量导入 Markdown 文章
+         * @description Multipart 字段名 `file[]`，1–10 个 `.md` 文件，单文件 ≤ 2MB；解析 YAML Front Matter（title/slug/tags/category/summary）并生成 Slug 冲突预览，结果存入 Background Job。
+         */
+        post: operations["importMarkdown"];
         delete?: never;
         options?: never;
         head?: never;
@@ -205,7 +197,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["previewAdminArticle"];
+        /**
+         * 预览 Markdown 渲染结果
+         * @description 返回经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML，不落库。
+         */
+        post: operations["previewArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/articles/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 批量重排文章手动排序值
+         * @description 批量重排文章手动排序值（`sort_order`，下锚语义）：这批文章整体落到原 `sort_order` 槽位区间正前方的连续新区块，块内顺序即入参顺序；未入参文章的相对位置不受影响。典型 payload 是「排序」模式下当前页的完整有序 id 列表（1–500 个，不得重复）；幂等，重复提交同一列表结果一致。
+         */
+        put: operations["reorderArticles"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -219,11 +235,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getAdminArticle"];
-        put: operations["updateAdminArticle"];
+        /**
+         * 获取文章详情
+         * @description 返回 Article 的 Markdown 原文和当前版本。
+         */
+        get: operations["getArticle"];
+        /**
+         * 更新文章
+         * @description 乐观锁更新：expected_version 必须等于当前 version。`access_password` 与 `ai_brief` 三层语义：缺省不改动、显式 null 清除、字符串设置。
+         */
+        put: operations["updateArticle"];
         post?: never;
-        /** @description 物理删除文章及其 Revision 与 Tag 关联；仅 `recycled` 状态允许删除，否则返回 409 `ARTICLE_NOT_RECYCLED`。 */
-        delete: operations["deleteAdminArticle"];
+        /**
+         * 物理删除文章
+         * @description 物理删除文章及其 Revision 与 Tag 关联；仅 `recycled` 状态允许删除，否则返回 409 `ARTICLE_NOT_RECYCLED`。
+         */
+        delete: operations["deleteArticle"];
         options?: never;
         head?: never;
         patch?: never;
@@ -236,8 +263,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 按 `revision_no` 倒序返回 Revision 列表；响应不含密码哈希，只暴露 `password_protected`。 */
-        get: operations["listAdminArticleRevisions"];
+        /**
+         * 查询文章 Revision 列表
+         * @description 按 `revision_no` 倒序返回 Revision 列表；响应不含密码哈希，只暴露 `password_protected`。
+         */
+        get: operations["listRevisions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -255,8 +285,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 将指定 Revision 的 Markdown 与元数据写回文章（`status`/`published_at` 不回滚）；恢复前会自动为当前版本留档新 Revision。版本冲突返回 409 `ARTICLE_CONFLICT`。 */
-        post: operations["restoreAdminArticleRevision"];
+        /**
+         * 恢复指定 Revision
+         * @description 将指定 Revision 的 Markdown 与元数据写回文章（`status`/`published_at` 不回滚）；恢复前会自动为当前版本留档新 Revision。版本冲突返回 409 `ARTICLE_CONFLICT`。
+         */
+        post: operations["restoreRevision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -276,7 +309,171 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["changeAdminArticleStatus"];
+        /**
+         * 流转文章状态
+         * @description 通过 `publish` / `recycle` / `recover` 命令做状态机流转；乐观锁校验 expected_version。
+         */
+        patch: operations["changeStatus"];
+        trace?: never;
+    };
+    "/api/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 审计日志查询
+         * @description Admin 敏感操作审计日志查询，仅 Owner（`settings:manage`）可访问。时间范围按 `created_at` 左闭右开过滤，格式 RFC 3339；非法时间值返回 400 `INVALID_DATE_RANGE`。
+         */
+        get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员登录
+         * @description 用户名或邮箱 + 密码认证；成功后撤销旧 Session、签发新 Session Cookie（HttpOnly，Path 限定 /api/admin）。账号维度 5 次/15 分钟、IP 维度 30 次/15 分钟双重限流，未命中用户也执行一次 Argon2id 以掩盖账号枚举的时间差异。
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员登出
+         * @description 撤销当前 Session 并清除 Session Cookie，返回 204。
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 请求密码重置
+         * @description 无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。Phase 05 接入 Email Adapter 前不会发送 Email，Reset Token 不落库明文。
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 重置密码
+         * @description 凭 Password Reset Token 设置新密码，成功后撤销该 User 的全部 Session，返回 204；Token 无效或已过期时返回 400。每 Token 维度 3 次/15 分钟限流。
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询当前会话
+         * @description 返回当前 Session 对应的 User 视图与 Session 过期时间；无有效 Session Cookie 时返回 401。
+         */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 创建首个 Owner 并完成初始化
+         * @description 校验一次性 bootstrap_secret 后创建首个 Owner User，并签发 Session Cookie。仅限未初始化时调用，限流 5 次/15 分钟。
+         */
+        post: operations["bootstrap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bootstrap/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询系统初始化状态
+         * @description 返回是否已创建首个 User；未初始化时前端应引导进入 Bootstrap 流程。
+         */
+        get: operations["bootstrapStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/admin/categories": {
@@ -286,9 +483,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAdminArticleCategories"];
+        /**
+         * 获取文章分类列表
+         * @description 管理端分类接口固定 article kind（link / gallery 分类由各自模块管理），返回可用于 Article Editor 的 Category 列表。
+         */
+        get: operations["listCategories"];
         put?: never;
-        post: operations["createAdminArticleCategory"];
+        /**
+         * 新建文章分类
+         * @description 创建 article kind 分类；slug 缺省时以 name 归一化生成，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        post: operations["createCategory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -303,45 +508,17 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 更新 Category 的 `name`/`slug`；slug 复用统一 Normalize 规则，唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        put: operations["updateAdminArticleCategory"];
+        /**
+         * 更新文章分类
+         * @description 更新分类的 `name` / `slug`；slug 复用统一 Normalize 规则，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        put: operations["updateCategory"];
         post?: never;
-        /** @description 仍被 Article 引用时返回 409 `TAXONOMY_IN_USE`，并在 `error.details.reference_count` 携带引用数。 */
-        delete: operations["deleteAdminArticleCategory"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminTags"];
-        put?: never;
-        post: operations["createAdminTag"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/tags/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** @description 更新 Tag 的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        put: operations["updateAdminTag"];
-        post?: never;
-        /** @description 仍被 Article 引用时返回 409 `TAXONOMY_IN_USE`，并在 `error.details.reference_count` 携带引用数。 */
-        delete: operations["deleteAdminTag"];
+        /**
+         * 删除文章分类
+         * @description 仍被 Article 引用时返回 409，并在 `error.details` 携带引用信息。
+         */
+        delete: operations["deleteCategory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -354,8 +531,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Admin 评论列表。返回访客 Email 辅助审核判断；Public API 永不暴露该字段。 */
-        get: operations["listAdminComments"];
+        /**
+         * Admin 评论列表
+         * @description 返回访客 Email 辅助审核判断；Public API 永不暴露该字段。支持按状态、目标类型/ID、关键词筛选。
+         */
+        get: operations["listComments"];
         put?: never;
         post?: never;
         delete?: never;
@@ -371,11 +551,35 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getAdminComment"];
+        /** 评论详情 */
+        get: operations["getComment"];
         put?: never;
         post?: never;
-        /** @description 物理删除评论。仅 `recycled` 状态允许，其余状态返回 409 `COMMENT_NOT_RECYCLED`。 */
-        delete: operations["deleteAdminComment"];
+        /**
+         * 物理删除评论
+         * @description 仅 `recycled` 状态允许物理删除，其余状态返回 409 `COMMENT_NOT_RECYCLED`。删除不可恢复。
+         */
+        delete: operations["deleteComment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/comments/{id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员回复评论
+         * @description Markdown 渲染并 Sanitize 后返回，状态直接为 `approved` 并公开，署名取操作管理员的展示名。
+         */
+        post: operations["replyToComment"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -394,25 +598,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description 评论审核。状态转换遵循 core 状态机：pending → approved/rejected/spam；approved/rejected/spam → recycled；recycled → approved（恢复并公开）。非法转换返回 409 `INVALID_COMMENT_TRANSITION`。 */
-        patch: operations["changeAdminCommentStatus"];
-        trace?: never;
-    };
-    "/api/admin/comments/{id}/reply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 管理员回复评论。Markdown 渲染并 Sanitize 后返回，状态直接为 `approved`，署名取操作管理员的展示名。 */
-        post: operations["replyAdminComment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        /**
+         * 评论审核（状态变更）
+         * @description 状态转换遵循 core 状态机：pending → approved/rejected/spam；approved/rejected/spam → recycled；recycled → approved（恢复并公开）。非法转换返回 409 `INVALID_COMMENT_TRANSITION`。
+         */
+        patch: operations["changeCommentStatus"];
         trace?: never;
     };
     "/api/admin/dashboard": {
@@ -422,202 +612,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务，一次请求完成。 */
-        get: operations["getAdminDashboard"];
+        /**
+         * Dashboard 聚合统计
+         * @description Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务，一次请求完成。
+         */
+        get: operations["getDashboard"];
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/audit-logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Admin 敏感操作审计日志查询，仅 Owner 可访问。时间范围按 `created_at` 左闭右开过滤，格式 RFC 3339；非法时间值返回 400 `INVALID_DATE_RANGE`。 */
-        get: operations["listAdminAuditLogs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 运行日志查询（数据来自 `server_logs` 表，tracing 事件批量落库），仅 Owner（`ManageSettings`）可访问。排序按 `ts, id`；`start`/`end` 按 `ts` 左闭右开过滤，格式 RFC 3339，非法值返回 400 `INVALID_DATE_RANGE`。`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`。提供 `around_id` 时进入上下文模式：以锚点行的 `ts` 为中心前后各取 `context` 条，按 `ts asc, id asc` 返回，忽略 `page`/`page_size`/`start`/`end`/`order`；锚点不存在返回 404 `LOG_ENTRY_NOT_FOUND`。 */
-        get: operations["listAdminLogs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 运行日志分桶统计（趋势图数据），仅 Owner（`ManageSettings`）可访问。`hours` 默认 24、范围 1–168；≤48 小时按小时分桶，>48 小时按天分桶（`date_trunc`）；桶按时间升序，五个级别键恒在（无数据为 0）。 */
-        get: operations["listAdminLogStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs/targets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 已出现过的 tracing target 去重列表，用于筛选下拉框，仅 Owner（`ManageSettings`）可访问。 */
-        get: operations["listAdminLogTargets"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs/sql": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 查询 SQL 语句日志（`sqlx::query` DEBUG 级）的运行时开关状态，仅 Owner（`ManageSettings`）可访问。 */
-        get: operations["getSqlLogging"];
-        /** @description 运行时切换 SQL 语句日志开关（tracing_subscriber reload），无需重启；`LOG_SQL` 环境变量仅作为启动初始值。仅 Owner（`ManageSettings`）可访问。 */
-        put: operations["setSqlLogging"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs/filter": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 查询运行时日志级别覆盖状态（自定义 EnvFilter directives 与自动复位剩余时间），仅 Owner（`ManageSettings`）可访问。 */
-        get: operations["getLogFilterOverride"];
-        /** @description 运行时设置日志级别覆盖（tracing_subscriber reload，无需重启），用于临时排障（如 `aries_server=debug`）。可带自动复位：到期未再变更则恢复默认过滤器；空 `directives` 清除覆盖（含未到期自动复位一并失效）。仅 Owner（`ManageSettings`）可访问。 */
-        put: operations["setLogFilterOverride"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/logs/tail": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 实时推送运行日志（SSE，`text/event-stream`）：以连接时刻的最大日志 id 为锚点，每 500ms 轮询推送之后写入且匹配筛选的新日志。事件为 `event: log`、`data` 为单个日志条目（形状同 `LogListItem`）；锚点查询失败时推送 `event: error` 后结束。筛选参数语义与列表接口一致（`level` 为最低级别；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`）。仅 Owner（`ManageSettings`）可访问。 */
-        get: operations["tailAdminLogs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminPages"];
-        put?: never;
-        /** @description 创建自定义页面；`content_html` 由服务端 Render Markdown 后入库。Slug 冲突返回 409 `SLUG_CONFLICT`。 */
-        post: operations["createAdminPage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/pages/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminPage"];
-        /** @description 全量更新页面；`content_html` 由服务端重新 Render。Slug 冲突返回 409 `SLUG_CONFLICT`。 */
-        put: operations["updateAdminPage"];
-        post?: never;
-        /** @description 软删除页面；删除后同 Slug 可重新创建。 */
-        delete: operations["deleteAdminPage"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/journals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminJournals"];
-        put?: never;
-        /** @description 创建日志；`content_markdown` 长度 1–2000，`content_html` 由服务端 Render。 */
-        post: operations["createAdminJournal"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/journals/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminJournal"];
-        /** @description 全量更新日志；`content_html` 由服务端重新 Render。 */
-        put: operations["updateAdminJournal"];
-        post?: never;
-        /** @description 软删除日志。 */
-        delete: operations["deleteAdminJournal"];
         options?: never;
         head?: never;
         patch?: never;
@@ -630,10 +632,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAdminGalleries"];
+        /**
+         * 分页查询图库列表
+         * @description 支持按状态、分类与关键字过滤；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+         */
+        get: operations["listGalleries"];
         put?: never;
-        /** @description 创建图库；`category_id` 必须指向 kind 为 `gallery` 的分类。Slug 冲突返回 409 `GALLERY_CONFLICT`。 */
-        post: operations["createAdminGallery"];
+        /**
+         * 创建图库
+         * @description `category_id` 必须指向 kind 为 `gallery` 的分类；Slug 冲突返回 409 `GALLERY_CONFLICT`。
+         */
+        post: operations["createGallery"];
         delete?: never;
         options?: never;
         head?: never;
@@ -647,11 +656,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 返回 kind 为 `gallery` 的分类列表。 */
-        get: operations["listAdminGalleryCategories"];
+        /**
+         * 查询图库分类列表
+         * @description 返回 kind 为 `gallery` 的分类列表。
+         */
+        get: operations["listGalleryCategories"];
         put?: never;
-        /** @description 创建 kind 为 `gallery` 的分类；Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        post: operations["createAdminGalleryCategory"];
+        /**
+         * 创建图库分类
+         * @description 创建 kind 为 `gallery` 的分类；Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        post: operations["createGalleryCategory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -666,11 +681,17 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 更新图库分类的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        put: operations["updateAdminGalleryCategory"];
+        /**
+         * 更新图库分类
+         * @description 更新图库分类的 `name` / `slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        put: operations["updateGalleryCategory"];
         post?: never;
-        /** @description 物理删除图库分类；仍被 Gallery 引用时返回 409 `TAXONOMY_IN_USE`。 */
-        delete: operations["deleteAdminGalleryCategory"];
+        /**
+         * 物理删除图库分类
+         * @description 仍被 Gallery 引用时返回 409 `TAXONOMY_IN_USE`。
+         */
+        delete: operations["deleteGalleryCategory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -683,12 +704,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getAdminGallery"];
-        /** @description 全量更新图库；Slug 冲突返回 409 `GALLERY_CONFLICT`。 */
-        put: operations["updateAdminGallery"];
+        /** 获取图库详情 */
+        get: operations["getGallery"];
+        /**
+         * 全量更新图库
+         * @description Slug 冲突返回 409 `GALLERY_CONFLICT`。
+         */
+        put: operations["updateGallery"];
         post?: never;
-        /** @description 软删除图库；其条目一并解除引用。 */
-        delete: operations["deleteAdminGallery"];
+        /**
+         * 软删除图库
+         * @description 软删除图库；其条目一并解除引用。
+         */
+        delete: operations["deleteGallery"];
         options?: never;
         head?: never;
         patch?: never;
@@ -701,11 +729,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 图库条目列表；稳定排序 `sort_order ASC, id ASC`。图库不存在返回 404。 */
-        get: operations["listAdminGalleryItems"];
+        /**
+         * 查询图库条目列表
+         * @description 稳定排序 `sort_order ASC, id ASC`；图库不存在返回 404。
+         */
+        get: operations["listGalleryItems"];
         put?: never;
-        /** @description 向图库添加媒体条目；同一媒体在同一图库中只可出现一次，重复返回 409 `GALLERY_CONFLICT`。 */
-        post: operations["addAdminGalleryItem"];
+        /**
+         * 向图库添加媒体条目
+         * @description 同一媒体在同一图库中只可出现一次，重复返回 409 `GALLERY_CONFLICT`。
+         */
+        post: operations["addGalleryItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -720,8 +754,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 原子批量重排图库条目；事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不属于该图库则整体回滚。 */
-        put: operations["reorderAdminGalleryItems"];
+        /**
+         * 原子批量重排图库条目
+         * @description 事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不属于该图库则整体回滚。
+         */
+        put: operations["reorderGalleryItems"];
         post?: never;
         delete?: never;
         options?: never;
@@ -737,11 +774,100 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 更新条目的 `alt`/`location`/`sort_order`；媒体引用创建后不可改。 */
-        put: operations["updateAdminGalleryItem"];
+        /**
+         * 更新图库条目
+         * @description 更新条目的 `alt` / `location` / `sort_order`；媒体引用创建后不可改。
+         */
+        put: operations["updateGalleryItem"];
         post?: never;
-        /** @description 物理移除图库条目。 */
-        delete: operations["removeAdminGalleryItem"];
+        /** 物理移除图库条目 */
+        delete: operations["removeGalleryItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/imports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取 Markdown 导入预览
+         * @description 返回导入预览（标题、Slug、警告、冲突标记）；非导入类型的 Job 返回 404。
+         */
+        get: operations["getImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/imports/{id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 提交 Markdown 导入
+         * @description 按逐篇策略落库；冲突项未指定策略时一律 skip，绝不静默覆盖已有文章。Job 只允许 Commit 一次。
+         */
+        post: operations["commitImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/journals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 日志分页列表
+         * @description 按创建时间倒序分页返回日志；可按 visibility 过滤，非法 visibility 返回 400 `INVALID_JOURNAL_VISIBILITY`。
+         */
+        get: operations["listJournals"];
+        put?: never;
+        /**
+         * 创建日志
+         * @description 创建日志；`content_markdown` 长度 1–2000，`content_html` 由服务端 Render，visibility 缺省 `public`。
+         */
+        post: operations["createJournal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/journals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 日志详情 */
+        get: operations["getJournal"];
+        /**
+         * 全量更新日志
+         * @description 全量更新日志；`content_html` 由服务端重新 Render，visibility 缺省 `public`。
+         */
+        put: operations["updateJournal"];
+        post?: never;
+        /** 软删除日志 */
+        delete: operations["deleteJournal"];
         options?: never;
         head?: never;
         patch?: never;
@@ -754,10 +880,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAdminLinks"];
+        /**
+         * 分页查询友情链接
+         * @description 稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+         */
+        get: operations["listLinks"];
         put?: never;
-        /** @description 创建友情链接；`url` 仅允许 http/https，否则返回 400 `INVALID_LINK_URL`。 */
-        post: operations["createAdminLink"];
+        /**
+         * 创建友情链接
+         * @description `url` 仅允许 http/https，否则返回 400 `INVALID_LINK_URL`；`status` 缺省为 `active`。
+         */
+        post: operations["createLink"];
         delete?: never;
         options?: never;
         head?: never;
@@ -771,11 +904,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 返回 kind 为 `link` 的分类列表。 */
-        get: operations["listAdminLinkCategories"];
+        /** 友链分类列表 */
+        get: operations["listLinkCategories"];
         put?: never;
-        /** @description 创建 kind 为 `link` 的分类；Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        post: operations["createAdminLinkCategory"];
+        /**
+         * 创建友链分类
+         * @description Slug 缺省时取 `name`，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        post: operations["createLinkCategory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -790,11 +926,17 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 更新友链分类的 `name`/`slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。 */
-        put: operations["updateAdminLinkCategory"];
+        /**
+         * 更新友链分类
+         * @description 唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        put: operations["updateLinkCategory"];
         post?: never;
-        /** @description 物理删除友链分类；仍存在未删除的友链引用时返回 409 `TAXONOMY_IN_USE`（FK 为 `ON DELETE SET NULL`，回收站中的友链不阻塞删除）。 */
-        delete: operations["deleteAdminLinkCategory"];
+        /**
+         * 删除友链分类
+         * @description 仍存在未删除的友链引用时返回 409 `TAXONOMY_IN_USE`（FK 为 `ON DELETE SET NULL`，回收站中的友链不阻塞删除）。
+         */
+        delete: operations["deleteLinkCategory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -807,12 +949,256 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["getAdminLink"];
-        /** @description 全量更新友情链接；`url` 仅允许 http/https。 */
-        put: operations["updateAdminLink"];
+        /** 获取友情链接详情 */
+        get: operations["getLink"];
+        /**
+         * 全量更新友情链接
+         * @description `url` 仅允许 http/https；`status` 缺省为 `active`。
+         */
+        put: operations["updateLink"];
         post?: never;
-        /** @description 软删除友情链接。 */
-        delete: operations["deleteAdminLink"];
+        /** 软删除友情链接 */
+        delete: operations["deleteLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 运行日志查询
+         * @description 数据来自 `server_logs` 表（tracing 事件批量落库）。`start`/`end` 按 `ts` 左闭右开过滤，格式 RFC 3339，非法值返回 400 `INVALID_DATE_RANGE`；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`。提供 `around_id` 时进入上下文模式：以锚点行的 `ts` 为中心前后各取 `context` 条，忽略分页/时间范围/排序参数，锚点不存在返回 404 `LOG_ENTRY_NOT_FOUND`。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["listLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/filter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询运行时日志级别覆盖状态
+         * @description 查询自定义 EnvFilter directives 与自动复位剩余时间，空 `directives` 表示无覆盖。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["getFilterOverride"];
+        /**
+         * 运行时设置日志级别覆盖
+         * @description 运行时设置日志级别覆盖（tracing_subscriber reload，无需重启），用于临时排障（如 `aries_server=debug`）。可带自动复位：到期未再变更则恢复默认过滤器；空 `directives` 清除覆盖（含未到期自动复位一并失效）。仅 Owner（`ManageSettings`）可访问。
+         */
+        put: operations["setFilterOverride"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/sql": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 查询 SQL 日志运行时开关状态
+         * @description 查询 SQL 语句日志（`sqlx::query` DEBUG 级）的运行时开关状态。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["getSqlLogging"];
+        /**
+         * 运行时切换 SQL 日志开关
+         * @description 运行时切换 SQL 语句日志开关（tracing_subscriber reload），无需重启；`LOG_SQL` 环境变量仅作为启动初始值。仅 Owner（`ManageSettings`）可访问。
+         */
+        put: operations["setSqlLogging"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 运行日志分桶统计
+         * @description 趋势图数据：`hours` 默认 24、范围 1–168；≤48 小时按小时分桶，>48 小时按天分桶（`date_trunc`）；桶按时间升序，五个级别键恒在（无数据为 0）。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["listLogStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/tail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 实时推送运行日志（SSE）
+         * @description 以连接时刻的最大日志 id 为锚点，每 500ms 轮询推送之后写入且匹配筛选的新日志。事件为 `event: log`、`data` 为单个日志条目（形状同 `LogItem`）；锚点查询失败时推送 `event: error` 后结束。筛选参数语义与列表接口一致（`level` 为最低级别；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`）。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["tailLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/logs/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 已出现过的 tracing target 列表
+         * @description 去重列表（升序，最多 200 条），用于筛选下拉框。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["listLogTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页查询媒体资产列表
+         * @description 仅返回 `active` 资产；稳定排序 `created_at DESC, id DESC`。
+         */
+        get: operations["listMedia"];
+        put?: never;
+        /**
+         * 本地上传媒体文件
+         * @description Multipart 字段名 `file[]`，每批 1–5 个文件，单文件 ≤ 5MB；扩展名白名单 jpg/jpeg/png/gif/bmp/webp，并校验 Magic Bytes 与声明 MIME。响应恒为数组。
+         */
+        post: operations["uploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/media/batch-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 批量软删除媒体资产
+         * @description 部分成功语义：被引用的资产保持 active 并归入 `referenced`；不存在或已删除的 ID 归入 `not_found`。单次 1–100 个 ID（服务端去重）。有实际删除时自动入队 `media_cleanup` 任务。
+         */
+        post: operations["batchDeleteMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/media/remote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 抓取远端图片并入库
+         * @description SSRF 防护：仅 http/https，拒绝内网与环回地址，Redirect 最多 3 次且逐跳重校验，Body ≤ 5MB，超时 10s。
+         */
+        post: operations["uploadRemoteMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取单个媒体资产详情
+         * @description 已软删除的资产返回 404。
+         */
+        get: operations["getMedia"];
+        /**
+         * 更新媒体资产元数据
+         * @description 仅允许更新 `alt` 与 `original_name`；文件内容、Hash、URL 创建后不可变。
+         */
+        put: operations["updateMedia"];
+        post?: never;
+        /**
+         * 软删除媒体资产
+         * @description 仍存在引用时返回 409 并携带 Usages 摘要。物理删除由 `media_cleanup` 后台任务在零引用后执行。
+         */
+        delete: operations["deleteMedia"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/media/{id}/usages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出媒体资产的引用
+         * @description 返回引用该资产的内容列表（封面 / 正文 / 图库条目）。
+         */
+        get: operations["listMediaUsages"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -825,11 +1211,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 平铺返回全部导航节点（含隐藏项），前端按 `parent_id` 组树；稳定排序 `parent_id NULLS FIRST, sort_order ASC, id ASC`。 */
-        get: operations["listAdminNavigation"];
+        /**
+         * 导航节点列表
+         * @description 稳定排序 `parent_id NULLS FIRST, sort_order ASC, id ASC`。
+         */
+        get: operations["listNavigation"];
         put?: never;
-        /** @description 创建导航节点；最多两级，超出返回 400 `INVALID_NAVIGATION_HIERARCHY`。`target_type` 为 `url` 时必须提供 `url`，其余类型必须提供 `target_id`（400 `INVALID_NAVIGATION_TARGET`）。 */
-        post: operations["createAdminNavigationItem"];
+        /**
+         * 创建导航节点
+         * @description 最多两级，超出返回 400 `INVALID_NAVIGATION_HIERARCHY`；`target_type` 为 `url` 时必须提供 `url`，其余类型必须提供 `target_id`（400 `INVALID_NAVIGATION_TARGET`）。
+         */
+        post: operations["createNavigationItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -844,8 +1236,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 原子批量重排导航节点；事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不存在则整体回滚并返回 404 `NAVIGATION_NOT_FOUND`。 */
-        put: operations["reorderAdminNavigation"];
+        /**
+         * 批量重排导航节点
+         * @description 事务内按 `item_ids` 顺序重写 `sort_order`，任一 ID 不存在则整体回滚并返回 404 `NAVIGATION_NOT_FOUND`。
+         */
+        put: operations["reorderNavigation"];
         post?: never;
         delete?: never;
         options?: never;
@@ -861,11 +1256,110 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 全量更新导航节点；层级与目标字段校验同创建。 */
-        put: operations["updateAdminNavigationItem"];
+        /**
+         * 全量更新导航节点
+         * @description 层级与目标字段校验同创建。
+         */
+        put: operations["updateNavigationItem"];
         post?: never;
-        /** @description 物理删除导航节点；仍含子节点时返回 409 `NAVIGATION_CONFLICT`，须先删除或移动子节点。 */
-        delete: operations["deleteAdminNavigationItem"];
+        /**
+         * 删除导航节点
+         * @description 仍含子节点时返回 409 `NAVIGATION_CONFLICT`，须先删除或移动子节点。
+         */
+        delete: operations["deleteNavigationItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页查询自定义页面
+         * @description 稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。
+         */
+        get: operations["listPages"];
+        put?: never;
+        /**
+         * 创建自定义页面
+         * @description `content_html` 由服务端 Render Markdown 后入库。Slug 冲突返回 409 `SLUG_CONFLICT`。
+         */
+        post: operations["createPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/pages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取自定义页面详情 */
+        get: operations["getPage"];
+        /**
+         * 全量更新自定义页面
+         * @description `content_html` 由服务端重新 Render。Slug 冲突返回 409 `SLUG_CONFLICT`。
+         */
+        put: operations["updatePage"];
+        post?: never;
+        /**
+         * 软删除自定义页面
+         * @description 删除后同 Slug 可重新创建。
+         */
+        delete: operations["deletePage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 当前登录用户 Profile
+         * @description 返回当前 Session 对应的 User Profile，含 Role 与权限列表。
+         */
+        get: operations["getProfile"];
+        /**
+         * 更新当前用户 Profile
+         * @description 更新邮箱、显示名与头像；写 Audit（`profile.updated`）。邮箱与其他用户冲突返回 409。
+         */
+        put: operations["updateProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/profile/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改当前用户密码
+         * @description 校验当前密码后更新为新密码；成功后撤销该用户全部 Session 并清除当前 Cookie，写 Audit（`profile.password_changed`）。
+         */
+        put: operations["updatePassword"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -878,10 +1372,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 读取分组设置，需要 `settings:manage` 权限。email 组的 `smtp_password`、ai 组的 `api_key` 为 write-only，响应只携带 `*_set` 表示是否已设置。 */
-        get: operations["getAdminSettingGroup"];
-        /** @description 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变，只更新提交的字段，不会重置未提交字段。email 组 `smtp_password`、ai 组 `api_key` 三态语义：字段省略或 `null` 保持不变、空字符串清除、非空字符串更新。 */
-        put: operations["updateAdminSettingGroup"];
+        /**
+         * 读取分组设置
+         * @description 读取分组设置，需要 `settings:manage` 权限。email 组的 `smtp_password`、ai 组的 `api_key` 为 write-only，响应只携带 `*_set` 表示是否已设置。
+         */
+        get: operations["getSettingGroup"];
+        /**
+         * 更新分组设置
+         * @description 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+         */
+        put: operations["updateSettingGroup"];
         post?: never;
         delete?: never;
         options?: never;
@@ -889,7 +1389,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/ai/editor/rewrite": {
+    "/api/admin/site-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取站点设置
+         * @description 读取单行站点设置，仅 Owner（`settings:manage`）可访问。
+         */
+        get: operations["getSiteSettings"];
+        /**
+         * 全量更新站点设置
+         * @description 全量更新站点设置；URL 字段允许为空、站内绝对路径或 http/https 外链，Page Size 取值 1–100，`comments_per_page` 取值 5–100。写 Audit（`site_settings.update`）。
+         */
+        put: operations["updateSiteSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取标签列表
+         * @description 返回可用于 Article Editor 的 Tag 列表。
+         */
+        get: operations["listTags"];
+        put?: never;
+        /**
+         * 新建标签
+         * @description slug 缺省时以 name 归一化生成，唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        post: operations["createTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/tags/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -897,92 +1445,94 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /** @description 改写选中的 Markdown 片段（SSE 流式）。需要 `content:manage` 权限与 `editor_assist` 功能开关。事件序列：`start`（feature/model/prompt_version）→ `delta` × N（`{text}`）→ `usage`（可选，token 用量）→ `done`；失败时以 `error`（`{code}`：`AI_PROVIDER_FAILED` / `AI_PROVIDER_TIMEOUT` / `AI_RATE_LIMITED` / `AI_INVALID_OUTPUT`）终止。每用户每分钟限 10 次（429）。每次请求落 `ai_requests` 审计并写 Audit（不含完整 Prompt）。 */
-        post: operations["aiEditorRewrite"];
-        delete?: never;
+        /**
+         * 更新标签
+         * @description 更新标签的 `name` / `slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。
+         */
+        put: operations["updateTag"];
+        post?: never;
+        /**
+         * 删除标签
+         * @description 仍被 Article 引用时返回 409，并在 `error.details` 携带引用信息。
+         */
+        delete: operations["deleteTag"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/ai/editor/summary": {
+    "/api/health/live": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 存活探针
+         * @description 进程存活即返回 200；不检查数据库等外部依赖。
+         */
+        get: operations["live"];
         put?: never;
-        /** @description 根据标题与正文生成摘要草稿；事件序列与门禁同 `aiEditorRewrite`。 */
-        post: operations["aiEditorSummary"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/ai/editor/metadata": {
+    "/api/health/ready": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 就绪探针
+         * @description 额外执行 `SELECT 1` 检查数据库连通性，不可用时返回 503。
+         */
+        get: operations["ready"];
         put?: never;
-        /** @description 建议 slug/keywords/description。Provider 被要求输出 JSON，服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端自行解析 delta 拼接的 JSON 文本。 */
-        post: operations["aiEditorMetadata"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/ai/editor/tags": {
+    "/api/media/files/{path}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 匿名访问媒体文件
+         * @description Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider 307 Redirect 到公开 URL。Path 做路径穿越校验。`?w=<width>` 请求按需缩略图（16–1200，仅 Local Provider 的 jpeg/png/webp，首次生成后落盘缓存且同样 immutable）；缺省、非法值或不支持的类型静默回退原图。
+         */
+        get: operations["serveMediaFile"];
         put?: never;
-        /** @description 根据标题与正文推荐文章标签。Provider 被要求输出 JSON（形如 {"tags": ["标签"]}），服务端在 done 前校验累积文本为合法 JSON，不合格以 error（AI_INVALID_OUTPUT）终止；前端按名称匹配现有标签或新建后选中。 */
-        post: operations["aiEditorTags"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/ai/editor/brief": {
+    "/api/public/archives": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** @description 根据标题与正文生成 150 字以内的 AI 导读（TL;DR）纯文本；事件序列与门禁同 `aiEditorRewrite`；导读由前端写入文章 `ai_brief` 字段随文保存。 */
-        post: operations["aiEditorBrief"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/ai/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description AI 请求用量审计分页查询，需要 `settings:manage` 权限；可按 `feature` 过滤，按创建时间倒序。`operator_user_id` 为 null 表示系统触发（评论自动审核）。 */
-        get: operations["listAiUsage"];
+        /**
+         * 文章归档聚合
+         * @description Published 文章按 year/month 聚合，组间倒序、组内按发布时间倒序。
+         */
+        get: operations["listPublicArchives"];
         put?: never;
         post?: never;
         delete?: never;
@@ -998,7 +1548,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 匿名可访问；只返回 `published` 状态文章。固定排序 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`，不提供排序参数。缺省分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200），阻止爬虫沿 `?page=N` 生成无限重复 URL。 */
+        /**
+         * 已发布文章分页列表
+         * @description 匿名可访问；只返回 `published` 状态文章。固定排序 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`，不提供排序参数。缺省分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200），阻止爬虫沿 `?page=N` 生成无限重复 URL。
+         */
         get: operations["listPublicArticles"];
         put?: never;
         post?: never;
@@ -1015,7 +1568,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 匿名可访问；Slug 不区分大小写。草稿、回收站或不存在的 Slug 一律返回 404 `ARTICLE_NOT_FOUND`。受密码保护的文章返回 `password_protected: true` 且 `rendered_html: null`，携带有效解锁 Cookie（见 access 端点）后返回正文。普通文章响应 `Cache-Control: public, max-age=60`，密码文章为 `private, no-store`。 */
+        /**
+         * 已发布文章公开详情
+         * @description 匿名可访问；Slug 不区分大小写。草稿、回收站或不存在的 Slug 一律返回 404 `ARTICLE_NOT_FOUND`。受密码保护的文章返回 `password_protected: true` 且 `rendered_html: null`，携带有效解锁 Cookie（见 access 端点）后返回正文。普通文章响应 `Cache-Control: public, max-age=60`，密码文章为 `private, no-store`。
+         */
         get: operations["getPublicArticle"];
         put?: never;
         post?: never;
@@ -1034,8 +1590,51 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 校验访问密码；成功后下发 HttpOnly Cookie `aries_article_access_{article_id}`（Path 限定本文详情、SameSite=Lax、2 小时），值为 HMAC-SHA256 凭据，密码修改后自动失效。同一客户端对同一文章限流 5 次/分钟。响应对所有缓存 `no-store`。 */
-        post: operations["unlockPublicArticle"];
+        /**
+         * 密码文章解锁
+         * @description 校验访问密码；成功后下发 HttpOnly Cookie `aries_article_access_{article_id}`（Path `/`、SameSite=Lax、2 小时），值为 HMAC-SHA256 凭据，密码修改后自动失效。同一客户端对同一文章限流 5 次/分钟。响应对所有缓存 `no-store`。
+         */
+        post: operations["unlockArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/articles/{slug}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 文章已批准评论树
+         * @description 匿名可访问；只返回已发布文章的 `approved` 评论，组织为两级树（根评论的 `children` 为回复，回复下的回复平铺在同一根下）。分页只作用于根评论，回复整组跟随所属根；根评论按创建时间升序。文章不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listArticleComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/articles/{slug}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 相关文章推荐
+         * @description 以文章标题 + 摘要为查询向量，返回内容相近的其他已发布文章（默认 6 篇，最多 12 篇）。`features.smart_search` 未开启、Embedding 未配置或文章不存在时返回 404；无相近文章返回 200 空数组。
+         */
+        get: operations["relatedArticles"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1051,25 +1650,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 浏览量 +1；同一客户端（IP + User-Agent 指纹）30 分钟滑动窗口内重复调用只计一次，窗口内重复调用返回当前计数。客户端不能指定计数值。响应 `no-store`。 */
-        post: operations["recordPublicArticleView"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/site": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。 */
-        get: operations["getPublicSite"];
-        put?: never;
-        post?: never;
+        /**
+         * 记录文章浏览量
+         * @description 浏览量 +1；同一客户端（IP + User-Agent 指纹）30 分钟滑动窗口内重复调用只计一次，窗口内重复调用返回当前计数。客户端不能指定计数值。响应 `no-store`。
+         */
+        post: operations["recordArticleView"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1083,7 +1668,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description kind 为 `article` 的分类列表，含实时 Published 文章数。 */
+        /**
+         * 获取公开分类列表
+         * @description kind 为 `article` 的分类列表，含实时 Published 文章数。
+         */
         get: operations["listPublicCategories"];
         put?: never;
         post?: never;
@@ -1100,263 +1688,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 该分类下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicCategoryArticles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 标签列表，含实时 Published 文章数。 */
-        get: operations["listPublicTags"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/tags/{slug}/articles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 该标签下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicTagArticles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/archives": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description Published 文章按 year/month 聚合，组间倒序、组内按发布时间倒序。 */
-        get: operations["listPublicArchives"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 全文搜索（PostgreSQL FTS `simple` 分词，OR ILIKE 兜底标题与摘要），只命中 Published；结果不含正文全文。按相关度排序（标题命中 > 摘要命中 > 仅正文命中，同档按发布时间倒序）。摘要未覆盖的正文命中在 `matched_excerpt` 返回纯文本片段（Markdown 已剥离、两端可带 `…`），由前端负责关键词高亮；摘要已含关键词时不返回该字段。分页大小取站点设置 `page_size_search`。`page > 1` 且当前页无命中时返回 404 `PAGE_OUT_OF_RANGE`；page=1 无命中保持 200。 */
-        get: operations["searchPublicArticles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/search/suggest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 搜索建议（输入即搜下拉）：标题/摘要包含匹配，标题前缀命中优先，按发布时间倒序取前 `limit` 条，只命中 Published。响应不可缓存。 */
-        get: operations["searchSuggest"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/search/ask": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 对话式站内搜索（AI 问答）：检索已发布文章内容块（配置 Embedding 时取向量近邻，否则降级为关键词搜索摘要），由 LLM 流式生成带引用序号的回答。事件序列：`start` → `delta` × N → `sources`（引用文章列表，`done` 之前）→ `usage` → `done`；失败以 `error` 事件终止。`features.smart_search` 未开启或 AI 未启用时返回 404 `AI_RETRIEVAL_DISABLED`；匿名限流 5 次/分钟 + 50 次/天（按客户端指纹）。 */
-        post: operations["searchAsk"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/articles/{slug}/related": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 相关文章推荐：以文章标题 + 摘要为查询向量，返回内容相近的其他已发布文章（默认 6 篇，最多 12 篇）。`features.smart_search` 未开启、Embedding 未配置或文章不存在时返回 404；无相近文章返回 200 空数组。 */
-        get: operations["listRelatedArticles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/pages/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回 `published` 页面。草稿、已删除或不存在的 Slug 一律返回 404 `PAGE_NOT_FOUND`。响应不含 Markdown 原文。 */
-        get: operations["getPublicPage"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/journals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回 `visibility = public` 的日志，`private` 内容永不进入结果集。稳定排序 `created_at DESC, id DESC`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicJournals"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/galleries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回 `published` 图库摘要，`cover_url` 取封面媒体的公开 URL。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicGalleries"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/galleries/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回 `published` 图库，草稿、已删除或不存在的 Slug 一律返回 404 `GALLERY_NOT_FOUND`。条目携带媒体公开 URL 与尺寸；条目未填 `alt` 时回退媒体资产自身的 `alt`。 */
-        get: operations["getPublicGallery"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/links": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回 `status = active` 的友情链接，不含管理字段。稳定排序 `sort_order ASC, id ASC`。 */
-        get: operations["listPublicLinks"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/photos": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问的照片墙：跨相册平铺所有 `published` 且未删除相册的条目，不分页（对齐旧版 xue 主题的 GetAll 行为）。稳定排序 `galleries.sort_order ASC, galleries.id ASC, gallery_items.sort_order ASC`。 */
-        get: operations["listPublicPhotos"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/articles/{slug}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；只返回已发布文章的 `approved` 评论，组织为两级树（根评论的 `children` 为回复，回复下的回复平铺在同一根下）。分页只作用于根评论，回复整组跟随所属根；根评论按创建时间升序。文章不存在或未发布返回 404 `ARTICLE_NOT_FOUND`；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicArticleComments"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/public/pages/{slug}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description 匿名可访问；与 `listPublicArticleComments` 同语义，目标为已发布页面（Page）。页面不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。 */
-        get: operations["listPublicPageComments"];
+        /**
+         * 获取分类下的公开文章分页
+         * @description 该分类下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listCategoryArticles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1374,8 +1710,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 访客发表评论。目标只允许已发布文章（`article`）或已发布页面（`page`），按 `target_slug` 定位。初始状态由站点评论策略决定：`moderated` → `pending`、`auto_approve` → `approved`、`closed` → 403 `COMMENTS_CLOSED`。Markdown 由服务端渲染并 Sanitize；Email/IP/UA 只存 Hash，不出现在任何响应中。同一客户端 60 秒最多 3 条（429 `RATE_LIMITED`）；相同 Email + 目标 + 内容 5 分钟内重复提交返回 409 `COMMENT_DUPLICATE`。 */
-        post: operations["createPublicComment"];
+        /**
+         * 访客发表评论
+         * @description 目标只允许已发布文章（`article`）或已发布页面（`page`），按 `target_slug` 定位。初始状态由站点评论策略决定：`moderated` → `pending`、`auto_approve` → `approved`、`closed` → 403 `COMMENTS_CLOSED`。Markdown 由服务端渲染并 Sanitize；Email/IP/UA 只存 Hash，不出现在任何响应中。同一客户端 60 秒最多 3 条（429 `RATE_LIMITED`）；相同 Email + 目标 + 内容 5 分钟内重复提交返回 409 `COMMENT_DUPLICATE`。
+         */
+        post: operations["createComment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1391,8 +1730,91 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 回复某条评论；只允许回复 `approved` 状态的评论，其余一律 404 `COMMENT_NOT_FOUND`（不泄露未审核评论的存在）。回复回复时新评论挂到同一根下，保持两级展示。校验、限流与策略规则同 `POST /api/public/comments`。 */
-        post: operations["replyPublicComment"];
+        /**
+         * 访客回复评论
+         * @description 只允许回复 `approved` 状态的评论，其余一律 404 `COMMENT_NOT_FOUND`（不泄露未审核评论的存在）。回复回复时新评论挂到同一根下，保持两级展示。校验、限流与策略规则同 `POST /api/public/comments`。
+         */
+        post: operations["replyComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/galleries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页获取公开图库摘要列表
+         * @description 匿名可访问；只返回 `published` 图库摘要，`cover_url` 取封面媒体的公开 URL。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listPublicGalleries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/galleries/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 按 Slug 获取已发布图库详情
+         * @description 匿名可访问；只返回 `published` 图库，草稿、已删除或不存在的 Slug 一律返回 404 `GALLERY_NOT_FOUND`。条目携带媒体公开 URL 与尺寸；条目未填 `alt` 时回退媒体资产自身的 `alt`。
+         */
+        get: operations["getPublicGallery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/journals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 分页获取公开日志列表
+         * @description 匿名可访问；只返回 `visibility = public` 的日志，`private` 内容永不进入结果集。稳定排序 `created_at DESC, id DESC`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listPublicJournals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取公开友情链接列表
+         * @description 匿名可访问；只返回 `status = active` 的友情链接，不含管理字段。稳定排序 `sort_order ASC, id ASC`。
+         */
+        get: operations["listPublicLinks"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1406,7 +1828,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 匿名可访问；只返回 `visible = true` 的节点，组织为两级树（一级节点的 `children` 为其子菜单）。隐藏节点不出现在响应中。 */
+        /**
+         * 获取公开导航两级树
+         * @description 匿名可访问；只返回 `visible = true` 的节点，组织为两级树（一级节点的 `children` 为其子菜单）。隐藏节点不出现在响应中。
+         */
         get: operations["listPublicNavigation"];
         put?: never;
         post?: never;
@@ -1416,83 +1841,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/media": {
+    "/api/public/pages/{slug}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listAdminMedia"];
-        put?: never;
-        /** @description Multipart 字段名 `file[]`，每批 1–5 个文件，单文件 ≤ 5MB；扩展名白名单 jpg/jpeg/png/gif/bmp/webp，并校验 Magic Bytes 与声明 MIME。响应恒为数组。 */
-        post: operations["uploadAdminMedia"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/media/remote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 抓取远端图片并入库。SSRF 防护：仅 http/https，拒绝内网与环回地址，Redirect 最多 3 次且逐跳重校验，Body ≤ 5MB，超时 10s。 */
-        post: operations["uploadAdminMediaFromUrl"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/media/batch-delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description 批量软删除，部分成功语义。被引用的资产保持 active 并归入 `referenced`；不存在或已删除的 ID 归入 `not_found`。单次 1–100 个 ID（服务端去重）。有实际删除时自动入队 `media_cleanup` 任务，并记录 `media.batch_delete` 审计事件。 */
-        post: operations["batchDeleteAdminMedia"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/media/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminMedia"];
-        /** @description 仅允许更新 `alt` 与 `original_name`；文件内容、Hash、URL 创建后不可变。 */
-        put: operations["updateAdminMedia"];
-        post?: never;
-        /** @description 软删除；仍存在引用时返回 409 并携带 Usages 摘要。物理删除由 `media_cleanup` 后台任务在零引用后执行。 */
-        delete: operations["deleteAdminMedia"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/media/{id}/usages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listAdminMediaUsages"];
+        /**
+         * 按 Slug 获取已发布页面详情
+         * @description 匿名可访问；只返回 `published` 页面。草稿、已删除或不存在的 Slug 一律返回 404 `PAGE_NOT_FOUND`。响应不含 Markdown 原文。
+         */
+        get: operations["getPublicPage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1501,31 +1861,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/articles/imports": {
+    "/api/public/pages/{slug}/comments": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** @description Multipart 字段名 `file[]`，1–10 个 `.md` 文件，单文件 ≤ 2MB；解析 YAML Front Matter（title/slug/tags/category/summary）并生成 Slug 冲突预览，结果存入 Background Job。 */
-        post: operations["importAdminMarkdown"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/imports/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["getAdminImport"];
+        /**
+         * 页面已批准评论树
+         * @description 匿名可访问；与 `listArticleComments` 同语义，目标为已发布页面（Page）。页面不存在或未发布返回 404；`page > 1` 且当前页无根评论时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listPageComments"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1534,7 +1881,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/imports/{id}/commit": {
+    "/api/public/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取公开照片墙列表
+         * @description 匿名可访问的照片墙：跨相册平铺所有 `published` 且未删除相册的条目，不分页（对齐旧版 xue 主题的 GetAll 行为）。稳定排序 `galleries.sort_order ASC, galleries.id ASC, gallery_items.sort_order ASC`。
+         */
+        get: operations["listPhotos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 全文搜索已发布文章
+         * @description PostgreSQL FTS `simple` 分词，OR ILIKE 兜底标题与摘要，只命中 Published；结果不含正文全文。按相关度排序（标题命中 > 摘要命中 > 仅正文命中，同档按发布时间倒序）。摘要未覆盖的正文命中在 `matched_excerpt` 返回纯文本片段（Markdown 已剥离、两端可带 `…`），由前端负责关键词高亮；摘要已含关键词时不返回该字段。分页大小取站点设置 `page_size_search`。`page > 1` 且当前页无命中时返回 404 `PAGE_OUT_OF_RANGE`；page=1 无命中保持 200。
+         */
+        get: operations["searchPublicArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/search/ask": {
         parameters: {
             query?: never;
             header?: never;
@@ -1543,24 +1930,30 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 按逐篇策略落库；所有导入文章一律为 Draft，绝不自动发布。Job 只允许 Commit 一次。 */
-        post: operations["commitAdminImport"];
+        /**
+         * 对话式站内搜索（AI 问答）
+         * @description 检索已发布文章内容块（配置 Embedding 时取向量近邻，否则降级为关键词搜索摘要），由 LLM 流式生成带引用序号的回答。SSE 事件序列：`start` → `delta` × N → `sources`（引用文章列表，`done` 之前）→ `usage` → `done`；失败以 `error` 事件终止。`features.smart_search` 未开启或 AI 未启用时返回 404 `AI_RETRIEVAL_DISABLED`；匿名限流 5 次/分钟 + 50 次/天（按客户端指纹）。
+         */
+        post: operations["searchAsk"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/admin/site-settings": {
+    "/api/public/search/suggest": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getAdminSiteSettings"];
-        /** @description 全量更新站点设置；`site_url` 必须为合法 http/https URL 或空，Page Size 取值 1–100。 */
-        put: operations["updateAdminSiteSettings"];
+        /**
+         * 搜索建议（输入即搜下拉）
+         * @description 标题/摘要包含匹配，标题前缀命中优先，按发布时间倒序取前 `limit` 条，只命中 Published。响应不可缓存。
+         */
+        get: operations["searchSuggest"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1568,15 +1961,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/media/files/{path}": {
+    "/api/public/site": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description 匿名可缓存的媒体文件端点；Local Provider 直接发文件（`Cache-Control: public, max-age=31536000, immutable`），S3 Provider Redirect 到公开 URL。Path 做路径穿越校验。`?w=<width>` 请求按需缩略图（16–1200，仅 Local Provider 的 jpeg/png/webp，首次生成后落盘缓存且同样 immutable）；缺省、非法值或不支持的类型静默回退原图。 */
-        get: operations["getMediaFile"];
+        /**
+         * 公开站点信息
+         * @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
+         */
+        get: operations["getPublicSite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取公开标签列表
+         * @description 标签列表，含实时 Published 文章数。
+         */
+        get: operations["listPublicTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/tags/{slug}/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取标签下的公开文章分页
+         * @description 该标签下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。
+         */
+        get: operations["listTagArticles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1589,1323 +2025,1948 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        HealthResponse: {
-            /** @example ok */
+        /**
+         * AiModelsResponse
+         * @description Provider 返回的模型 ID 列表（去重排序，上限 500）。
+         */
+        AiModelsResponse: {
+            models: string[];
+        };
+        /** @description AI 请求审计记录；不存完整 Prompt。 */
+        AiUsageItem: {
+            /**
+             * Format: int32
+             * @description 补全 Token 用量；失败或无用量报告时为 null。
+             */
+            completion_tokens?: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 失败分类（config/provider/timeout/rate_limited/invalid_output/store）。 */
+            error_category?: string | null;
+            /** @description 功能标识，同查询参数 `feature` 的枚举值。 */
+            feature: string;
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int32
+             * @description 端到端耗时（毫秒）。
+             */
+            latency_ms: number;
+            /** @description 使用的模型 ID。 */
+            model: string;
+            /**
+             * Format: int64
+             * @description 触发用户；null 表示系统触发（评论自动审核）。
+             */
+            operator_user_id?: number | null;
+            /**
+             * Format: int32
+             * @description Prompt Token 用量；失败或无用量报告时为 null。
+             */
+            prompt_tokens?: number | null;
+            /** @description `success` / `failed` / `cancelled`。 */
             status: string;
-            /** @example aries-server */
-            service: string;
         };
-        BootstrapStatusResponse: {
-            initialized: boolean;
-        };
-        BootstrapRequest: {
-            bootstrap_secret: string;
-            username: string;
-            /** Format: email */
-            email: string;
-            display_name: string;
-            password: string;
-        };
-        LoginRequest: {
-            login: string;
-            password: string;
-        };
-        ForgotPasswordRequest: {
-            /** Format: email */
-            email: string;
-        };
-        ResetPasswordRequest: {
-            token: string;
-            password: string;
-        };
-        UpdateProfileRequest: {
-            /** Format: email */
-            email: string;
-            display_name: string;
-            /** Format: uri */
-            avatar_url: string | null;
-        };
-        UpdatePasswordRequest: {
-            current_password: string;
-            new_password: string;
-        };
-        UserResponse: {
-            /** Format: int64 */
-            id: number;
-            username: string;
-            /** Format: email */
-            email: string;
-            display_name: string;
-            /** Format: uri */
-            avatar_url: string | null;
-            /** @enum {string} */
-            role: "owner" | "editor" | "moderator";
-            permissions: ("dashboard:view" | "content:manage" | "comments:moderate" | "users:manage" | "settings:manage" | "profile:manage")[];
-        };
-        SessionResponse: {
-            user: components["schemas"]["UserResponse"];
-            /** Format: date-time */
-            expires_at: string;
-        };
-        /** @enum {string} */
-        ArticleStatus: "draft" | "published" | "recycled";
-        /** @enum {string} */
-        ArticleStatusCommand: "publish" | "recycle" | "recover";
-        ChangeArticleStatusRequest: {
-            command: components["schemas"]["ArticleStatusCommand"];
-            /** Format: int64 */
-            expected_version: number;
-        };
-        CreateTaxonomyRequest: {
-            name: string;
-            slug?: string;
-        };
-        /** @description 管理端分类 DTO；`/api/admin/categories` 只返回 `kind = article`，`link` / `gallery` 分类由各自模块的分类端点返回同一结构。 */
-        ArticleCategoryResponse: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            parent_id: number | null;
-            /** @enum {string} */
-            kind: "article" | "link" | "gallery";
-            name: string;
-            slug: string;
-            description: string;
-        };
-        ArticleTagResponse: {
-            /** Format: int64 */
-            id: number;
-            name: string;
-            slug: string;
-        };
-        CreateArticleRequest: {
-            title: string;
-            slug?: string;
-            /** @default  */
-            summary: string;
-            /** @description AI 导读（TL;DR），由 `/api/admin/ai/editor/brief` 生成；不超过 500 字符。 */
-            ai_brief?: string | null;
-            /** @default  */
-            markdown_source: string;
-            /** Format: int64 */
-            category_id?: number | null;
-            /** Format: uri */
-            cover_url?: string | null;
-            seo_keywords?: string[];
-            /** @description 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。字段缺省表示不改动（新建时视为无密码）；显式 `null` 表示清除密码；字符串表示设置新密码，Trim 后少于 6 个字符返回 400 `INVALID_ACCESS_PASSWORD`。 */
-            access_password?: string | null;
-            /** @default true */
-            allow_comments: boolean;
-            /** @default false */
-            is_pinned: boolean;
-            tag_ids?: number[];
-        };
-        UpdateArticleRequest: components["schemas"]["CreateArticleRequest"] & {
-            /** Format: int64 */
-            expected_version: number;
-        };
-        PreviewArticleRequest: {
-            markdown_source: string;
-        };
-        PreviewArticleResponse: {
-            rendered_html: string;
-        };
-        RestoreRevisionRequest: {
-            /** Format: int64 */
-            expected_version: number;
-        };
-        /** @description Revision 快照；不含密码哈希，`password_protected` 仅表示当时是否设置过访问密码。 */
-        ArticleRevisionResponse: {
-            /** Format: int64 */
-            revision_no: number;
-            title: string;
-            slug: string;
-            summary: string;
-            /** @description AI 导读（TL;DR） */
-            ai_brief?: string | null;
-            /** Format: int64 */
-            category_id: number | null;
-            /** Format: uri */
-            cover_url: string | null;
-            seo_keywords: string[];
-            tag_ids: number[];
-            password_protected: boolean;
-            allow_comments: boolean;
-            is_pinned: boolean;
-            markdown_source: string;
-            /** Format: int64 */
-            operator_id: number;
-            /** Format: date-time */
-            created_at: string;
-        };
-        ArticleResponse: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            author_id: number;
-            /** Format: int64 */
-            category_id: number | null;
-            status: components["schemas"]["ArticleStatus"];
-            slug: string;
-            title: string;
-            summary: string;
-            /** @description AI 导读（TL;DR）；更新时字段缺省表示不改动，显式 null 清除 */
-            ai_brief?: string | null;
-            /** Format: uri */
-            cover_url: string | null;
-            markdown_source: string;
-            rendered_html: string;
-            seo_keywords: string[];
-            tag_ids: number[];
-            password_protected: boolean;
-            allow_comments: boolean;
-            is_pinned: boolean;
-            /** Format: int64 */
-            version: number;
-            /** Format: date-time */
-            published_at: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        ArticlePageResponse: {
-            items: components["schemas"]["ArticleResponse"][];
-            /** Format: int64 */
-            total: number;
+        AiUsagePageResponse: {
+            /** @description 用量审计记录列表。 */
+            items: components["schemas"]["AiUsageItem"][];
+            /**
+             * Format: int32
+             * @description 当前页码。
+             */
             page: number;
+            /**
+             * Format: int32
+             * @description 每页条数。
+             */
             page_size: number;
+            /**
+             * Format: int64
+             * @description 符合条件的总记录数。
+             */
+            total: number;
         };
-        /** @description Public 列表项；不含 `markdown_source`、`author_id`、`version` 等内部字段。 */
-        PublicArticleListItem: {
-            /** Format: int64 */
-            id: number;
+        ArchiveArticleResponse: {
+            /** Format: date-time */
+            published_at: string;
             slug: string;
             title: string;
-            summary: string;
-            /** Format: uri */
-            cover_url: string | null;
-            /** Format: int64 */
-            category_id: number | null;
-            tag_ids: number[];
-            is_pinned: boolean;
-            password_protected: boolean;
-            /** @description 仅搜索接口在摘要未覆盖正文命中时返回的纯文本片段（Markdown 已剥离）；其他列表接口不出现该字段。 */
-            matched_excerpt?: string | null;
-            /** Format: date-time */
-            published_at: string | null;
         };
-        PublicArticleDetail: components["schemas"]["PublicArticleListItem"] & {
-            allow_comments: boolean;
-            /** @description AI 导读（TL;DR），管理端生成并随文保存；未生成时该字段不出现。 */
-            ai_brief?: string | null;
-            seo_keywords: string[];
-            /** @description 经过 `comrak` Render 和 `ammonia` Sanitization 的 HTML；受密码保护且未解锁时为 `null`。 */
-            rendered_html: string | null;
-            category: {
-                /** Format: int64 */
-                id?: number;
-                name?: string;
-                slug?: string;
-            } | null;
-            tags: {
-                /** Format: int64 */
-                id?: number;
-                name?: string;
-                slug?: string;
-            }[];
-            /** Format: int64 */
-            visit_count: number;
-            /** Format: int64 */
-            comment_count: number;
-            /** @description 同一公开排序中靠前（更新）的一篇；第一篇为 `null`。 */
-            previous: {
-                slug?: string;
-                title?: string;
-            } | null;
-            /** @description 同一公开排序中靠后（更旧）的一篇；最后一篇为 `null`。 */
-            next: {
-                slug?: string;
-                title?: string;
-            } | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        PublicSiteResponse: {
-            site_name: string;
-            site_description: string;
-            site_url: string;
-            logo_url: string;
-            icp_text: string;
-            default_cover_url: string;
-            /**
-             * Format: date-time
-             * @description 建站时间（footer「本站已运行 X 天」的数据源）
-             */
-            created_at: string;
-        };
-        PublicCategory: {
-            /** Format: int64 */
-            id: number;
-            name: string;
-            slug: string;
-            description: string;
-            /**
-             * Format: int64
-             * @description 实时统计的 Published 文章数。
-             */
-            article_count: number;
-        };
-        PublicTag: {
-            /** Format: int64 */
-            id: number;
-            name: string;
-            slug: string;
-            /**
-             * Format: int64
-             * @description 实时统计的 Published 文章数。
-             */
-            article_count: number;
-        };
-        PublicArchiveMonth: {
-            year: number;
-            month: number;
+        ArchiveMonthResponse: {
+            articles: components["schemas"]["ArchiveArticleResponse"][];
             /** Format: int64 */
             count: number;
-            articles: {
-                slug: string;
-                title: string;
-                /** Format: date-time */
-                published_at: string;
-            }[];
+            /** Format: int32 */
+            month: number;
+            /** Format: int32 */
+            year: number;
         };
-        PublicArticlePageResponse: {
-            items: components["schemas"]["PublicArticleListItem"][];
-            /** Format: int64 */
-            total: number;
+        ArticlePageResponse: {
+            /** @description 当前页文章列表。 */
+            items: components["schemas"]["ArticleResponse"][];
+            /**
+             * Format: int32
+             * @description 当前页码，从 1 开始。
+             */
             page: number;
+            /**
+             * Format: int32
+             * @description 每页条数。
+             */
             page_size: number;
+            /**
+             * Format: int64
+             * @description 命中总数（稳定 Total 语义，与分页无关）。
+             */
+            total: number;
         };
-        /** @description 搜索建议项：仅 Slug 与 Title，不泄露其他字段。 */
-        PublicSearchSuggestion: {
-            slug: string;
-            title: string;
-        };
-        PublicSearchAskRequest: {
-            /** @description 访客提问 */
-            question: string;
-        };
-        /** @description 相关文章条目：仅公开元数据，不含正文与统计。 */
-        RelatedArticle: {
-            slug: string;
-            title: string;
-            /** Format: uri */
-            cover_url: string | null;
-            /** Format: date-time */
-            published_at: string | null;
-        };
-        MessageResponse: {
-            message: string;
-        };
-        ErrorResponse: {
-            error: {
-                code: string;
-                message: string;
-                /** @description 可选结构化补充信息；如 `TAXONOMY_IN_USE` 时携带 `{ "reference_count": <number> }`。 */
-                details?: Record<string, never>;
-            };
-        };
-        MediaAssetResponse: {
-            /** Format: int64 */
-            id: number;
-            /** @enum {string} */
-            provider: "local" | "s3" | "legacy_url";
-            /** @description 服务端生成的不可预测 Key（`yyyy/mm/<uuid>.<ext>`），不含用户文件名。 */
-            object_key: string;
-            url: string;
-            original_name: string;
-            mime: string;
-            /** Format: int64 */
-            size_bytes: number;
-            /** @description 尺寸探测失败时为 `null`，由 `metadata_probe` 后台任务补探测。 */
-            width?: number | null;
-            height?: number | null;
-            sha256: string;
-            alt: string;
-            /** @enum {string} */
-            status: "active" | "deleted";
-            /** Format: int64 */
-            uploaded_by: number;
-            /** Format: date-time */
+        ArticleResponse: {
+            /** @description AI 导读（TL;DR）；更新时字段缺省表示不改动，显式 null 清除。 */
+            ai_brief?: string | null;
+            /** @description 是否允许评论。 */
+            allow_comments: boolean;
+            /**
+             * Format: int64
+             * @description 作者用户 ID。
+             */
+            author_id: number;
+            /**
+             * Format: int64
+             * @description 所属分类 ID。
+             */
+            category_id?: number | null;
+            /** @description 封面图 URL。 */
+            cover_url?: string | null;
+            /**
+             * Format: date-time
+             * @description 创建时间（RFC 3339）。
+             */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Format: int64
+             * @description 文章 ID。
+             */
+            id: number;
+            /** @description 是否置顶。 */
+            is_pinned: boolean;
+            /** @description Markdown 原文。 */
+            markdown_source: string;
+            /** @description 是否设置了访问密码（任何响应都不回显密码或哈希）。 */
+            password_protected: boolean;
+            /**
+             * Format: date-time
+             * @description 发布时间；草稿为 `null`。
+             */
+            published_at?: string | null;
+            /** @description 服务端渲染并 Sanitization 后的 HTML。 */
+            rendered_html: string;
+            /** @description SEO 关键字列表。 */
+            seo_keywords: string[];
+            /** @description URL 别名。 */
+            slug: string;
+            /**
+             * @description 文章状态：`draft` / `published` / `recycled`。
+             * @example published
+             */
+            status: string;
+            /** @description 摘要。 */
+            summary: string;
+            /** @description 关联标签 ID 列表。 */
+            tag_ids: number[];
+            /** @description 文章标题。 */
+            title: string;
+            /**
+             * Format: date-time
+             * @description 更新时间（RFC 3339）。
+             */
             updated_at: string;
             /**
              * Format: int64
-             * @description 仅上传响应出现；同内容 Hash 的已存在资产 ID。
+             * @description 乐观锁版本号：每次更新递增。
              */
-            duplicate_of?: number;
+            version: number;
         };
-        MediaPageResponse: {
-            items: components["schemas"]["MediaAssetResponse"][];
+        /**
+         * ArticleStats
+         * @description 文章计数统计。
+         */
+        ArticleStats: {
+            /**
+             * Format: int64
+             * @description 草稿数。
+             */
+            draft: number;
+            /**
+             * Format: int64
+             * @description 已发布数。
+             */
+            published: number;
+            /**
+             * Format: int64
+             * @description 回收站数。
+             */
+            recycled: number;
+            /**
+             * Format: int64
+             * @description 全部文章数（不含软删除）。
+             */
+            total: number;
+        };
+        /** @enum {string} */
+        ArticleStatusCommand: "publish" | "recycle" | "recover";
+        /** @description 浏览计数响应。 */
+        ArticleViewResponse: {
+            /**
+             * Format: int64
+             * @description 当前浏览量。
+             */
+            visit_count: number;
+        };
+        AskRequest: {
+            /** @description 用户问题，1–300 字符。 */
+            question: string;
+        };
+        /**
+         * AuditLogEntry
+         * @description 单条审计日志记录。
+         */
+        AuditLogResponse: {
+            action: string;
+            /** Format: int64 */
+            actor_user_id?: number | null;
+            actor_username?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            metadata: unknown;
+            target_id?: string | null;
+            target_type: string;
+        };
+        /**
+         * AuditPageResponse
+         * @description 审计日志分页。
+         */
+        AuditPageResponse: {
+            items: components["schemas"]["AuditLogResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
             /** Format: int64 */
             total: number;
-            page: number;
-            page_size: number;
-        };
-        UpdateMediaRequest: {
-            /** @default  */
-            alt: string;
-            /** @description 缺省或空串表示不改动。 */
-            original_name?: string;
         };
         BatchDeleteMediaRequest: {
             /** @description 待删除的资产 ID 列表，单次 1–100 个（服务端去重）。 */
-            ids: number[];
+            ids?: number[];
         };
         /** @description 批量删除的部分成功结果；三个列表均按 ID 升序，且互不相交。 */
-        MediaBatchDeleteResult: {
+        BatchDeleteMediaResponse: {
             /** @description 成功软删除的 ID。 */
             deleted: number[];
-            /** @description 仍被内容引用、保持 active 的 ID。 */
-            referenced: number[];
             /** @description 不存在或已删除的 ID。 */
             not_found: number[];
+            /** @description 仍被内容引用、保持 active 的 ID。 */
+            referenced: number[];
         };
-        RemoteUploadRequest: {
-            /** Format: uri */
-            url: string;
+        BootstrapRequest: {
+            /** @description 一次性引导密钥（环境变量 BOOTSTRAP_SECRET，≥ 24 字符）。 */
+            bootstrap_secret: string;
+            /** @description 显示名：1–60 字符。 */
+            display_name: string;
+            /** @description 邮箱地址。 */
+            email: string;
+            /** @description 初始密码：10–128 字符。 */
+            password: string;
+            /** @description 登录用户名：3–30 位字母、数字、下划线或短横线。 */
+            username: string;
         };
-        MediaUsageResponse: {
+        BootstrapStatusResponse: {
+            /** @description 是否已创建首个 User。 */
+            initialized: boolean;
+        };
+        /** @description 友链分类创建/更新请求体。 */
+        CategoryPayload: {
+            name: string;
+            /** @description 缺省时取 `name`。 */
+            slug?: string | null;
+        };
+        /**
+         * CategoryResponse
+         * @description 管理端分类 DTO；`/api/admin/categories` 固定 `kind = article`，link / gallery 分类由各自模块管理。
+         */
+        CategoryResponse: {
+            description: string;
             /** Format: int64 */
             id: number;
+            /** @description 分类类型（本模块固定为 `article`）。 */
+            kind: string;
+            name: string;
             /** Format: int64 */
-            asset_id: number;
-            /** @enum {string} */
-            target_type: "article_cover" | "article_content" | "gallery_item";
-            /** Format: int64 */
-            target_id: number;
-            /** Format: date-time */
-            created_at: string;
-        };
-        ImportPreviewItem: {
-            index: number;
-            file_name: string;
-            title: string;
+            parent_id?: number | null;
             slug: string;
-            summary: string;
-            tags: string[];
-            category?: string | null;
-            warnings: string[];
-            /** @description Slug 已被现有文章占用时需要在 Commit 时给出 skip/rename 策略。 */
-            slug_conflict: boolean;
         };
-        ImportJobResponse: {
-            /** Format: int64 */
-            job_id: number;
-            /** @enum {string} */
-            status: "pending" | "running" | "done" | "failed";
-            items: components["schemas"]["ImportPreviewItem"][];
-        };
-        CommitImportRequest: {
-            /** @description 仅冲突项需要显式策略；未列出的冲突项默认 skip。 */
-            items?: {
-                index: number;
-                /** @enum {string} */
-                strategy: "skip" | "rename";
-            }[];
-        };
-        CommitImportResult: {
-            created: {
-                /** Format: int64 */
-                id: number;
-                title: string;
-                slug: string;
-            }[];
-            skipped: string[];
-            renamed: {
-                from: string;
-                to: string;
-            }[];
-        };
-        SiteSettingsResponse: {
-            site_name: string;
-            site_description: string;
-            site_url: string;
-            logo_url: string;
-            icp_text: string;
-            default_cover_url: string;
-            page_size_index: number;
-            page_size_archive: number;
-            page_size_search: number;
-            comment_policy: components["schemas"]["CommentPolicy"];
-            comments_per_page: number;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        UpdateSiteSettingsRequest: {
-            site_name: string;
-            /** @default  */
-            site_description: string;
+        ChangeArticleStatusRequest: {
+            /** @description 状态流转命令：`publish`（发布，draft → published）、`recycle`（回收）、`recover`（还原为草稿）。 */
+            command: components["schemas"]["ArticleStatusCommand"];
             /**
-             * @description 合法 http/https URL、站内绝对路径或空串。
-             * @default
+             * Format: int64
+             * @description 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
              */
-            site_url: string;
-            /** @default  */
-            logo_url: string;
-            /** @default  */
-            icp_text: string;
-            /** @default  */
-            default_cover_url: string;
-            page_size_index: number;
-            page_size_archive: number;
-            page_size_search: number;
-            /** @description closed 禁止评论；moderated 提交后待人工审核；auto_approve 提交后直接公开。 */
-            comment_policy: components["schemas"]["CommentPolicy"];
-            comments_per_page: number;
+            expected_version: number;
         };
-        /** @enum {string} */
-        CommentPolicy: "closed" | "moderated" | "auto_approve";
-        /** @enum {string} */
-        CommentStatus: "pending" | "approved" | "rejected" | "spam" | "recycled";
-        /** @description Admin 端评论 DTO。`author_email` 仅 Admin API 返回，Public API 永不暴露。 */
-        CommentResponse: {
-            /** Format: int64 */
-            id: number;
-            /** @enum {string} */
-            target_type: "article" | "page" | "link";
-            /** Format: int64 */
-            target_id: number;
-            /** Format: int64 */
-            root_id: number | null;
-            /** Format: int64 */
-            parent_id: number | null;
-            author_name: string;
-            author_email: string;
-            author_url: string | null;
-            content_markdown: string;
-            /** @description 服务端 Comrak 渲染并 Sanitize 后的 HTML，可安全直出。 */
-            content_html: string;
-            status: components["schemas"]["CommentStatus"];
-            is_admin_reply: boolean;
-            moderation_reason: string | null;
-            /** Format: date-time */
-            moderated_at: string | null;
-            /**
-             * @description AI 审核风险结论；null 表示未经过 AI 审核。
-             * @enum {string|null}
-             */
-            ai_risk: "safe" | "suspicious" | "spam" | null;
-            /** @description AI 给出的简短理由 */
-            ai_reason: string | null;
-            /**
-             * Format: float
-             * @description AI 置信度（0–1）
-             */
-            ai_confidence: number | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
+        ChangeCommentStatusRequest: {
+            /** @description 审核备注（可选，trim 后非空才持久化）。 */
+            reason?: string | null;
+            /** @description 目标状态：`pending` / `approved` / `rejected` / `spam` / `recycled`。 */
+            status: string;
         };
         CommentPageResponse: {
             items: components["schemas"]["CommentResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
             /**
              * Format: int64
              * @description 当前筛选条件下的评论总数。
              */
             total: number;
-            page: number;
-            page_size: number;
         };
-        ChangeCommentStatusRequest: {
-            status: components["schemas"]["CommentStatus"];
+        /** @description 评论 DTO：不返回 `ip_hash`/`user_agent_digest` 等内部字段。 */
+        CommentResponse: {
             /**
-             * @description 审核备注（可选，trim 后非空才持久化）。
-             * @default
+             * Format: float
+             * @description AI 置信度（0–1）。
              */
-            reason: string;
-        };
-        ReplyCommentRequest: {
+            ai_confidence?: number | null;
+            /** @description AI 给出的简短理由。 */
+            ai_reason?: string | null;
+            /** @description AI 审核结论（未审核为 null），供管理端辅助判断。 */
+            ai_risk?: string | null;
+            /** @description 仅 Admin API 返回，Public API 永不暴露。 */
+            author_email: string;
+            author_name: string;
+            author_url?: string | null;
+            /** @description 服务端 Comrak 渲染并 Sanitize 后的 HTML，可安全直出。 */
+            content_html: string;
             content_markdown: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            is_admin_reply: boolean;
+            /** Format: date-time */
+            moderated_at?: string | null;
+            /** @description 审核备注（状态变更时可选填写）。 */
+            moderation_reason?: string | null;
+            /**
+             * Format: int64
+             * @description 直接父评论 ID；根评论为 null。
+             */
+            parent_id?: number | null;
+            /**
+             * Format: int64
+             * @description 所属根评论 ID（根评论为自身 ID）。
+             */
+            root_id?: number | null;
+            /** @description `pending` / `approved` / `rejected` / `spam` / `recycled`。 */
+            status: string;
+            /** Format: int64 */
+            target_id: number;
+            /** @description 评论目标类型：`article` / `page` / `link`。 */
+            target_type: string;
+            /** Format: date-time */
+            updated_at: string;
         };
+        /**
+         * CommentStats
+         * @description 评论计数统计。
+         */
+        CommentStats: {
+            /**
+             * Format: int64
+             * @description 待审核数。
+             */
+            pending: number;
+            /**
+             * Format: int64
+             * @description 今日新增数。
+             */
+            today: number;
+            /**
+             * Format: int64
+             * @description 全部评论数。
+             */
+            total: number;
+        };
+        CommitImportRequest: {
+            /** @description 仅冲突项需要显式策略；未列出的冲突项默认 skip。 */
+            items?: components["schemas"]["CommitStrategy"][];
+        };
+        CommitResultResponse: {
+            created: components["schemas"]["CreatedArticleSummary"][];
+            /** @description 因冲突自动改名的 Slug 映射。 */
+            renamed: components["schemas"]["RenamedSlug"][];
+            /** @description 因 Slug 冲突被跳过的 Slug。 */
+            skipped: string[];
+        };
+        CommitStrategy: {
+            /** @description 导入预览项的序号。 */
+            index: number;
+            /** @description `skip`（跳过）或 `rename`（自动改名落库）。 */
+            strategy: string;
+        };
+        CreateArticleRequest: {
+            /**
+             * @description 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。
+             *     新建时字段缺省或显式 `null` 都视为无密码；字符串表示设置新密码，
+             *     Trim 后少于 6 个字符返回 400 `INVALID_ACCESS_PASSWORD`。
+             */
+            access_password?: string | null;
+            /** @description AI 导读（TL;DR），由 `/api/admin/ai/editor/brief` 生成；不超过 500 字符。 */
+            ai_brief?: string | null;
+            /** @description 是否允许评论，默认 `true`。 */
+            allow_comments?: boolean;
+            /**
+             * Format: int64
+             * @description 所属分类 ID。
+             */
+            category_id?: number | null;
+            /** @description 封面图 URL。 */
+            cover_url?: string | null;
+            /** @description 是否置顶，默认 `false`。 */
+            is_pinned?: boolean;
+            /** @description Markdown 原文，最长 1,000,000 字符。 */
+            markdown_source?: string;
+            /** @description SEO 关键字（Trim、排序、去重，最多 20 个，单个最长 50 字符）。 */
+            seo_keywords?: string[];
+            /** @description URL 别名；缺省回退为标题。 */
+            slug?: string | null;
+            /** @description 摘要，最长 500 字符。 */
+            summary?: string;
+            /** @description 关联标签 ID 列表。 */
+            tag_ids?: number[];
+            /** @description 文章标题（Trim 后非空，最长 200 字符）。 */
+            title: string;
+        };
+        /** @description 访客发表评论；`target_type` 支持 `article` / `page`，按 `target_slug` 定位已发布目标。`website` 可选且仅允许 http/https。 */
+        CreateCommentRequest: {
+            /** @description Markdown 源文本，长度 1–2000 字符。 */
+            content: string;
+            /** @description 邮箱（只入库不出 API），最大 254 字符。 */
+            email: string;
+            /** @description 昵称，长度 1–60 字符。 */
+            nickname: string;
+            /** @description 已发布文章 / 页面的 Slug。 */
+            target_slug: string;
+            /** @description 评论目标类型；公开提交仅接受 `article` / `page`。 */
+            target_type: string;
+            /** @description 个人主页，可选且仅允许 http/https。 */
+            website?: string | null;
+        };
+        /**
+         * CreateTaxonomyRequest
+         * @description 创建/更新分类或标签的请求体。
+         */
+        CreateTaxonomyRequest: {
+            /** @description 显示名称；`slug` 缺省时以 name 归一化生成。 */
+            name: string;
+            /** @description 自定义 Slug；缺省时取 name。 */
+            slug?: string | null;
+        };
+        CreatedArticleSummary: {
+            /** Format: int64 */
+            id: number;
+            slug: string;
+            title: string;
+        };
+        /**
+         * DashboardResponse
+         * @description Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务。
+         */
         DashboardResponse: {
-            articles: {
-                /** Format: int64 */
-                total: number;
-                /** Format: int64 */
-                draft: number;
-                /** Format: int64 */
-                published: number;
-                /** Format: int64 */
-                recycled: number;
-            };
-            comments: {
-                /** Format: int64 */
-                total: number;
-                /** Format: int64 */
-                pending: number;
-                /**
-                 * Format: int64
-                 * @description UTC 当日新增评论数。
-                 */
-                today: number;
-            };
-            /** @description 最新 5 条待审核评论。 */
+            articles: components["schemas"]["ArticleStats"];
+            comments: components["schemas"]["CommentStats"];
+            recent_failed_jobs: components["schemas"]["FailedJobResponse"][];
             recent_pending_comments: components["schemas"]["CommentResponse"][];
-            /** @description 最近失败的后台任务（attempts 已达 max_attempts）。 */
-            recent_failed_jobs: {
-                /** Format: int64 */
-                id: number;
-                kind: string;
-                attempts: number;
-                max_attempts: number;
-                last_error?: string | null;
-                /** Format: date-time */
-                updated_at: string;
-            }[];
         };
-        AuditPageResponse: {
-            items: {
-                /** Format: int64 */
-                id: number;
-                /** Format: int64 */
-                actor_user_id?: number | null;
-                /** @description 用户被删除时为 null。 */
-                actor_username?: string | null;
-                action: string;
-                target_type: string;
-                target_id?: string | null;
-                metadata?: Record<string, never>;
-                /** Format: date-time */
-                created_at: string;
-            }[];
-            /**
-             * Format: int64
-             * @description 当前筛选条件下的审计记录总数。
-             */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        LogItem: {
-            /** Format: int64 */
-            id: number;
-            /**
-             * Format: date-time
-             * @description 事件时间，RFC 3339 字符串。
-             */
-            ts: string;
-            /** @description 级别原文（`ERROR`/`WARN`/`INFO`/`DEBUG`/`TRACE`）；不做枚举约束，未来新增级别无需改表。 */
-            level: string;
-            /** @description tracing target（模块路径）。 */
-            target: string;
+        ErrorBody: {
+            /** @description 机器可读错误码，如 `UNAUTHORIZED`、`ARTICLE_NOT_FOUND`。 */
+            code: string;
+            /** @description 结构化补充信息（如引用计数），大多数错误为空，序列化时省略。 */
+            details?: unknown;
+            /** @description 人类可读错误信息。 */
             message: string;
-            /** @description 最近的 Span 名（HTTP 请求内日志为 TraceLayer Span）。 */
-            span_name: string | null;
-            /** @description 请求的 `x-request-id`；可按此值查询整条请求链路。 */
-            request_id: string | null;
-            /** @description 事件的其余结构化字段。 */
-            fields: Record<string, never>;
         };
-        LogPageResponse: {
-            items: components["schemas"]["LogItem"][];
-            /**
-             * Format: int64
-             * @description 当前筛选条件下的日志总数。
-             */
-            total: number;
-            page: number;
-            page_size: number;
-            /** @description 最近 24 小时各级别条数，与筛选条件无关。 */
-            level_counts: {
-                /** Format: int64 */
-                ERROR: number;
-                /** Format: int64 */
-                WARN: number;
-                /** Format: int64 */
-                INFO: number;
-                /** Format: int64 */
-                DEBUG: number;
-                /** Format: int64 */
-                TRACE: number;
-            };
+        /**
+         * @description 统一错误响应体（与 `http::error::ApiError` 的实际 JSON 形状一致）：
+         *     `{ "error": { "code", "message", "details?" } }`。
+         *     所有端点的 4xx/5xx 响应统一引用本类型。
+         */
+        ErrorResponse: {
+            error: components["schemas"]["ErrorBody"];
         };
-        LogTargetsResponse: {
-            items: string[];
-        };
-        /** @description 单个时间桶；五个级别键恒在，无数据为 0。 */
-        LogStatsBucket: {
-            /**
-             * Format: date-time
-             * @description 桶起点，RFC 3339；≤48 小时窗口按小时分桶，更长窗口按天分桶。
-             */
-            bucket: string;
+        /**
+         * FailedJob
+         * @description 最近失败的后台任务（status = failed）。
+         */
+        FailedJobResponse: {
+            /** Format: int32 */
+            attempts: number;
             /** Format: int64 */
-            ERROR: number;
-            /** Format: int64 */
-            WARN: number;
-            /** Format: int64 */
-            INFO: number;
-            /** Format: int64 */
-            DEBUG: number;
-            /** Format: int64 */
-            TRACE: number;
+            id: number;
+            kind: string;
+            last_error?: string | null;
+            /** Format: int32 */
+            max_attempts: number;
+            /** Format: date-time */
+            updated_at: string;
         };
-        LogStatsResponse: {
-            /** @description 实际统计窗口（小时），经 1–168 收敛后的值。 */
-            hours: number;
-            /** @description 按时间升序的分桶结果。 */
-            buckets: components["schemas"]["LogStatsBucket"][];
-            /**
-             * Format: int64
-             * @description 运行日志 channel 满累计丢弃条数（可丢弃数据，仅作观测）。
-             */
-            channel_dropped: number;
-        };
-        SqlLoggingState: {
-            /** @description SQL 语句日志当前是否开启。 */
-            enabled: boolean;
-        };
-        SqlLoggingRequest: {
-            enabled: boolean;
-        };
-        LogFilterOverride: {
-            /** @description 当前生效的自定义 EnvFilter directives（如 `aries_server=debug`）；空串表示无覆盖。 */
+        FilterOverrideResponse: {
+            /** @description 当前生效的覆盖 directives，空串为无覆盖。 */
             directives: string;
             /**
              * Format: int64
-             * @description 自动复位剩余秒数；null 表示持续到被显式清除。
+             * @description 自动复位剩余秒数；None 表示持续到被显式清除。
              */
-            restore_seconds_remaining: number | null;
+            restore_seconds_remaining?: number | null;
         };
-        LogFilterOverrideRequest: {
-            /** @description 逗号分隔的 EnvFilter directives（如 `aries_server=debug,tower_http=debug`）；空串清除覆盖。非法 directive 返回 400 `INVALID_DIRECTIVES`。 */
-            directives: string;
-            /** @description 自动复位时间（分钟），到期未再变更则恢复默认过滤器；省略或 0 表示不复位，超过 1440 按 1440 收敛。 */
-            restore_minutes?: number;
+        ForgotPasswordRequest: {
+            /** @description 邮箱地址。 */
+            email: string;
         };
-        /** @enum {string} */
-        PageStatus: "draft" | "published";
-        PageRequest: {
-            /** @description 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。 */
-            slug: string;
-            title: string;
-            /** @default  */
-            content_markdown: string;
-            /** @default draft */
-            status: components["schemas"]["PageStatus"];
-            /** @default 0 */
-            sort_order: number;
-        };
-        PageResponse: {
-            /** Format: int64 */
-            id: number;
-            slug: string;
-            title: string;
-            content_markdown: string;
-            /** @description 服务端 Render 并 Sanitize 后的 HTML。 */
-            content_html: string;
-            status: components["schemas"]["PageStatus"];
-            sort_order: number;
-            /**
-             * Format: int64
-             * @description 创建人 User ID；创建人被删除时为 `null`。
-             */
-            created_by: number | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        PagePageResponse: {
-            items: components["schemas"]["PageResponse"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        /** @enum {string} */
-        JournalVisibility: "public" | "private";
-        JournalRequest: {
-            content_markdown: string;
-            /** @default public */
-            visibility: components["schemas"]["JournalVisibility"];
-        };
-        JournalResponse: {
-            /** Format: int64 */
-            id: number;
-            content_markdown: string;
-            /** @description 服务端 Render 并 Sanitize 后的 HTML。 */
-            content_html: string;
-            visibility: components["schemas"]["JournalVisibility"];
-            /**
-             * Format: int64
-             * @description 创建人 User ID；创建人被删除时为 `null`。
-             */
-            created_by: number | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        JournalPageResponse: {
-            items: components["schemas"]["JournalResponse"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        /** @enum {string} */
-        GalleryStatus: "draft" | "published";
-        GalleryRequest: {
-            /**
-             * Format: int64
-             * @description 必须指向 kind 为 `gallery` 的分类。
-             */
-            category_id: number;
-            /** @description 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。 */
-            slug: string;
-            title: string;
-            /** @default  */
-            description: string;
-            /**
-             * Format: int64
-             * @description 封面媒体资产 ID；媒体删除时自动置空。
-             */
-            cover_media_id?: number | null;
-            /** @default draft */
-            status: components["schemas"]["GalleryStatus"];
-            /** @default 0 */
-            sort_order: number;
-        };
-        GalleryResponse: {
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            category_id: number;
-            slug: string;
-            title: string;
-            description: string;
-            /** Format: int64 */
-            cover_media_id: number | null;
-            status: components["schemas"]["GalleryStatus"];
-            sort_order: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        GalleryPageResponse: {
-            items: components["schemas"]["GalleryResponse"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        GalleryItemRequest: {
-            /**
-             * Format: int64
-             * @description 同一媒体在同一图库中只可出现一次。
-             */
-            media_asset_id: number;
-            /** @default  */
+        /** @description 内联媒体摘要：软删除资产为 null，width/height 探测失败为 null。 */
+        GalleryItemMediaResponse: {
             alt: string;
-            /** @default  */
-            location: string;
-            /** @default 0 */
-            sort_order: number;
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: int64 */
+            id: number;
+            url: string;
+            /** Format: int32 */
+            width?: number | null;
         };
-        GalleryItemUpdateRequest: {
-            /** @default  */
-            alt: string;
-            /** @default  */
-            location: string;
-            /** @default 0 */
-            sort_order: number;
-        };
-        GalleryItemOrderRequest: {
-            /** @description 该图库全部条目 ID 的目标顺序；服务端在事务内原子重写 `sort_order`。 */
+        /** @description 原子批量重排请求体：按 `item_ids` 顺序重写 `sort_order`。 */
+        GalleryItemOrderPayload: {
+            /** @description 条目 ID 有序列表；任一 ID 不属于该图库则整体回滚。 */
             item_ids: number[];
         };
-        /** @description 内联媒体摘要（条目接口一次返回，前端无需逐条再拉媒体详情）。 */
-        GalleryItemMedia: {
-            /** Format: int64 */
-            id: number;
-            /** @description 媒体公开 URL */
-            url: string;
-            alt: string;
-            /** @description 尺寸探测失败时为 null */
-            width: number | null;
-            /** @description 尺寸探测失败时为 null */
-            height: number | null;
+        /** @description 添加图库条目请求体。 */
+        GalleryItemPayload: {
+            /** @description 图片替代文本。 */
+            alt?: string;
+            /** @description 拍摄地点。 */
+            location?: string;
+            /**
+             * Format: int64
+             * @description 媒体资产 ID；同一媒体在同一图库中只可出现一次。
+             */
+            media_asset_id: number;
+            /** Format: int32 */
+            sort_order?: number;
         };
         GalleryItemResponse: {
-            /** Format: int64 */
-            id: number;
+            alt: string;
+            /** Format: date-time */
+            created_at: string;
             /** Format: int64 */
             gallery_id: number;
             /** Format: int64 */
-            media_asset_id: number;
-            alt: string;
+            id: number;
             location: string;
+            media?: null | components["schemas"]["GalleryItemMediaResponse"];
+            /** Format: int64 */
+            media_asset_id: number;
+            /** Format: int32 */
             sort_order: number;
+        };
+        /** @description 更新图库条目请求体（媒体引用创建后不可改）。 */
+        GalleryItemUpdatePayload: {
+            /** @description 图片替代文本。 */
+            alt?: string;
+            /** @description 拍摄地点。 */
+            location?: string;
+            /** Format: int32 */
+            sort_order?: number;
+        };
+        GalleryPageResponse: {
+            items: components["schemas"]["GalleryResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description 图库创建 / 全量更新请求体。 */
+        GalleryPayload: {
+            /**
+             * Format: int64
+             * @description 分类 ID，必须指向 kind 为 `gallery` 的分类。
+             */
+            category_id: number;
+            /**
+             * Format: int64
+             * @description 封面媒体资产 ID。
+             */
+            cover_media_id?: number | null;
+            description?: string;
+            /** @description URL 友好的唯一 Slug。 */
+            slug: string;
+            /** Format: int32 */
+            sort_order?: number;
+            /** @description 状态：`draft` / `published`；缺省为 `draft`。 */
+            status?: string | null;
+            title: string;
+        };
+        GalleryResponse: {
+            /** Format: int64 */
+            category_id: number;
+            /** Format: int64 */
+            cover_media_id?: number | null;
             /** Format: date-time */
             created_at: string;
-            /** @description 内联媒体摘要；引用的媒体资产被软删除时为 null。 */
-            media: components["schemas"]["GalleryItemMedia"] | null;
+            description: string;
+            /** Format: int64 */
+            id: number;
+            slug: string;
+            /** Format: int32 */
+            sort_order: number;
+            /** @description 状态：`draft` / `published`。 */
+            status: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        /** @enum {string} */
-        LinkStatus: "active" | "inactive";
-        LinkRequest: {
+        /**
+         * HealthResponse
+         * @description 健康检查响应（`aries_core::health::HealthResponse` 的文档镜像，避免给 core 加 utoipa 依赖）。
+         */
+        HealthView: {
+            /** @description 固定为 `aries-server`。 */
+            service: string;
+            /** @description 固定为 `ok`。 */
+            status: string;
+        };
+        ImportJobResponse: {
+            items: components["schemas"]["ImportPreview"][];
+            /** Format: int64 */
+            job_id: number;
+            /** @description `pending` / `running` / `done` / `failed`。 */
+            status: string;
+        };
+        /**
+         * @description `POST /api/admin/articles/imports` 的 Multipart 表单；实际字段名为 `file[]`（兼容 `file`），
+         *     1–10 个 `.md` 文件，单文件 ≤ 2MB。
+         */
+        ImportMarkdownForm: {
+            /** @description 待导入的 Markdown 文件（.md / .markdown）。 */
+            file: string[];
+        };
+        /** @description 预览响应剥离正文，避免大字段反复传输。 */
+        ImportPreview: {
+            category?: string | null;
+            file_name: string;
+            index: number;
+            slug: string;
+            /** @description Slug 已被现有文章占用时需要在 Commit 时给出 skip/rename 策略。 */
+            slug_conflict: boolean;
+            summary: string;
+            tags: string[];
+            title: string;
+            warnings: string[];
+        };
+        /**
+         * JournalPageResponse
+         * @description 日志分页；稳定排序 `created_at DESC, id DESC`，不含已软删除记录。
+         */
+        JournalPageResponse: {
+            items: components["schemas"]["JournalResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /**
+         * JournalRequest
+         * @description 日志创建/更新入参；`content_html` 由服务端 Render，visibility 缺省为 `public`。
+         */
+        JournalPayload: {
+            /** @description 日志正文 Markdown，长度 1–2000。 */
+            content_markdown: string;
+            /** @description 可见性：`public` / `private`，缺省 `public`。 */
+            visibility?: string | null;
+        };
+        /**
+         * JournalResponse
+         * @description 日志详情。
+         */
+        JournalResponse: {
+            content_html: string;
+            content_markdown: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            created_by?: number | null;
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            updated_at: string;
+            visibility: string;
+        };
+        LinkPageResponse: {
+            items: components["schemas"]["LinkResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description 友情链接创建/更新请求体。 */
+        LinkPayload: {
             /**
              * Format: int64
              * @description 可空（允许未分类）；须指向 kind 为 `link` 的分类。
              */
             category_id?: number | null;
-            title: string;
-            /** @description 仅允许 http/https。 */
-            url: string;
+            description?: string;
+            /** @description 图标地址，可空。 */
             icon_url?: string | null;
-            /** @default  */
-            description: string;
-            /** @default active */
-            status: components["schemas"]["LinkStatus"];
-            /** @default 0 */
-            sort_order: number;
+            /** Format: int32 */
+            sort_order?: number;
+            /** @description `active` / `inactive`，缺省 `active`。 */
+            status?: string | null;
+            /** @description 标题。 */
+            title: string;
+            /** @description 链接地址，仅允许 http/https，否则返回 400 `INVALID_LINK_URL`。 */
+            url: string;
         };
+        /** @description 友情链接响应体。 */
         LinkResponse: {
             /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            category_id: number | null;
-            title: string;
-            url: string;
-            icon_url: string | null;
-            description: string;
-            status: components["schemas"]["LinkStatus"];
-            sort_order: number;
+            category_id?: number | null;
             /** Format: date-time */
             created_at: string;
+            description: string;
+            /** @description 图标地址，可空。 */
+            icon_url?: string | null;
+            /** Format: int64 */
+            id: number;
+            /** Format: int32 */
+            sort_order: number;
+            /** @description `active` / `inactive`。 */
+            status: string;
+            /** @description 标题。 */
+            title: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description 链接地址，仅允许 http/https。 */
+            url: string;
         };
-        LinkPageResponse: {
-            items: components["schemas"]["LinkResponse"][];
+        LogItem: {
+            fields: unknown;
+            /** Format: int64 */
+            id: number;
+            level: string;
+            message: string;
+            request_id?: string | null;
+            span_name?: string | null;
+            target: string;
+            /** @description RFC 3339 字符串（time 的默认 serde 是数组形式，显式格式化）。 */
+            ts: string;
+        };
+        LogLevelCountsResponse: {
+            /** Format: int64 */
+            DEBUG: number;
+            /** Format: int64 */
+            ERROR: number;
+            /** Format: int64 */
+            INFO: number;
+            /** Format: int64 */
+            TRACE: number;
+            /** Format: int64 */
+            WARN: number;
+        };
+        LogPageResponse: {
+            items: components["schemas"]["LogItem"][];
+            /** @description 最近 24h 各级别条数（GROUP BY 聚合）。 */
+            level_counts: components["schemas"]["LogLevelCountsResponse"];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
             /** Format: int64 */
             total: number;
+        };
+        LogStatsBucketResponse: components["schemas"]["LogLevelCountsResponse"] & {
+            /** @description 桶起点，RFC 3339。 */
+            bucket: string;
+        };
+        LogStatsResponse: {
+            buckets: components["schemas"]["LogStatsBucketResponse"][];
+            /**
+             * Format: int64
+             * @description 运行日志 channel 累计丢弃条数（channel 满时丢弃，属可丢弃数据）。
+             */
+            channel_dropped: number;
+            /** Format: int32 */
+            hours: number;
+        };
+        LoginRequest: {
+            /** @description 用户名或邮箱。 */
+            login: string;
+            /** @description 密码。 */
+            password: string;
+        };
+        MediaAssetResponse: {
+            alt: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description 同内容 Hash 的已存在资产 ID；仅在本次上传命中重复时返回。
+             */
+            duplicate_of?: number | null;
+            /** Format: int32 */
+            height?: number | null;
+            /** Format: int64 */
+            id: number;
+            mime: string;
+            /** @description 服务端生成的不可预测 Key（`yyyy/mm/<uuid>.<ext>`），不含用户文件名。 */
+            object_key: string;
+            original_name: string;
+            /** @description 存储 Provider：`local` / `s3` / `legacy_url`。 */
+            provider: string;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description `active` / `deleted`；列表与详情只返回 `active`。 */
+            status: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int64 */
+            uploaded_by: number;
+            url: string;
+            /**
+             * Format: int32
+             * @description 尺寸探测失败时为 `null`，由 `metadata_probe` 后台任务补探测。
+             */
+            width?: number | null;
+        };
+        MediaPageResponse: {
+            items: components["schemas"]["MediaAssetResponse"][];
+            /** Format: int32 */
             page: number;
+            /** Format: int32 */
             page_size: number;
+            /** Format: int64 */
+            total: number;
         };
-        /** @enum {string} */
-        NavigationTargetType: "article" | "page" | "category" | "url";
-        NavigationItemRequest: {
-            /**
-             * Format: int64
-             * @description 父节点 ID；最多两级，不得指向已有子节点的节点之外的更深层级。
-             */
-            parent_id?: number | null;
-            label: string;
-            target_type: components["schemas"]["NavigationTargetType"];
-            /**
-             * Format: int64
-             * @description 内部目标 ID；`target_type` 非 `url` 时必填。
-             */
-            target_id?: number | null;
-            /** @description 外部 URL，仅允许 http/https；`target_type = url` 时必填。 */
-            url?: string | null;
-            /** @default false */
-            open_in_new_tab: boolean;
-            /** @default true */
-            visible: boolean;
-            /** @default 0 */
-            sort_order: number;
-        };
-        NavigationItemResponse: {
+        MediaUsageResponse: {
+            /** Format: int64 */
+            asset_id: number;
+            /** Format: date-time */
+            created_at: string;
             /** Format: int64 */
             id: number;
             /** Format: int64 */
-            parent_id: number | null;
-            label: string;
-            target_type: components["schemas"]["NavigationTargetType"];
-            /** Format: int64 */
-            target_id: number | null;
-            url: string | null;
-            open_in_new_tab: boolean;
-            visible: boolean;
-            sort_order: number;
+            target_id: number;
+            /** @description 引用方类型：`article_cover` / `article_content` / `gallery_item`。 */
+            target_type: string;
+        };
+        MessageResponse: {
+            /** @description 人类可读结果信息。 */
+            message: string;
+        };
+        /** @description 导航节点响应体（平铺，前端按 `parent_id` 组树）。 */
+        NavigationItemResponse: {
             /** Format: date-time */
             created_at: string;
+            /** Format: int64 */
+            id: number;
+            label: string;
+            open_in_new_tab: boolean;
+            /** Format: int64 */
+            parent_id?: number | null;
+            /** Format: int32 */
+            sort_order: number;
+            /** Format: int64 */
+            target_id?: number | null;
+            /** @description `article` / `page` / `category` / `url`。 */
+            target_type: string;
             /** Format: date-time */
             updated_at: string;
+            url?: string | null;
+            visible: boolean;
         };
-        NavigationOrderRequest: {
+        /** @description 导航排序请求体。 */
+        NavigationOrderPayload: {
             /** @description 全部导航节点 ID 的目标顺序；服务端在事务内原子重写 `sort_order`，任一 ID 不存在则整体回滚。 */
             item_ids: number[];
         };
-        /** @enum {string} */
-        SettingGroupName: "appearance" | "email" | "integrations" | "ai";
-        /** @description AI 功能开关；`editor_assist` 控制 rewrite/summary/metadata/tags/brief 编辑器端点；`smart_search` 控制相关文章推荐与站内 AI 问答（默认关闭，开启需配置 Embedding 端点）。 */
-        AiFeatureToggles: {
-            /** @default false */
-            editor_assist: boolean;
-            /** @default false */
-            comment_moderation: boolean;
-            /** @default false */
-            smart_search: boolean;
-        };
-        /** @description AI 设置的读取视图；`api_key` 为 write-only，只回 `api_key_set`。 */
-        AiSettingsView: {
-            /** @default false */
-            enabled: boolean;
-            /**
-             * @description Provider 协议；openai 走 `/chat/completions` 兼容协议，anthropic 走 Messages API。旧 payload 无此字段时按 openai 处理。
-             * @default openai
-             * @enum {string}
-             */
-            protocol: "openai" | "anthropic";
-            /** @description Provider Base URL；anthropic 缺省为 `https://api.anthropic.com` */
-            base_url?: string | null;
-            model?: string | null;
-            /** @description 是否已配置 api_key（永不回传明文） */
-            api_key_set?: boolean;
-            features?: components["schemas"]["AiFeatureToggles"];
-            /** @description Embedding 端点（OpenAI 兼容 `/embeddings`，Ollama 的 `/v1` 同样兼容）；未配置时 smart_search 相关能力不可用 */
-            embedding_base_url?: string | null;
-            /** @description Embedding 模型名，如 `bge-m3` */
-            embedding_model?: string | null;
-        };
-        AiRewriteRequest: {
-            /** @description 选中的 Markdown 片段 */
-            text: string;
-        };
-        AiArticleContextRequest: {
-            title: string;
-            /** @description 正文 Markdown；标题 + 正文合计不超过 20000 字符 */
-            content: string;
-        };
-        /** @description AI 请求审计记录；不存完整 Prompt。 */
-        AiUsageItem: {
-            /** Format: int64 */
-            id: number;
-            /** @enum {string} */
-            feature: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation" | "editor_tags" | "ai_brief" | "search_ask";
+        /** @description 导航节点创建/更新请求体。 */
+        NavigationPayload: {
+            /** @description 菜单文案。 */
+            label: string;
+            open_in_new_tab?: boolean;
             /**
              * Format: int64
-             * @description null 表示系统触发
+             * @description 父节点 ID；最多两级，超出返回 400 `INVALID_NAVIGATION_HIERARCHY`。
              */
-            operator_user_id: number | null;
-            model: string;
-            /** @enum {string} */
-            status: "success" | "failed" | "cancelled";
-            prompt_tokens: number | null;
-            completion_tokens: number | null;
-            latency_ms: number;
-            /** @description 失败分类（config/provider/timeout/rate_limited/invalid_output/store） */
-            error_category: string | null;
-            /** Format: date-time */
-            created_at: string;
+            parent_id?: number | null;
+            /** Format: int32 */
+            sort_order?: number;
+            /**
+             * Format: int64
+             * @description 内部目标 ID；`target_type` 非 `url` 时必填（400 `INVALID_NAVIGATION_TARGET`）。
+             */
+            target_id?: number | null;
+            /** @description `article` / `page` / `category` / `url`。 */
+            target_type: string;
+            /** @description 外链地址；`target_type` 为 `url` 时必填。 */
+            url?: string | null;
+            visible?: boolean;
         };
-        AiUsagePageResponse: {
-            items: components["schemas"]["AiUsageItem"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        /** @description 外观设置；只含结构化字段，禁止任意 Script/head_content 注入。 */
-        AppearanceSettings: {
-            logo_url?: string | null;
-            favicon_url?: string | null;
-            /** @enum {string|null} */
-            color_scheme?: "system" | "light" | "dark" | null;
-            /** @enum {string|null} */
-            list_density?: "comfortable" | "compact" | null;
-        };
-        /** @description 邮件设置的公开视图；`smtp_password` 永不回传，只回 `smtp_password_set`。 */
-        EmailSettingsView: {
-            enabled?: boolean;
-            smtp_host?: string | null;
-            smtp_port?: number | null;
-            smtp_username?: string | null;
-            smtp_password_set?: boolean;
-            from_address?: string | null;
-            from_name?: string | null;
-        };
-        /** @description 邮件设置更新入参（部分合并语义）；所有字段可选，省略或 `null` 的字段保持当前值，只更新提交的字段，不会重置未提交字段。`smtp_password` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。 */
-        EmailSettingsPatch: {
-            enabled?: boolean | null;
-            smtp_host?: string | null;
-            smtp_port?: number | null;
-            smtp_username?: string | null;
-            smtp_password?: string | null;
-            from_address?: string | null;
-            from_name?: string | null;
-        };
-        /** @description AI 设置更新入参（部分合并语义）；所有字段可选，省略或 `null` 的字段保持当前值，只更新提交的字段，不会重置未提交字段。`api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。 */
-        AiSettingsPatch: {
-            enabled?: boolean | null;
-            /** @enum {string|null} */
-            protocol?: "openai" | "anthropic" | null;
-            base_url?: string | null;
-            model?: string | null;
-            api_key?: string | null;
-            features?: components["schemas"]["AiFeatureToggles"] | null;
-            embedding_base_url?: string | null;
-            embedding_model?: string | null;
-        };
-        /** @description 第三方集成设置；受控 Integration Slot，仅结构化字段。 */
-        IntegrationSettings: {
-            analytics_id?: string | null;
-            site_verification_token?: string | null;
-        };
-        SettingGroupResponse: {
-            group: components["schemas"]["SettingGroupName"];
-            /** @description 乐观锁版本号，更新成功后递增。 */
-            version: number;
-            /** Format: date-time */
-            updated_at: string;
-            /** @description 按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。 */
-            settings: Record<string, never>;
-        };
-        UpdateSettingGroupRequest: {
-            /** @description 提交时读到的版本号；与服务端不一致返回 409 `SETTING_VERSION_CONFLICT`。 */
-            expected_version: number;
-            /** @description 按 group 分别为 `AppearanceSettings` / `EmailSettingsPatch` / `IntegrationSettings` / `AiSettingsPatch`。 */
-            settings: Record<string, never>;
-        };
-        /** @description 公开页面详情；只含渲染后的 HTML 与展示字段。 */
-        PublicPageDetail: {
+        NeighborRef: {
             slug: string;
             title: string;
+        };
+        PagePageResponse: {
+            items: components["schemas"]["PageResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description 自定义页面创建/更新请求体。 */
+        PagePayload: {
+            /** @description Markdown 正文，服务端渲染为 `content_html` 后入库。 */
+            content_markdown?: string;
+            /** @description 1–160 个小写字母、数字或连字符；软删除行不占用 Slug。 */
+            slug: string;
+            /** Format: int32 */
+            sort_order?: number;
+            /** @description `draft` / `published`，缺省 `draft`。 */
+            status?: string | null;
+            /** @description 页面标题。 */
+            title: string;
+        };
+        /** @description 页面 DTO：不返回内部字段（当前无敏感列，但保持 DTO/Domain 分离约定）。 */
+        PageResponse: {
+            /** @description 服务端渲染后的 HTML。 */
             content_html: string;
+            /** @description Markdown 源文。 */
+            content_markdown: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            created_by?: number | null;
+            /** Format: int64 */
+            id: number;
+            /** @description 1–160 个小写字母、数字或连字符。 */
+            slug: string;
+            /** Format: int32 */
+            sort_order: number;
+            /** @description `draft` / `published`。 */
+            status: string;
+            title: string;
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description 公开日志列表项；不含 Markdown 原文与内部字段。 */
-        PublicJournalItem: {
+        PreviewArticleRequest: {
+            /** @description Markdown 原文，最长 1,000,000 字符。 */
+            markdown_source: string;
+        };
+        PreviewArticleResponse: {
+            /** @description 经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML。 */
+            rendered_html: string;
+        };
+        /**
+         * @description 公开详情：受密码保护且未解锁时 `rendered_html` 为 `null`；
+         *     `markdown_source` 绝不出现在公开响应中。
+         */
+        PublicArticleDetail: {
+            /** @description AI 导读（TL;DR）：发布时在管理端生成并随文保存；未生成时不出现该字段。 */
+            ai_brief?: string | null;
+            allow_comments: boolean;
+            category?: null | components["schemas"]["TaxonomyRef"];
             /** Format: int64 */
-            id: number;
-            content_html: string;
+            comment_count: number;
+            cover_url?: string | null;
             /** Format: date-time */
             created_at: string;
-        };
-        PublicJournalPageResponse: {
-            items: components["schemas"]["PublicJournalItem"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        PublicGallerySummary: {
-            slug: string;
-            title: string;
-            description: string;
-            /** @description 封面媒体的公开 URL；未设置封面或封面媒体已删除时为 `null`。 */
-            cover_url: string | null;
-        };
-        PublicGalleryPageResponse: {
-            items: components["schemas"]["PublicGallerySummary"][];
-            /** Format: int64 */
-            total: number;
-            page: number;
-            page_size: number;
-        };
-        /** @description 公开图库条目；只含展示字段与媒体 URL/尺寸，不回内部资产元数据。媒体资产被软删除的条目不出现在响应中。 */
-        PublicGalleryItem: {
-            url: string;
-            /** @description 条目 `alt` 为空时回退媒体资产自身的 `alt`。 */
-            alt: string;
-            location: string;
-            width: number | null;
-            height: number | null;
-        };
-        PublicGalleryDetail: {
-            slug: string;
-            title: string;
-            description: string;
-            items: components["schemas"]["PublicGalleryItem"][];
-        };
-        /** @description 公开评论 DTO；永不包含 Email/IP/UA。访客头像为 Email SHA-256 拼出的 Cravatar URL，管理员回复头像为站点 Logo（未配置为 null）。`children` 为该根评论下的回复（回复的回复平铺在同一根下，最多两级）。 */
-        PublicComment: {
             /** Format: int64 */
             id: number;
-            /** Format: int64 */
-            parent_id: number | null;
-            /** @description 评论者昵称（管理员回复为管理员展示名） */
-            nickname: string;
-            /** @description Cravatar 头像 URL 或站点 Logo */
-            avatar_url: string | null;
-            /** @description 访客自己提交的站点链接（入库前已校验 http/https）；管理员回复恒为 null。前端可把昵称渲染成该外链（对齐 Twikoo 行为）。 */
-            website: string | null;
-            /** @description 服务端渲染并 Sanitize 后的 HTML */
-            content_html: string;
-            /** @description 是否为管理员回复 */
-            is_admin: boolean;
+            is_pinned: boolean;
+            next?: null | components["schemas"]["NeighborRef"];
+            password_protected: boolean;
+            previous?: null | components["schemas"]["NeighborRef"];
             /** Format: date-time */
-            created_at: string;
-            children: components["schemas"]["PublicComment"][];
+            published_at?: string | null;
+            rendered_html?: string | null;
+            seo_keywords: string[];
+            slug: string;
+            /** @description 摘要由作者显式撰写，视为公开元数据；正文 HTML 才需要解锁。 */
+            summary: string;
+            tags: components["schemas"]["TaxonomyRef"][];
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int64 */
+            visit_count: number;
         };
-        PublicCommentCreated: components["schemas"]["PublicComment"] & {
-            /** @enum {string} */
-            status: "pending" | "approved";
+        /** @description Public 列表项剥离 `markdown_source`、`author_id`、`version` 等内部字段。 */
+        PublicArticleListItem: {
+            /** Format: int64 */
+            category_id?: number | null;
+            cover_url?: string | null;
+            /** Format: int64 */
+            id: number;
+            is_pinned: boolean;
+            /** @description 搜索命中正文的纯文本片段（仅搜索接口在摘要未覆盖命中时返回；其他列表接口不出现该字段）。 */
+            matched_excerpt?: string | null;
+            password_protected: boolean;
+            /** Format: date-time */
+            published_at?: string | null;
+            slug: string;
+            summary: string;
+            tag_ids: number[];
+            title: string;
+        };
+        PublicArticlePageResponse: {
+            items: components["schemas"]["PublicArticleListItem"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /**
+         * PublicCategoryResponse
+         * @description 公开分类摘要，含实时 Published 文章数。
+         */
+        PublicCategoryResponse: {
+            /**
+             * Format: int64
+             * @description 实时统计的 Published 文章数。
+             */
+            article_count: number;
+            description: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            slug: string;
+        };
+        /** @description 提交成功的响应：附带当前 status，前端据此提示「待审核」。 */
+        PublicCommentCreatedResponse: components["schemas"]["PublicCommentResponse"] & {
+            /** @description 初始状态：`pending`（需审核）或 `approved`（自动通过），取决于站点评论策略。 */
+            status: string;
         };
         /** @description 已批准评论树分页；分页只作用于根评论，`total` 为根评论总数。 */
         PublicCommentPageResponse: {
-            items: components["schemas"]["PublicComment"][];
+            items: components["schemas"]["PublicCommentResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
             /** Format: int64 */
             total: number;
-            page: number;
-            page_size: number;
         };
-        /** @description 访客发表评论；`target_type` 支持 `article` / `page`，按 `target_slug` 定位已发布目标。`website` 可选且仅允许 http/https。 */
-        CreatePublicCommentRequest: {
+        /**
+         * @description 公开评论 DTO：永不包含 email/ip/ua；管理员回复的头像取站点 Logo（无则 null）。
+         *     `website` 是访客自己提交的公开展示信息（对齐 Twikoo：昵称渲染成外链），
+         *     入库前已经过 http/https 校验，可直接回传。
+         */
+        PublicCommentResponse: {
+            /** @description 访客头像为 Email SHA-256 拼 Cravatar URL；管理员回复取站点 Logo（未配置时为 null）。 */
+            avatar_url?: string | null;
+            /** @description 回复列表（仅根评论有子级）。 */
+            children: components["schemas"]["PublicCommentResponse"][];
+            /** @description 服务端渲染并 Sanitize 后的 HTML，可安全直出。 */
+            content_html: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            is_admin: boolean;
+            nickname: string;
             /**
-             * @description 评论目标类型；公开提交仅接受 article / page
-             * @enum {string}
+             * Format: int64
+             * @description 直接父评论 ID；根评论为 null。回复的回复平铺在同一根下，保持两级展示。
              */
-            target_type: "article" | "page" | "link";
-            target_slug: string;
-            nickname: string;
-            /** Format: email */
-            email: string;
+            parent_id?: number | null;
+            /** @description 访客自填的主页链接（仅 http/https）；管理员回复为 null。 */
             website?: string | null;
-            /** @description Markdown 源文本 */
-            content: string;
         };
-        /** @description 回复评论；规则同 CreatePublicCommentRequest（目标继承被回复评论）。 */
-        ReplyPublicCommentRequest: {
-            nickname: string;
-            /** Format: email */
-            email: string;
-            website?: string | null;
-            /** @description Markdown 源文本 */
-            content: string;
-        };
-        /** @description 公开照片墙条目；媒体 URL/尺寸与相册、分类信息已由服务端解析。 */
-        PublicPhoto: {
-            /** @description 媒体公开 URL */
-            url: string;
-            /** @description 条目 alt 文本（可为空串） */
+        /** @description 公开图库条目：只回展示字段与媒体 URL/尺寸，不回内部 asset 元数据。 */
+        PublicGalleryItemResponse: {
+            /** @description 替代文本；条目未填时回退媒体资产自身的 `alt`。 */
             alt: string;
-            /** @description 拍摄地点（可为空串） */
+            /**
+             * Format: int32
+             * @description 媒体高度（像素）；未知为 null。
+             */
+            height?: number | null;
+            /** @description 拍摄地点。 */
             location: string;
-            /** @description 图片宽度（探测失败时为 null） */
-            width: number | null;
-            /** @description 图片高度（探测失败时为 null） */
-            height: number | null;
-            /** @description 所属相册 Slug */
-            gallery_slug: string;
-            /** @description 所属相册标题 */
-            gallery_title: string;
-            /** @description 所属相册的分类名（分类已删除时为 null） */
-            category_name: string | null;
-        };
-        /** @description 公开友情链接；不含 `status`/`sort_order` 等管理字段，`category_name` 供前端按分类分组展示。 */
-        PublicLink: {
-            title: string;
+            /** @description 媒体公开 URL。 */
             url: string;
-            icon_url: string | null;
+            /**
+             * Format: int32
+             * @description 媒体宽度（像素）；未知为 null。
+             */
+            width?: number | null;
+        };
+        PublicGalleryPageResponse: {
+            /** @description 当前页图库摘要。 */
+            items: components["schemas"]["PublicGallerySummary"][];
+            /**
+             * Format: int32
+             * @description 当前页码。
+             */
+            page: number;
+            /**
+             * Format: int32
+             * @description 每页条数。
+             */
+            page_size: number;
+            /**
+             * Format: int64
+             * @description 总条目数。
+             */
+            total: number;
+        };
+        PublicGalleryResponse: {
+            /** @description 图库描述。 */
             description: string;
-            /** Format: int64 */
-            category_id: number | null;
-            /** @description 友链分类名；未分类或分类已删除时为 null（解析失败降级，不影响整个列表）。 */
-            category_name: string | null;
+            /** @description 图库条目列表；媒体缺失（软删除）的条目已被跳过。 */
+            items: components["schemas"]["PublicGalleryItemResponse"][];
+            /** @description 图库 Slug。 */
+            slug: string;
+            /** @description 图库标题。 */
+            title: string;
         };
-        /** @description 公开导航节点；`children` 为一级节点的子菜单（最多两级）。`href` 为服务端解析后的路由地址（url 原样、article → `/articles/{slug}`、page → `/custom/{slug}`、category → `/categories/{slug}`）；目标不存在或未发布的节点连同子树被剔除。 */
+        /** @description 公开图库摘要。 */
+        PublicGallerySummary: {
+            /** @description 封面媒体公开 URL；无封面为 null。 */
+            cover_url?: string | null;
+            /** @description 图库描述。 */
+            description: string;
+            /** @description 图库 Slug。 */
+            slug: string;
+            /** @description 图库标题。 */
+            title: string;
+        };
+        PublicJournalPageResponse: {
+            /** @description 当前页条目。 */
+            items: components["schemas"]["PublicJournalResponse"][];
+            /**
+             * Format: int32
+             * @description 当前页码。
+             */
+            page: number;
+            /**
+             * Format: int32
+             * @description 每页条数。
+             */
+            page_size: number;
+            /**
+             * Format: int64
+             * @description 总条目数。
+             */
+            total: number;
+        };
+        /** @description 公开日志条目：只含渲染后的 HTML。 */
+        PublicJournalResponse: {
+            /** @description 服务端渲染并 Sanitize 后的日志 HTML。 */
+            content_html: string;
+            /**
+             * Format: date-time
+             * @description 创建时间。
+             */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description 日志 ID。
+             */
+            id: number;
+        };
+        /**
+         * @description 公开友链 DTO：不回 status/sort_order 等管理字段；
+         *     `category_name` 供前端按分类分组展示（对齐旧版 xue 主题的分组标题）。
+         */
+        PublicLinkResponse: {
+            /**
+             * Format: int64
+             * @description 所属分类 ID；无分类为 null。
+             */
+            category_id?: number | null;
+            /** @description 所属分类名（供前端分组展示）；无分类或解析失败为 null。 */
+            category_name?: string | null;
+            /** @description 友链描述。 */
+            description: string;
+            /** @description 图标 URL；无图标为 null。 */
+            icon_url?: string | null;
+            /** @description 友链标题。 */
+            title: string;
+            /** @description 友链 URL。 */
+            url: string;
+        };
+        /**
+         * @description 公开导航节点：两级树，children 为一级节点的子菜单。
+         *     `href` 为服务端解析后的路由地址，前端直接用于 NuxtLink，无需关心 target 拼路由规则。
+         */
         PublicNavigationNode: {
-            label: string;
-            target_type: components["schemas"]["NavigationTargetType"];
-            /** Format: int64 */
-            target_id: number | null;
-            url: string | null;
-            /** @description 解析后的可访问地址；url 类型与 url 相同，内部目标为按 slug 拼出的路由。 */
-            href: string | null;
-            open_in_new_tab: boolean;
+            /** @description 子菜单（仅一级节点可能有子节点）。 */
             children: components["schemas"]["PublicNavigationNode"][];
+            /** @description 服务端解析后的可访问路由地址。 */
+            href?: string | null;
+            /** @description 菜单显示名。 */
+            label: string;
+            /** @description 是否新标签页打开。 */
+            open_in_new_tab: boolean;
+            /**
+             * Format: int64
+             * @description 内部目标 ID（article/page/category 时存在）。
+             */
+            target_id?: number | null;
+            /** @description 目标类型：`article` / `page` / `category` / `url`。 */
+            target_type: string;
+            /** @description 外链地址；非 url 类型为 null。 */
+            url?: string | null;
+        };
+        /** @description 公开页面 DTO：只回渲染后的 HTML 与展示字段，不回 Markdown 源与内部字段。 */
+        PublicPageResponse: {
+            /** @description 服务端渲染并 Sanitize 后的页面 HTML。 */
+            content_html: string;
+            /** @description 页面 Slug。 */
+            slug: string;
+            /** @description 页面标题。 */
+            title: string;
+            /**
+             * Format: date-time
+             * @description 最近更新时间。
+             */
+            updated_at: string;
+        };
+        /** @description 公开照片墙条目：跨相册平铺，字段已含解析后的媒体 URL/尺寸与分类名。 */
+        PublicPhotoResponse: {
+            /** @description 替代文本。 */
+            alt: string;
+            /** @description 所属图库分类名；无分类为 null。 */
+            category_name?: string | null;
+            /** @description 所属图库 Slug。 */
+            gallery_slug: string;
+            /** @description 所属图库标题。 */
+            gallery_title: string;
+            /**
+             * Format: int32
+             * @description 媒体高度（像素）；未知为 null。
+             */
+            height?: number | null;
+            /** @description 拍摄地点。 */
+            location: string;
+            /** @description 媒体公开 URL。 */
+            url: string;
+            /**
+             * Format: int32
+             * @description 媒体宽度（像素）；未知为 null。
+             */
+            width?: number | null;
+        };
+        /**
+         * PublicSiteResponse
+         * @description 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。
+         */
+        PublicSiteResponse: {
+            /**
+             * Format: date-time
+             * @description 建站时间（展示端 footer「本站已运行 X 天」）。
+             */
+            created_at: string;
+            default_cover_url: string;
+            icp_text: string;
+            logo_url: string;
+            site_description: string;
+            site_name: string;
+            site_url: string;
+        };
+        /**
+         * PublicTagResponse
+         * @description 公开标签摘要，含实时 Published 文章数。
+         */
+        PublicTagResponse: {
+            /**
+             * Format: int64
+             * @description 实时统计的 Published 文章数。
+             */
+            article_count: number;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            slug: string;
+        };
+        RelatedArticleResponse: {
+            cover_url?: string | null;
+            /** Format: date-time */
+            published_at?: string | null;
+            slug: string;
+            title: string;
+        };
+        RemoteUploadRequest: {
+            /** @description 待抓取的远端图片 URL（仅 http/https）。 */
+            url: string;
+        };
+        RenamedSlug: {
+            from: string;
+            to: string;
+        };
+        ReorderArticlesRequest: {
+            /** @description 期望的新顺序（当前可视列表按展示顺序全量提交）。 */
+            article_ids: number[];
+        };
+        /** @description 回复评论；规则同 CreateCommentRequest（目标继承被回复评论），只允许回复 `approved` 状态的评论。 */
+        ReplyCommentRequest: {
+            /** @description Markdown 源文本，长度 1–2000 字符。 */
+            content: string;
+            /** @description 邮箱（只入库不出 API），最大 254 字符。 */
+            email: string;
+            /** @description 昵称，长度 1–60 字符。 */
+            nickname: string;
+            /** @description 个人主页，可选且仅允许 http/https。 */
+            website?: string | null;
+        };
+        ResetPasswordRequest: {
+            /** @description 新密码：10–128 字符。 */
+            password: string;
+            /** @description Password Reset Token。 */
+            token: string;
+        };
+        RestoreRevisionRequest: {
+            /**
+             * Format: int64
+             * @description 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
+             */
+            expected_version: number;
+        };
+        /** @description Revision 响应不回显 `access_password`，只暴露是否受密码保护。 */
+        RevisionResponse: {
+            /** @description 当时 AI 导读（TL;DR）。 */
+            ai_brief?: string | null;
+            /** @description 当时是否允许评论。 */
+            allow_comments: boolean;
+            /**
+             * Format: int64
+             * @description 当时分类 ID。
+             */
+            category_id?: number | null;
+            /** @description 当时封面图 URL。 */
+            cover_url?: string | null;
+            /**
+             * Format: date-time
+             * @description 版本创建时间（RFC 3339）。
+             */
+            created_at: string;
+            /** @description 当时是否置顶。 */
+            is_pinned: boolean;
+            /** @description 当时 Markdown 原文。 */
+            markdown_source: string;
+            /**
+             * Format: int64
+             * @description 操作者用户 ID。
+             */
+            operator_id: number;
+            /** @description 当时是否设置了访问密码（不回显密码哈希）。 */
+            password_protected: boolean;
+            /**
+             * Format: int64
+             * @description 版本号，从 1 开始递增。
+             */
+            revision_no: number;
+            /** @description 当时 SEO 关键字列表。 */
+            seo_keywords: string[];
+            /** @description 当时 URL 别名。 */
+            slug: string;
+            /** @description 当时摘要。 */
+            summary: string;
+            /** @description 当时关联标签 ID 列表。 */
+            tag_ids: number[];
+            /** @description 当时标题。 */
+            title: string;
+        };
+        /**
+         * AiRewriteRequest
+         * @description 编辑器改写入参：选中的 Markdown 片段（trim 后 1–8000 字符）。
+         */
+        RewriteRequest: {
+            /** @description 选中的 Markdown 片段。 */
+            text: string;
+        };
+        SearchSuggestionResponse: {
+            slug: string;
+            title: string;
+        };
+        SessionResponse: {
+            /**
+             * Format: date-time
+             * @description Session 过期时间（UTC）。
+             */
+            expires_at: string;
+            /** @description 当前 User 视图。 */
+            user: components["schemas"]["UserResponse"];
+        };
+        SetFilterOverrideRequest: {
+            /** @description EnvFilter directives（逗号分隔），如 `aries_server=debug,tower_http=debug`；空串清除覆盖。 */
+            directives: string;
+            /**
+             * Format: int32
+             * @description 自动复位时间（分钟）：到期未再变更则恢复默认过滤器；省略或 0 表示不复位。
+             */
+            restore_minutes?: number | null;
+        };
+        /**
+         * SettingGroupResponse
+         * @description 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。
+         */
+        SettingGroupResponse: {
+            /** @description 分组名：`appearance` / `email` / `integrations` / `ai`。 */
+            group: string;
+            /** @description 分组设置内容，JSON 结构随 group 而不同。 */
+            settings: unknown;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: int32
+             * @description 乐观锁版本号，每次更新递增。
+             */
+            version: number;
+        };
+        /**
+         * UpdateSettingGroupRequest
+         * @description 分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations 组全量覆盖（`AppearanceSettings` / `IntegrationSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。
+         */
+        SettingUpdateRequest: {
+            /**
+             * Format: int32
+             * @description 乐观锁版本号（先 GET 读取当前 version）。
+             */
+            expected_version: number;
+            /** @description 分组设置内容，JSON 结构随 group 而不同（见 description）。 */
+            settings: unknown;
+        };
+        /**
+         * SiteSettingsResponse
+         * @description 单行站点设置。
+         */
+        SiteSettingsResponse: {
+            /** @description 评论策略：`closed` / `moderated` / `auto_approve`。 */
+            comment_policy: string;
+            /**
+             * Format: int32
+             * @description 评论每页条数（5–100）。
+             */
+            comments_per_page: number;
+            /** @description 文章默认封面 URL。 */
+            default_cover_url: string;
+            /** @description ICP 备案号文本，展示在 Footer。 */
+            icp_text: string;
+            logo_url: string;
+            /**
+             * Format: int32
+             * @description 归档页分页大小（1–100）。
+             */
+            page_size_archive: number;
+            /**
+             * Format: int32
+             * @description 首页分页大小（1–100）。
+             */
+            page_size_index: number;
+            /**
+             * Format: int32
+             * @description 搜索页分页大小（1–100）。
+             */
+            page_size_search: number;
+            site_description: string;
+            /** @description 站点名称（1–100 字符）。 */
+            site_name: string;
+            /** @description 站点外部 URL；非空时必须是合法 http/https URL。 */
+            site_url: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SqlLoggingRequest: {
+            enabled: boolean;
+        };
+        /**
+         * AiArticleContextRequest
+         * @description 文章上下文入参：标题 + 正文 Markdown，合计 1–60000 字符。
+         */
+        SummaryRequest: {
+            /** @description 正文 Markdown；标题 + 正文合计不超过 60000 字符。 */
+            content: string;
+            /** @description 文章标题。 */
+            title: string;
+        };
+        /**
+         * TagResponse
+         * @description 管理端标签 DTO。
+         */
+        TagResponse: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            slug: string;
+        };
+        TaxonomyRef: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            slug: string;
+        };
+        UnlockRequest: {
+            /** @description 访问密码。 */
+            password: string;
+        };
+        /** @description 解锁成功响应：`Set-Cookie` 同时携带访问凭据。 */
+        UnlockResponse: {
+            /** @description 恒为 `true`。 */
+            unlocked: boolean;
+        };
+        UpdateArticleRequest: {
+            /**
+             * @description 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。
+             *     三层语义：缺省不改动、显式 `null` 清除、字符串设置新密码（Trim 后少于 6 个字符返回 400）。
+             */
+            access_password?: string | null;
+            /** @description AI 导读（TL;DR）；三层语义：缺省不改动、显式 null 清除、字符串设置。 */
+            ai_brief?: string | null;
+            /** @description 是否允许评论，默认 `true`。 */
+            allow_comments?: boolean;
+            /**
+             * Format: int64
+             * @description 所属分类 ID。
+             */
+            category_id?: number | null;
+            /** @description 封面图 URL。 */
+            cover_url?: string | null;
+            /**
+             * Format: int64
+             * @description 乐观锁版本号：必须等于当前 `version`，否则返回 409 `ARTICLE_CONFLICT`。
+             */
+            expected_version: number;
+            /** @description 是否置顶，默认 `false`。 */
+            is_pinned?: boolean;
+            /** @description Markdown 原文，最长 1,000,000 字符。 */
+            markdown_source?: string;
+            /** @description SEO 关键字（Trim、排序、去重，最多 20 个，单个最长 50 字符）。 */
+            seo_keywords?: string[];
+            /** @description URL 别名；缺省时保持现有值。 */
+            slug?: string | null;
+            /** @description 摘要，最长 500 字符。 */
+            summary?: string;
+            /** @description 关联标签 ID 列表。 */
+            tag_ids?: number[];
+            /** @description 文章标题（Trim 后非空，最长 200 字符）。 */
+            title: string;
+        };
+        UpdateMediaRequest: {
+            /** @description 替换说明文字；缺省为空串。 */
+            alt?: string;
+            /** @description 替换原始文件名；缺省或空串表示不改动。 */
+            original_name?: string | null;
+        };
+        /**
+         * UpdatePasswordRequest
+         * @description 修改当前登录用户密码；成功后撤销该用户全部 Session 并清除当前 Cookie。
+         */
+        UpdatePasswordRequest: {
+            /** @description 当前密码；校验失败返回 400 `INVALID_CURRENT_PASSWORD`。 */
+            current_password: string;
+            /** @description 新密码；需通过 Password Policy 校验（400 `INVALID_PASSWORD`）。 */
+            new_password: string;
+        };
+        /**
+         * UpdateProfileRequest
+         * @description 更新当前登录用户的 Profile。
+         */
+        UpdateProfileRequest: {
+            /** @description 头像 URL；缺省/null/空串表示清除，非空必须是 http/https 绝对 URL（400 `INVALID_AVATAR_URL`）。 */
+            avatar_url?: string | null;
+            /** @description 显示名；长度与字符白名单校验，非法返回 400。 */
+            display_name: string;
+            /** @description 邮箱；会 Normalize 并校验格式与唯一性，冲突返回 409。 */
+            email: string;
+        };
+        /**
+         * UpdateSiteSettingsRequest
+         * @description 全量更新站点设置。`site_url`/`logo_url`/`default_cover_url` 允许为空或以 `/` 开头的站内绝对路径，非空外链必须是 http/https URL（400 `INVALID_URL`）；三个 Page Size 取值 1–100（400 `INVALID_PAGE_SIZE`）；`comments_per_page` 取值 5–100；`comment_policy` 为 `closed`/`moderated`/`auto_approve`（400 `INVALID_COMMENT_POLICY`）。
+         */
+        UpdateSiteSettingsRequest: {
+            /** @description 评论策略，缺省 `moderated`。 */
+            comment_policy?: string;
+            /**
+             * Format: int32
+             * @description 评论每页条数，缺省 20。
+             */
+            comments_per_page?: number;
+            default_cover_url?: string;
+            icp_text?: string;
+            logo_url?: string;
+            /** Format: int32 */
+            page_size_archive: number;
+            /** Format: int32 */
+            page_size_index: number;
+            /** Format: int32 */
+            page_size_search: number;
+            site_description?: string;
+            /** @description 站点名称，Trim 后 1–100 字符（400 `INVALID_SITE_NAME`）。 */
+            site_name: string;
+            site_url?: string;
+        };
+        /**
+         * @description `POST /api/admin/media` 的 Multipart 表单；实际字段名为 `file[]`（兼容 `file`），
+         *     每批 1–5 个文件，单文件 ≤ 5MB。
+         */
+        UploadMediaForm: {
+            /** @description 待上传图片文件（jpg/jpeg/png/gif/bmp/webp）。 */
+            file: string[];
+        };
+        UserResponse: {
+            /** @description 头像 URL，未设置时为 null。 */
+            avatar_url?: string | null;
+            /** @description 显示名。 */
+            display_name: string;
+            /** @description 邮箱地址。 */
+            email: string;
+            /**
+             * Format: int64
+             * @description User ID。
+             */
+            id: number;
+            /** @description 该角色拥有的权限标识列表。 */
+            permissions: string[];
+            /** @description 角色：owner / editor / moderator。 */
+            role: string;
+            /** @description 登录用户名。 */
+            username: string;
         };
     };
-    responses: {
-        /** @description Request Validation 失败。 */
-        BadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Credentials 无效、Session 缺失或 Session 已过期。 */
-        Unauthorized: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Origin、Bootstrap Secret 或 Permission 不满足要求。 */
-        Forbidden: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Bootstrap 已完成或唯一字段冲突。 */
-        Conflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Resource 不存在。 */
-        NotFound: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description 超出 Rate Limit。本地限流（登录、评论提交等）会携带 `Retry-After` 响应头（距可重试的剩余秒数，整数）；上游 Provider 限流（如 AI）可能缺省。 */
-        RateLimited: {
-            headers: {
-                /** @description 距当前限流窗口恢复、可重试的剩余秒数（向上取整，至少 1）。 */
-                "Retry-After"?: number;
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Internal Error；响应不暴露 PostgreSQL 或 Rust Error Detail。 */
-        InternalError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-    };
-    parameters: {
-        /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-        Origin: string;
-    };
+    responses: never;
+    parameters: never;
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getLiveness: {
+    aiEditorBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description 输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    aiEditorMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description 输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    aiEditorRewrite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RewriteRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description 输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    aiEditorSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description 输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    aiEditorTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description SSE 流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description 输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listAiModels: {
         parameters: {
             query?: never;
             header?: never;
@@ -2914,322 +3975,71 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Process 正常运行。 */
+            /** @description 可用模型 ID 列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["AiModelsResponse"];
                 };
             };
-        };
-    };
-    getReadiness: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description PostgreSQL 可访问。 */
-            200: {
+            /** @description 未保存 api_key/base_url */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description PostgreSQL 暂不可用。 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    getBootstrapStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回是否已创建首个 User。 */
-            200: {
+            /** @description 未认证 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BootstrapStatusResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            500: components["responses"]["InternalError"];
-        };
-    };
-    bootstrapOwner: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BootstrapRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建首个 Owner 并签发 Session Cookie。 */
-            200: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    loginAdmin: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Authentication 成功并签发 Session Cookie。 */
-            200: {
-                headers: {
-                    "Set-Cookie"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    logoutAdmin: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 撤销当前 Session 并清除 Cookie。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getAdminSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回当前 Session 与 User View。 */
-            200: {
+            /** @description 无 settings:manage 权限 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    requestPasswordReset: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ForgotPasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description 无论账号是否存在都返回相同响应。Phase 05 接入 Email Adapter 前不会发送 Email。 */
-            202: {
+            /** @description 触发每用户每分钟 10 次限流 */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    resetPassword: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResetPasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description 更新 Password 并撤销该 User 的全部 Session。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    getAdminProfile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回当前 User Profile。 */
-            200: {
+            /** @description Provider 请求失败或超时 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
-    updateAdminProfile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProfileRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的 User Profile。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    updateAdminPassword: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdatePasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description 更新 Password，撤销全部 Session 并清除当前 Cookie。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listAdminArticles: {
+    listAiUsage: {
         parameters: {
             query?: {
+                /** @description 页码，从 1 开始。 */
                 page?: number;
+                /** @description 每页条数（1–100）。 */
                 page_size?: number;
-                keyword?: string;
-                status?: components["schemas"]["ArticleStatus"];
-                /** @description 排序字段白名单；非法值静默回退 `updated_at`。 */
-                sort?: "updated_at" | "created_at" | "published_at" | "title";
-                /** @description 排序方向；非法值静默回退 `desc`。稳定 Tie-breaker 恒为 `id DESC`。 */
-                order?: "asc" | "desc";
+                /** @description 按功能过滤：`editor_rewrite` / `editor_summary` / `editor_metadata` / `comment_moderation` / `editor_tags` / `ai_brief` / `search_ask`。 */
+                feature?: string;
             };
             header?: never;
             path?: never;
@@ -3237,7 +4047,71 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 返回具备稳定 Total 语义的 Article Page。 */
+            /** @description 用量审计分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiUsagePageResponse"];
+                };
+            };
+            /** @description feature 参数非法（INVALID_AI_PARAMETER） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listArticles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数。 */
+                page_size: number;
+                /** @description 标题/摘要关键字过滤。 */
+                keyword: string | null;
+                /** @description 按状态过滤：`draft` / `published` / `recycled`。 */
+                status: string | null;
+                /** @description 按分类 ID 过滤。 */
+                category_id: number | null;
+                /** @description 按标签 ID 过滤。 */
+                tag_id: number | null;
+                /** @description 排序字段白名单；非法值静默回退 `updated_at`。`sort_order` 为手动排序值（「排序」模式的拖拽/箭头调整）。 */
+                sort: string | null;
+                /** @description 排序方向；非法值静默回退 `desc`。稳定 Tie-breaker 恒为 `id DESC`。 */
+                order: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 返回具备稳定 Total 语义的 Article Page */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3246,17 +4120,30 @@ export interface operations {
                     "application/json": components["schemas"]["ArticlePageResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    createAdminArticleDraft: {
+    createArticle: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3266,7 +4153,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Draft 已写入 PostgreSQL。 */
+            /** @description Draft 已写入 PostgreSQL */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -3275,19 +4162,100 @@ export interface operations {
                     "application/json": components["schemas"]["ArticleResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description 标题为空、内容超长、SEO 关键字非法或访问密码过短 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    previewAdminArticle: {
+    importMarkdown: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 待导入的 Markdown 文件批次 */
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["ImportMarkdownForm"];
             };
+        };
+        responses: {
+            /** @description 导入预览已生成 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description 文件类型/大小/编码不合法或 Multipart 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    previewArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -3297,7 +4265,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 返回经过 `comrak` Render 和 `ammonia` Sanitization 的 HTML。 */
+            /** @description 返回渲染并 Sanitization 后的 HTML */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3306,23 +4274,106 @@ export interface operations {
                     "application/json": components["schemas"]["PreviewArticleResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description 内容超长（ARTICLE_CONTENT_TOO_LONG） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getAdminArticle: {
+    reorderArticles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderArticlesRequest"];
+            };
+        };
+        responses: {
+            /** @description 排序已更新（无响应体） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 入参为空、含重复 id 或超过 500 个（INVALID_REORDER_INPUT） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getArticle: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 返回 Article 的 Markdown 原文和当前版本。 */
+            /** @description 返回 Article 的 Markdown 原文和当前版本 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3331,19 +4382,41 @@ export interface operations {
                     "application/json": components["schemas"]["ArticleResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    updateAdminArticle: {
+    updateArticle: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
             };
             cookie?: never;
@@ -3354,7 +4427,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 返回保存后的 Article 和新版本号。 */
+            /** @description 返回保存后的 Article 和新版本号 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3363,74 +4436,168 @@ export interface operations {
                     "application/json": components["schemas"]["ArticleResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description 标题为空、内容超长、SEO 关键字非法或访问密码过短 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 版本冲突或 Slug 冲突（ARTICLE_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    deleteAdminArticle: {
+    deleteArticle: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Article 已物理删除。 */
+            /** @description Article 已物理删除（无响应体） */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章非 recycled 状态（ARTICLE_NOT_RECYCLED） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    listAdminArticleRevisions: {
+    listRevisions: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 返回 Article 的 Revision 列表。 */
+            /** @description 返回 Article 的 Revision 列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleRevisionResponse"][];
+                    "application/json": components["schemas"]["RevisionResponse"][];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    restoreAdminArticleRevision: {
+    restoreRevision: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
+                /** @description Revision 版本号，从 1 开始 */
                 rev: number;
             };
             cookie?: never;
@@ -3441,7 +4608,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 返回恢复后的 Article 和新版本号。 */
+            /** @description 返回恢复后的 Article 和新版本号 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3450,10 +4617,25 @@ export interface operations {
                     "application/json": components["schemas"]["ArticleResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description Article 或 Revision 不存在（`ARTICLE_NOT_FOUND` / `REVISION_NOT_FOUND`）。 */
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Article 或 Revision 不存在（ARTICLE_NOT_FOUND / REVISION_NOT_FOUND） */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3462,17 +4644,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            409: components["responses"]["Conflict"];
+            /** @description 版本冲突（ARTICLE_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    changeAdminArticleStatus: {
+    changeStatus: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path: {
+                /** @description 文章 ID */
                 id: number;
             };
             cookie?: never;
@@ -3483,7 +4671,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 返回状态流转后的 Article 和新版本号。 */
+            /** @description 返回状态流转后的 Article 和新版本号 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3492,433 +4680,80 @@ export interface operations {
                     "application/json": components["schemas"]["ArticleResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listAdminArticleCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回可用于 Article Editor 的 Category 列表。 */
-            200: {
+            /** @description 非法状态迁移 */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"][];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminArticleCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的 Article Category。 */
-            201: {
+            /** @description 未认证 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    updateAdminArticleCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的 Article Category。 */
-            200: {
+            /** @description 无 content:manage 权限 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminArticleCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Category 已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listAdminTags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回可用于 Article Editor 的 Tag 列表。 */
-            200: {
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleTagResponse"][];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminTag: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的 Tag。 */
-            201: {
+            /** @description 版本冲突或非法状态迁移（ARTICLE_CONFLICT） */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleTagResponse"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
         };
     };
-    updateAdminTag: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的 Tag。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleTagResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminTag: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tag 已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listAdminComments: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                status?: components["schemas"]["CommentStatus"];
-                target_type?: "article" | "page" | "link";
-                target_id?: number;
-                /** @description 对内容 Markdown 与评论者名称做模糊匹配。 */
-                keyword?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 具备稳定 Total 语义的 Comment Page。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentPageResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getAdminComment: {
+    listAuditLogs: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: number;
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数（1–100）。 */
+                page_size: number;
+                /** @description 操作人 User ID 精确过滤。 */
+                actor_user_id: number | null;
+                /** @description 动作精确过滤，如 `article.created`、`comment.moderated`。 */
+                action: string | null;
+                /** @description 目标类型精确过滤，如 `article`、`comment`、`site_settings`。 */
+                target_type: string | null;
+                /** @description 目标 ID 精确过滤。 */
+                target_id: string | null;
+                /** @description 时间范围起点（按 `created_at` 左闭右开过滤），格式 RFC 3339；非法值返回 400 `INVALID_DATE_RANGE`。 */
+                start: string | null;
+                /** @description 时间范围终点，格式同 `start`。 */
+                end: string | null;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 评论详情。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteAdminComment: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 评论已物理删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    changeAdminCommentStatus: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChangeCommentStatusRequest"];
-            };
-        };
-        responses: {
-            /** @description 状态变更成功。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    replyAdminComment: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReplyCommentRequest"];
-            };
-        };
-        responses: {
-            /** @description 回复已创建并公开。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    getAdminDashboard: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 聚合统计。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DashboardResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listAdminAuditLogs: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                actor_user_id?: number;
-                /** @description 如 `article.created`、`comment.moderated`。 */
-                action?: string;
-                /** @description 如 `article`、`comment`、`site_settings`。 */
-                target_type?: string;
-                target_id?: string;
-                start?: string;
-                end?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 审计日志分页。 */
+            /** @description 审计日志分页 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3927,54 +4762,667 @@ export interface operations {
                     "application/json": components["schemas"]["AuditPageResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description start/end 非合法 RFC 3339 时间 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 非 Owner（settings:manage） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    listAdminLogs: {
+    login: {
         parameters: {
-            query?: {
-                /** @description 最低级别语义，如 `WARN` 含 WARN+ERROR；缺省或未知值返回全部级别。 */
-                level?: "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE";
-                /** @description tracing target（模块路径）精确匹配；候选值见 `/api/admin/logs/targets`。与 `exclude_target` 互斥。 */
-                target?: string;
-                /** @description 精确排除某个 target（如 `sqlx::query`）；与 `target` 同用返回 400 `INVALID_FILTER`。 */
-                exclude_target?: string;
-                /** @description 上下文模式锚点（日志行 id）；提供时忽略 `page`/`page_size`/`start`/`end`/`order`，响应中 `page` 恒为 1、`total` 为实际返回条数、`page_size` 为 `context`。 */
-                around_id?: number;
-                /** @description 上下文模式窗口：锚点前后各取的条数。 */
-                context?: number;
-                /** @description 对 `message` 与 `fields`（JSON 文本）模糊匹配（ILIKE）；`%`、`_`、`\` 按字面量转义。 */
-                keyword?: string;
-                /** @description 精确匹配 `x-request-id`，用于查询同一请求的完整日志链路。 */
-                request_id?: string;
-                start?: string;
-                end?: string;
-                /** @description 排序方向；链路追踪场景用 `asc` 按时间正序看流转，未知值按 `desc` 处理。 */
-                order?: "asc" | "desc";
-                page?: number;
-                page_size?: number;
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
             };
+        };
+        responses: {
+            /** @description 认证成功并签发 Session Cookie */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description 用户名或密码错误，或账号已被禁用 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origin 校验失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 运行日志分页，附最近 24 小时各级别条数。 */
+            /** @description 撤销当前 Session 并清除 Cookie */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证或 Session 已失效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origin 校验失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 无论账号是否存在都返回相同响应 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description 邮箱格式不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origin 校验失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新 Password 并撤销该 User 的全部 Session */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token 无效或已过期，或新密码不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origin 校验失败 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前 Session 与 User 视图 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LogPageResponse"];
+                    "application/json": components["schemas"]["SessionResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description 上下文模式锚点不存在（`LOG_ENTRY_NOT_FOUND`）。 */
+            /** @description 未认证或 Session 已失效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bootstrap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BootstrapRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建首个 Owner 并签发 Session Cookie */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description 用户名、邮箱、显示名或密码不合法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description bootstrap_secret 无效 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 系统已初始化 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发限流 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bootstrapStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 是否已创建首个 User */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapStatusResponse"];
+                };
+            };
+            /** @description 数据库查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分类列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 分类名称与可选 Slug */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的分类 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 参数校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description name 或 slug 已存在（`TAXONOMY_CONFLICT`） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 分类名称与可选 Slug */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的分类 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 参数校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类不存在（`TAXONOMY_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description name 或 slug 已存在（`TAXONOMY_CONFLICT`） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分类已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类不存在（`TAXONOMY_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类仍被引用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: number;
+                page_size: number;
+                /** @description 按状态筛选：`pending` / `approved` / `rejected` / `spam` / `recycled`。 */
+                status: string | null;
+                /** @description 按目标类型筛选：`article` / `page` / `link`。 */
+                target_type: string | null;
+                /** @description 按目标 ID 筛选。 */
+                target_id: number | null;
+                /** @description 对内容 Markdown 与评论者名称做模糊匹配。 */
+                keyword: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 具备稳定 Total 语义的评论分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPageResponse"];
+                };
+            };
+            /** @description status / target_type 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无评论审核权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 评论 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 评论详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无评论审核权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 评论不存在 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3985,32 +5433,199 @@ export interface operations {
             };
         };
     };
-    listAdminLogStats: {
+    deleteComment: {
         parameters: {
-            query?: {
-                /** @description 统计窗口（小时）。 */
-                hours?: number;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description 评论 ID */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 分桶统计。 */
+            /** @description 评论已物理删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无评论审核权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 评论不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 评论未进入 recycled 状态（COMMENT_NOT_RECYCLED） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    replyToComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 被回复的评论 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description 回复已创建并公开 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentResponse"];
+                };
+            };
+            /** @description 内容长度非法（INVALID_COMMENT_CONTENT） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无评论审核权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 被回复的评论不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    changeCommentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 评论 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeCommentStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description 状态变更成功 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LogStatsResponse"];
+                    "application/json": components["schemas"]["CommentResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description status 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无评论审核权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 评论不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 非法状态转换（INVALID_COMMENT_TRANSITION） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    listAdminLogTargets: {
+    getDashboard: {
         parameters: {
             query?: never;
             header?: never;
@@ -4019,17 +5634,1903 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description target 列表（升序，最多 200 条）。 */
+            /** @description 聚合统计 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LogTargetsResponse"];
+                    "application/json": components["schemas"]["DashboardResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 dashboard:view 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listGalleries: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始。 */
+                page?: number;
+                /** @description 每页条数（1–100）。 */
+                page_size?: number;
+                /** @description 状态过滤：`draft` / `published`。 */
+                status?: string;
+                /** @description 按图库分类（kind = `gallery`）过滤。 */
+                category_id?: number;
+                /** @description 对标题与 Slug 做模糊匹配；空白值被忽略。 */
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库分页结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryPageResponse"];
+                };
+            };
+            /** @description 状态参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createGallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 图库创建参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的图库 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryResponse"];
+                };
+            };
+            /** @description 请求参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 或媒体资产冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listGalleryCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库分类列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createGalleryCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 分类创建参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的图库分类 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 分类名无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 唯一冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateGalleryCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 分类更新参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的图库分类 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 分类名无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 唯一冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteGalleryCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库分类已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类仍被图库引用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getGallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateGallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 图库全量更新参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的图库 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryResponse"];
+                };
+            };
+            /** @description 请求参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 或媒体资产冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteGallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listGalleryItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图库条目列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryItemResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addGalleryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 条目添加参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryItemPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的图库条目 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryItemResponse"];
+                };
+            };
+            /** @description 请求参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库或媒体资产不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 同一媒体已存在于该图库 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reorderGalleryItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 有序条目 ID 列表 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryItemOrderPayload"];
+            };
+        };
+        responses: {
+            /** @description 排序已应用 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库或条目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateGalleryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+                /** @description 条目 ID */
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 条目更新参数 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryItemUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的图库条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryItemResponse"];
+                };
+            };
+            /** @description 请求参数无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 图库或条目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeGalleryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 ID */
+                id: number;
+                /** @description 条目 ID */
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 条目已移除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 条目不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导入 Job ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导入预览 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 导入 Job 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    commitImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导入 Job ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 冲突项的逐篇处理策略 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 导入完成，Job 置为 Done */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitResultResponse"];
+                };
+            };
+            /** @description 策略非法（INVALID_IMPORT_STRATEGY） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 导入 Job 不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Job 已处理过（IMPORT_ALREADY_COMMITTED / IMPORT_SLUG_EXHAUSTED） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listJournals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数（1–100）。 */
+                page_size: number;
+                /** @description 可见性过滤：`public` / `private`；非法值返回 400。 */
+                visibility: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 日志分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalPageResponse"];
+                };
+            };
+            /** @description visibility 值非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 日志入参 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的日志 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalResponse"];
+                };
+            };
+            /** @description 正文长度或 visibility 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 日志 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 日志详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 日志不存在（JOURNAL_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 日志 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 日志入参 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的日志 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalResponse"];
+                };
+            };
+            /** @description 正文长度或 visibility 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 日志不存在（JOURNAL_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 日志 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 日志已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 日志不存在（JOURNAL_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数（1–100）。 */
+                page_size: number;
+                /** @description 按状态过滤：`active` / `inactive`。 */
+                status: string | null;
+                /** @description 按友链分类过滤。 */
+                category_id: number | null;
+                /** @description 对标题与 URL 做模糊匹配；空白值被忽略。 */
+                keyword: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 友情链接分页结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkPageResponse"];
+                };
+            };
+            /** @description status 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 友情链接字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的友情链接 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            /** @description URL 非法或 status 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLinkCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 友链分类列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createLinkCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 友链分类字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的友链分类 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description slug 冲突（TAXONOMY_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateLinkCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 友链分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 友链分类字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的友链分类 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 友链分类不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description slug 冲突（TAXONOMY_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteLinkCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 友链分类 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 友链分类已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 友链分类不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分类仍被引用（TAXONOMY_IN_USE） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 友情链接 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 友情链接详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 友情链接不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 友情链接 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 友情链接字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的友情链接 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            /** @description URL 非法或 status 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 友情链接不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 友情链接 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 友情链接已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 友情链接不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: number;
+                page_size: number;
+                /** @description 最低级别：WARN 含 WARN+ERROR；空为全部。 */
+                level: string | null;
+                target: string | null;
+                /** @description message 与 fields（JSON 文本）模糊匹配（ILIKE，%/_ 会被转义）。 */
+                keyword: string | null;
+                /** @description 请求链路追踪：精确匹配 request_id，空串忽略。 */
+                request_id: string | null;
+                /** @description 精确排除该 target（如 `sqlx::query`）；与 `target` 互斥。 */
+                exclude_target: string | null;
+                /** @description 上下文模式锚点：以该行的 ts 为中心取前后日志。 */
+                around_id: number | null;
+                /** @description 上下文模式窗口：前后各取 context 条，默认 20，上限 100。 */
+                context: number | null;
+                /** @description 排序方向：asc/desc，默认 desc；链路场景用 asc 按时间正序看流转。 */
+                order: string | null;
+                /** @description 时间范围左闭右开，RFC 3339。 */
+                start: string | null;
+                end: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 运行日志分页，附最近 24 小时各级别条数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPageResponse"];
+                };
+            };
+            /** @description 时间格式非法或 target/exclude_target 同用 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 上下文模式锚点不存在（LOG_ENTRY_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFilterOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前覆盖状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterOverrideResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setFilterOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 覆盖 directives 与可选自动复位时间 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetFilterOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description 设置后的覆盖状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilterOverrideResponse"];
+                };
+            };
+            /** @description directives 非法（INVALID_DIRECTIVES） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getSqlLogging: {
@@ -4041,1603 +7542,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前开关状态。 */
+            /** @description 当前开关状态（`{ "enabled": bool }`） */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SqlLoggingState"];
+                    "application/json": unknown;
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    setSqlLogging: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SqlLoggingRequest"];
-            };
-        };
-        responses: {
-            /** @description 切换后的开关状态。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SqlLoggingState"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getLogFilterOverride: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前覆盖状态。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LogFilterOverride"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    setLogFilterOverride: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LogFilterOverrideRequest"];
-            };
-        };
-        responses: {
-            /** @description 设置后的覆盖状态。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LogFilterOverride"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    tailAdminLogs: {
-        parameters: {
-            query?: {
-                /** @description 最低级别（同列表语义）。 */
-                level?: "ERROR" | "WARN" | "INFO" | "DEBUG" | "TRACE";
-                /** @description tracing target 精确匹配；与 `exclude_target` 互斥。 */
-                target?: string;
-                /** @description 精确排除该 target；与 `target` 互斥。 */
-                exclude_target?: string;
-                /** @description message 与 fields 模糊匹配（ILIKE，%/_ 转义）。 */
-                keyword?: string;
-                /** @description 请求链路追踪：精确匹配 request_id。 */
-                request_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description SSE 流（持续响应，客户端断开即结束）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listAdminPages: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                status?: components["schemas"]["PageStatus"];
-                /** @description 对标题与 Slug 做模糊匹配；空白值被忽略。 */
-                keyword?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 自定义页面分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PagePageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminPage: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PageRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的页面。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAdminPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 页面详情。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminPage: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PageRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的页面。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminPage: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 页面已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listAdminJournals: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                visibility?: components["schemas"]["JournalVisibility"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 日志分页；稳定排序 `created_at DESC, id DESC`，不含已软删除记录。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalPageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminJournal: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JournalRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的日志。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getAdminJournal: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 日志详情。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminJournal: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JournalRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的日志。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteAdminJournal: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 日志已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listAdminGalleries: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                status?: components["schemas"]["GalleryStatus"];
-                category_id?: number;
-                /** @description 对标题与 Slug 做模糊匹配；空白值被忽略。 */
-                keyword?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryPageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminGallery: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GalleryRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的图库。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listAdminGalleryCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库分类列表。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminGalleryCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的图库分类。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    updateAdminGalleryCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的图库分类。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminGalleryCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库分类已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAdminGallery: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库详情。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminGallery: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GalleryRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的图库。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminGallery: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listAdminGalleryItems: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 图库条目列表。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryItemResponse"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    addAdminGalleryItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GalleryItemRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的图库条目。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryItemResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    reorderAdminGalleryItems: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GalleryItemOrderRequest"];
-            };
-        };
-        responses: {
-            /** @description 排序已应用。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminGalleryItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-                item_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GalleryItemUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的图库条目。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GalleryItemResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    removeAdminGalleryItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-                item_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 条目已移除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listAdminLinks: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                status?: components["schemas"]["LinkStatus"];
-                category_id?: number;
-                /** @description 对标题与 URL 做模糊匹配；空白值被忽略。 */
-                keyword?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 友情链接分页；稳定排序 `sort_order ASC, id ASC`，不含已软删除记录。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinkPageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminLink: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LinkRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的友情链接。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinkResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listAdminLinkCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 友链分类列表。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminLinkCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的友链分类。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    updateAdminLinkCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTaxonomyRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的友链分类。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleCategoryResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    deleteAdminLinkCategory: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 友链分类已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAdminLink: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 友情链接详情。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinkResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminLink: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LinkRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的友情链接。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LinkResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteAdminLink: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 友情链接已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listAdminNavigation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 导航节点列表。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NavigationItemResponse"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    createAdminNavigationItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NavigationItemRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回新建的导航节点。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NavigationItemResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    reorderAdminNavigation: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NavigationOrderRequest"];
-            };
-        };
-        responses: {
-            /** @description 排序已应用。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminNavigationItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NavigationItemRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的导航节点。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NavigationItemResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteAdminNavigationItem: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 导航节点已删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAdminSettingGroup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                group: components["schemas"]["SettingGroupName"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingGroupResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description 分组名非法（`SETTING_GROUP_NOT_FOUND`）。 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    updateAdminSettingGroup: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                group: components["schemas"]["SettingGroupName"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateSettingGroupRequest"];
-            };
-        };
-        responses: {
-            /** @description 返回更新后的分组设置。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingGroupResponse"];
-                };
-            };
-            /** @description Payload 结构不合法（`INVALID_SETTING_PAYLOAD`）。 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description 分组名非法（`SETTING_GROUP_NOT_FOUND`）。 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            409: components["responses"]["Conflict"];
-        };
-    };
-    aiEditorRewrite: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiRewriteRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            /** @description AI 未启用（`AI_DISABLED`）或该功能未开启（`AI_FEATURE_DISABLED`）。 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    aiEditorSummary: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiArticleContextRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    aiEditorMetadata: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiArticleContextRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    aiEditorTags: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiArticleContextRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    aiEditorBrief: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiArticleContextRequest"];
-            };
-        };
-        responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    listAiUsage: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                feature?: "editor_rewrite" | "editor_summary" | "editor_metadata" | "comment_moderation" | "editor_tags" | "ai_brief" | "search_ask";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 用量审计分页。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiUsagePageResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    listPublicArticles: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                keyword?: string;
-                category_id?: number;
-                tag_id?: number;
-                /** @description 按分类 Slug 过滤（大小写不敏感）。 */
-                category?: string;
-                /** @description 按标签 Slug 过滤（大小写不敏感）。 */
-                tag?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回已发布 Article 的分页结果；列表项不含 Markdown 原文与内部字段。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicArticlePageResponse"];
-                };
-            };
-            /** @description 越界分页（`PAGE_OUT_OF_RANGE`）。 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getPublicArticle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 返回已发布 Article 的公开详情；不含 `markdown_source`、`author_id`、`version`。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicArticleDetail"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    unlockPublicArticle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    password: string;
-                };
-            };
-        };
-        responses: {
-            /** @description 解锁成功，`Set-Cookie` 携带访问凭据。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        unlocked: boolean;
-                    };
-                };
-            };
-            /** @description 文章未设置访问密码（`ARTICLE_NOT_PROTECTED`）。 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description 密码错误（`INVALID_ARTICLE_PASSWORD`）。 */
+            /** @description 未认证 */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5646,37 +7560,175 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            404: components["responses"]["NotFound"];
-            429: components["responses"]["RateLimited"];
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    recordPublicArticleView: {
+    setSqlLogging: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 目标开关状态 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SqlLoggingRequest"];
+            };
+        };
+        responses: {
+            /** @description 切换后的开关状态（`{ "enabled": bool }`） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description 请求体非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 过滤器 reload 失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLogStats: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                slug: string;
+                /** @description 统计窗口（小时）：默认 24，范围 1–168；≤48h 按小时分桶，>48h 按天。 */
+                hours: number | null;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 当前浏览量。 */
+            /** @description 分桶统计 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** Format: int64 */
-                        visit_count: number;
-                    };
+                    "application/json": components["schemas"]["LogStatsResponse"];
                 };
             };
-            404: components["responses"]["NotFound"];
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
-    getPublicSite: {
+    tailLogs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 最低级别（同列表语义：WARN 含 WARN+ERROR）。 */
+                level: string | null;
+                target: string | null;
+                /** @description 精确排除该 target（与 target 互斥）。 */
+                exclude_target: string | null;
+                keyword: string | null;
+                request_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 流（持续响应，客户端断开即结束） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["LogItem"];
+                };
+            };
+            /** @description target/exclude_target 同用等筛选参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLogTargets: {
         parameters: {
             query?: never;
             header?: never;
@@ -5685,62 +7737,286 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 公开站点信息。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicSiteResponse"];
-                };
-            };
-        };
-    };
-    listPublicCategories: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 分类摘要列表。 */
+            /** @description target 列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicCategory"][];
+                    "application/json": unknown;
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
     };
-    listPublicCategoryArticles: {
+    listMedia: {
         parameters: {
             query?: {
                 page?: number;
+                page_size?: number;
+                /** @description 按 `original_name` 模糊匹配。 */
+                keyword?: string;
+                /** @description 按存储 Provider 过滤：`local` / `s3` / `legacy_url`。 */
+                provider?: string;
+                mime?: string;
             };
             header?: never;
-            path: {
-                slug: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 分页文章列表。 */
+            /** @description 媒体资产分页列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicArticlePageResponse"];
+                    "application/json": components["schemas"]["MediaPageResponse"];
                 };
             };
-            /** @description 分类不存在（`CATEGORY_NOT_FOUND`）。 */
+            /** @description Provider 过滤值非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    uploadMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 待上传文件批次 */
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UploadMediaForm"];
+            };
+        };
+        responses: {
+            /** @description 全部文件已入库；同内容 Hash 的资产带 `duplicate_of` 提示 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"][];
+                };
+            };
+            /** @description 文件为空/超限/类型不允许或 Multipart 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    batchDeleteMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 待删除的资产 ID 列表 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchDeleteMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description 逐项归类结果（deleted / referenced / not_found 均按 ID 升序） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchDeleteMediaResponse"];
+                };
+            };
+            /** @description 空批次或超过 100 个 ID（INVALID_BATCH_DELETE） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    uploadRemoteMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 远端图片 URL */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description 远端文件已下载并入库 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
+                };
+            };
+            /** @description URL 非法、地址被禁止或抓取失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 媒体资产 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资产详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 资产不存在或已删除 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5751,7 +8027,178 @@ export interface operations {
             };
         };
     };
-    listPublicTags: {
+    updateMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 媒体资产 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 待更新的元数据 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description 资产已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
+                };
+            };
+            /** @description 字段超长 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 资产不存在或已删除 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 媒体资产 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已软删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 资产不存在或已删除 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 资产仍被内容引用（MEDIA_IN_USE） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMediaUsages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 媒体资产 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资产的引用列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaUsageResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 资产不存在或已删除 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listNavigation: {
         parameters: {
             query?: never;
             header?: never;
@@ -5760,40 +8207,1216 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 标签摘要列表。 */
+            /** @description 导航节点列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicTag"][];
+                    "application/json": components["schemas"]["NavigationItemResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
     };
-    listPublicTagArticles: {
+    createNavigationItem: {
         parameters: {
-            query?: {
-                page?: number;
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 导航节点字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NavigationPayload"];
             };
+        };
+        responses: {
+            /** @description 返回新建的导航节点 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NavigationItemResponse"];
+                };
+            };
+            /** @description 层级或目标字段非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reorderNavigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 目标顺序 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NavigationOrderPayload"];
+            };
+        };
+        responses: {
+            /** @description 排序已应用 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 任一导航节点不存在（NAVIGATION_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateNavigationItem: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
-                slug: string;
+                /** @description 导航节点 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 导航节点字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NavigationPayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的导航节点 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NavigationItemResponse"];
+                };
+            };
+            /** @description 层级或目标字段非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 导航节点不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteNavigationItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导航节点 ID */
+                id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 分页文章列表。 */
+            /** @description 导航节点已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 导航节点不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 仍含子节点（NAVIGATION_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数（1–100）。 */
+                page_size: number;
+                /** @description 按状态过滤：`draft` / `published`。 */
+                status: string | null;
+                /** @description 对标题与 Slug 做模糊匹配；空白值被忽略。 */
+                keyword: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 自定义页面分页结果 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicArticlePageResponse"];
+                    "application/json": components["schemas"]["PagePageResponse"];
                 };
             };
-            /** @description 标签不存在（`TAG_NOT_FOUND`）。 */
+            /** @description status 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 页面字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagePayload"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的页面 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 冲突（SLUG_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页面 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 页面详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 页面不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updatePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页面 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 页面字段 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagePayload"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的页面 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResponse"];
+                };
+            };
+            /** @description 参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 页面不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Slug 冲突（SLUG_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deletePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页面 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 页面已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无内容管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 页面不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前 User Profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 profile:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Profile 入参 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的 User Profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description 邮箱/显示名/头像 URL 校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 profile:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 邮箱已被其他用户使用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updatePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 密码修改入参 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 密码已更新，Session 已全部撤销 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前密码错误或新密码不通过 Policy 校验 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 profile:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSettingGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分组名：appearance / email / integrations / ai */
+                group: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分组设置与乐观锁版本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingGroupResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分组名非法（SETTING_GROUP_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSettingGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 分组名：appearance / email / integrations / ai */
+                group: string;
+            };
+            cookie?: never;
+        };
+        /** @description 分组设置更新体 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的分组设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingGroupResponse"];
+                };
+            };
+            /** @description Payload 结构不合法（INVALID_SETTING_PAYLOAD） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 分组名非法（SETTING_GROUP_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 乐观锁版本冲突（SETTING_VERSION_CONFLICT） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSiteSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 单行站点设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteSettingsResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 非 Owner（settings:manage） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSiteSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 站点设置入参 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSiteSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description 站点设置已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteSettingsResponse"];
+                };
+            };
+            /** @description 字段校验失败（INVALID_SITE_NAME / INVALID_URL / INVALID_PAGE_SIZE 等） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 非 Owner（settings:manage） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 标签列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagResponse"][];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description 标签名称与可选 Slug */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回新建的标签 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagResponse"];
+                };
+            };
+            /** @description 参数校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description name 或 slug 已存在（`TAXONOMY_CONFLICT`） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 标签 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description 标签名称与可选 Slug */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回更新后的标签 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagResponse"];
+                };
+            };
+            /** @description 参数校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 标签不存在（`TAXONOMY_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description name 或 slug 已存在（`TAXONOMY_CONFLICT`） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 标签 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 标签已删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 标签不存在（`TAXONOMY_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 标签仍被引用 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 服务存活 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthView"];
+                };
+            };
+        };
+    };
+    ready: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 服务就绪 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthView"];
+                };
+            };
+            /** @description 数据库不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    serveMediaFile: {
+        parameters: {
+            query?: {
+                /** @description 缩略图目标宽度（16–1200 的整数）；缺省或非法时返回原图。 */
+                w?: string;
+            };
+            header?: never;
+            path: {
+                /** @description 媒体 Object Key（如 `2026/09/<uuid>.png`） */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文件内容；Content-Type 按入库时的 MIME */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description S3 Provider 时 Redirect 到公开 URL */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 文件不存在或路径非法 */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5813,30 +9436,37 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 归档分组列表。 */
+            /** @description 归档分组列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicArchiveMonth"][];
+                    "application/json": components["schemas"]["ArchiveMonthResponse"][];
                 };
             };
         };
     };
-    searchPublicArticles: {
+    listPublicArticles: {
         parameters: {
-            query: {
-                q: string;
-                page?: number;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                page: number;
+                /** @description 缺省时取站点设置的 `page_size_index`。 */
+                page_size: number | null;
+                keyword: string | null;
+                category_id: number | null;
+                tag_id: number | null;
+                /** @description 按 Slug 过滤（新版统一 Slug；旧版标签按 name 的行为不继承）。 */
+                category: string | null;
+                tag: string | null;
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 搜索命中分页。 */
+            /** @description 返回已发布文章的分页结果；列表项不含 Markdown 原文与内部字段 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5845,16 +9475,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublicArticlePageResponse"];
                 };
             };
-            /** @description 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description 越界分页（`PAGE_OUT_OF_RANGE`）。 */
+            /** @description 越界分页（`PAGE_OUT_OF_RANGE`） */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5865,29 +9486,659 @@ export interface operations {
             };
         };
     };
-    searchSuggest: {
+    getPublicArticle: {
         parameters: {
-            query: {
-                q: string;
-                limit?: number;
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 Slug（不区分大小写） */
+                slug: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 返回已发布文章的公开详情；不含 `markdown_source`、`author_id`、`version` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicArticleDetail"];
+                };
+            };
+            /** @description 文章不存在或未发布（`ARTICLE_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unlockArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 Slug（不区分大小写） */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        /** @description 访问密码 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlockRequest"];
+            };
+        };
+        responses: {
+            /** @description 解锁成功，`Set-Cookie` 携带访问凭据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnlockResponse"];
+                };
+            };
+            /** @description 文章未设置访问密码（`ARTICLE_NOT_PROTECTED`） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 密码错误（`INVALID_ARTICLE_PASSWORD`） */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在或未发布（`ARTICLE_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 解锁尝试过于频繁（5 次/分钟） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listArticleComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 Slug */
+                slug: string;
+                page: number;
+                /** @description 缺省时取站点设置 `comments_per_page`。 */
+                page_size: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已批准评论树分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentPageResponse"];
+                };
+            };
+            /** @description 文章不存在、未发布或分页越界（PAGE_OUT_OF_RANGE） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    relatedArticles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 Slug（不区分大小写） */
+                slug: string;
+                /** @description 返回篇数上限（1–12，默认 6）。 */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 相关文章列表（可能为空数组） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedArticleResponse"][];
+                };
+            };
+            /** @description 文章不存在或 AI 检索未开启（`ARTICLE_NOT_FOUND` / `AI_RETRIEVAL_DISABLED`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordArticleView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 Slug（不区分大小写） */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前浏览量 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleViewResponse"];
+                };
+            };
+            /** @description 文章不存在或未发布（`ARTICLE_NOT_FOUND`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPublicCategories: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 建议列表（可能为空数组）。 */
+            /** @description 分类摘要列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicSearchSuggestion"][];
+                    "application/json": components["schemas"]["PublicCategoryResponse"][];
                 };
             };
-            /** @description 关键词为空或过长（`INVALID_SEARCH_KEYWORD`）。 */
+        };
+    };
+    listCategoryArticles: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始。 */
+                page?: number;
+            };
+            header?: never;
+            path: {
+                /** @description 分类 Slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 分页文章列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicArticlePageResponse"];
+                };
+            };
+            /** @description 分类不存在（`CATEGORY_NOT_FOUND`）或页码越界（`PAGE_OUT_OF_RANGE`） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentCreatedResponse"];
+                };
+            };
+            /** @description 昵称/邮箱/主页/内容校验失败 */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 站点评论已关闭（COMMENTS_CLOSED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 评论目标不存在或未发布（COMMENT_TARGET_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 重复提交（COMMENT_DUPLICATE） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 提交过于频繁（RATE_LIMITED） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    replyComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 被回复的评论 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentCreatedResponse"];
+                };
+            };
+            /** @description 昵称/邮箱/主页/内容校验失败 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 站点评论已关闭（COMMENTS_CLOSED） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 被回复的评论不存在（COMMENT_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 重复提交（COMMENT_DUPLICATE） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 提交过于频繁（RATE_LIMITED） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPublicGalleries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数，1–100。 */
+                page_size: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开图库摘要分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicGalleryPageResponse"];
+                };
+            };
+            /** @description 越界分页（PAGE_OUT_OF_RANGE） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPublicGallery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 图库 Slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开图库详情（含条目） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicGalleryResponse"];
+                };
+            };
+            /** @description 图库不存在或未发布（GALLERY_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPublicJournals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页码，从 1 开始。 */
+                page: number;
+                /** @description 每页条数，1–100。 */
+                page_size: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开日志分页；列表项只含渲染后的 HTML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicJournalPageResponse"];
+                };
+            };
+            /** @description 越界分页（PAGE_OUT_OF_RANGE） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPublicLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开友情链接列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLinkResponse"][];
+                };
+            };
+        };
+    };
+    listPublicNavigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开导航两级树 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicNavigationNode"][];
+                };
+            };
+        };
+    };
+    getPublicPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页面 Slug */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已发布页面的公开详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPageResponse"];
+                };
+            };
+            /** @description 页面不存在或未发布（PAGE_NOT_FOUND） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPageComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 页面 Slug */
+                slug: string;
+                page: number;
+                /** @description 缺省时取站点设置 `comments_per_page`。 */
+                page_size: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已批准评论树分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCommentPageResponse"];
+                };
+            };
+            /** @description 页面不存在、未发布或分页越界（PAGE_OUT_OF_RANGE） */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listPhotos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 公开照片墙列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPhotoResponse"][];
+                };
+            };
+        };
+    };
+    searchPublicArticles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 搜索关键词，1–100 字符。 */
+                q: string | null;
+                page: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 搜索命中分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicArticlePageResponse"];
+                };
+            };
+            /** @description 关键词为空或过长（`INVALID_SEARCH_KEYWORD`） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 越界分页（`PAGE_OUT_OF_RANGE`） */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5904,22 +10155,23 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
+        /** @description 用户问题 */
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PublicSearchAskRequest"];
+                "application/json": components["schemas"]["AskRequest"];
             };
         };
         responses: {
-            /** @description SSE 流（`text/event-stream`）。 */
+            /** @description SSE 流（`text/event-stream`） */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": string;
+                    "text/event-stream": unknown;
                 };
             };
-            /** @description 问题为空或超过 300 字符（`INVALID_AI_INPUT`）。 */
+            /** @description 问题为空或超过 300 字符（`INVALID_AI_INPUT`） */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5928,7 +10180,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description AI 检索未开启（`AI_RETRIEVAL_DISABLED`）。 */
+            /** @description AI 检索未开启（`AI_RETRIEVAL_DISABLED`） */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5937,35 +10189,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    listRelatedArticles: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 相关文章列表（可能为空数组）。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RelatedArticle"][];
-                };
-            };
-            /** @description 文章不存在或 AI 检索未开启（`ARTICLE_NOT_FOUND` / `AI_RETRIEVAL_DISABLED`）。 */
-            404: {
+            /** @description 超过匿名限流（5 次/分钟 + 50 次/天） */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5975,426 +10200,30 @@ export interface operations {
             };
         };
     };
-    getPublicPage: {
+    searchSuggest: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                slug: string;
+                /** @description 搜索关键词，1–100 字符。 */
+                q: string | null;
+                /** @description 返回条数上限（1–20，默认 8）。 */
+                limit: number | null;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 已发布页面的公开详情。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPageDetail"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listPublicJournals: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开日志分页；列表项只含渲染后的 HTML。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicJournalPageResponse"];
-                };
-            };
-            /** @description 越界分页（`PAGE_OUT_OF_RANGE`）。 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    listPublicGalleries: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开图库摘要分页。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicGalleryPageResponse"];
-                };
-            };
-            /** @description 越界分页（`PAGE_OUT_OF_RANGE`）。 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    getPublicGallery: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开图库详情（含条目）。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicGalleryDetail"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listPublicLinks: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开友情链接列表。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicLink"][];
-                };
-            };
-        };
-    };
-    listPublicPhotos: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开照片墙列表。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPhoto"][];
-                };
-            };
-        };
-    };
-    listPublicArticleComments: {
-        parameters: {
-            query?: {
-                page?: number;
-                /** @description 缺省时取站点设置 `comments_per_page`。 */
-                page_size?: number;
-            };
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 已批准评论树分页。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicCommentPageResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    listPublicPageComments: {
-        parameters: {
-            query?: {
-                page?: number;
-                /** @description 缺省时取站点设置 `comments_per_page`。 */
-                page_size?: number;
-            };
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 已批准评论树分页。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicCommentPageResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-        };
-    };
-    createPublicComment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreatePublicCommentRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。 */
+            /** @description 建议列表（可能为空数组） */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicCommentCreated"];
+                    "application/json": components["schemas"]["SearchSuggestionResponse"][];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    replyPublicComment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReplyPublicCommentRequest"];
-            };
-        };
-        responses: {
-            /** @description 创建成功；`status` 供前端提示「待审核」。响应禁止缓存（no-store）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicCommentCreated"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    listPublicNavigation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 公开导航两级树。 */
-            200: {
-                headers: {
-                    /** @example public, max-age=60, stale-while-revalidate=300 */
-                    "Cache-Control"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicNavigationNode"][];
-                };
-            };
-        };
-    };
-    listAdminMedia: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                /** @description 按 `original_name` 模糊匹配。 */
-                keyword?: string;
-                provider?: "local" | "s3" | "legacy_url";
-                mime?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 仅返回 `active` 资产；稳定排序 `created_at DESC, id DESC`。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaPageResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    uploadAdminMedia: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    "file[]"?: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description 全部文件已入库；同内容 Hash 的资产带 `duplicate_of` 提示。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaAssetResponse"][];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    uploadAdminMediaFromUrl: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RemoteUploadRequest"];
-            };
-        };
-        responses: {
-            /** @description 远端文件已下载并入库。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaAssetResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    batchDeleteAdminMedia: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BatchDeleteMediaRequest"];
-            };
-        };
-        responses: {
-            /** @description 逐项归类结果（deleted / referenced / not_found 均按 ID 升序）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaBatchDeleteResult"];
-                };
-            };
-            /** @description 空批次或超过 100 个 ID（`INVALID_BATCH_DELETE`）。 */
+            /** @description 关键词为空或过长（`INVALID_SEARCH_KEYWORD`） */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6403,212 +10232,9 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
-    getAdminMedia: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 资产详情；已软删除的资产返回 404。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaAssetResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    updateAdminMedia: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateMediaRequest"];
-            };
-        };
-        responses: {
-            /** @description 资产已更新。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaAssetResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    deleteAdminMedia: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 已软删除。 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    listAdminMediaUsages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 资产的引用列表。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MediaUsageResponse"][];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    importAdminMarkdown: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    "file[]"?: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description 导入预览已生成。 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportJobResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-        };
-    };
-    getAdminImport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 导入预览（标题、Slug、警告、冲突标记）。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportJobResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    commitAdminImport: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CommitImportRequest"];
-            };
-        };
-        responses: {
-            /** @description 导入完成，Job 置为 Done。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommitImportResult"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getAdminSiteSettings: {
+    getPublicSite: {
         parameters: {
             query?: never;
             header?: never;
@@ -6617,80 +10243,70 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 单行站点设置。 */
+            /** @description 公开站点信息 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SiteSettingsResponse"];
+                    "application/json": components["schemas"]["PublicSiteResponse"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
-    updateAdminSiteSettings: {
+    listPublicTags: {
         parameters: {
             query?: never;
-            header: {
-                /** @description 必须精确匹配 `ADMIN_ORIGINS` 白名单中的一项；Browser 会自动发送。 */
-                Origin: components["parameters"]["Origin"];
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateSiteSettingsRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description 站点设置已更新。 */
+            /** @description 标签摘要列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SiteSettingsResponse"];
+                    "application/json": components["schemas"]["PublicTagResponse"][];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
-    getMediaFile: {
+    listTagArticles: {
         parameters: {
             query?: {
-                /** @description 缩略图目标宽度；等比缩放、不放大。 */
-                w?: number;
+                /** @description 页码，从 1 开始。 */
+                page?: number;
             };
             header?: never;
             path: {
-                path: string;
+                /** @description 标签 Slug */
+                slug: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 文件内容；Content-Type 按入库时的 MIME。 */
+            /** @description 分页文章列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": unknown;
+                    "application/json": components["schemas"]["PublicArticlePageResponse"];
                 };
             };
-            /** @description S3 Provider 时 Redirect 到公开 URL。 */
-            307: {
+            /** @description 标签不存在（`TAG_NOT_FOUND`）或页码越界（`PAGE_OUT_OF_RANGE`） */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
-            404: components["responses"]["NotFound"];
         };
     };
 }

@@ -308,14 +308,25 @@ async fn write_ai_audit(
 // 编辑器助手端点
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    title = "AiRewriteRequest",
+    description = "编辑器改写入参：选中的 Markdown 片段（trim 后 1–8000 字符）。"
+)]
 struct RewriteRequest {
+    /// 选中的 Markdown 片段。
     text: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    title = "AiArticleContextRequest",
+    description = "文章上下文入参：标题 + 正文 Markdown，合计 1–60000 字符。"
+)]
 struct SummaryRequest {
+    /// 文章标题。
     title: String,
+    /// 正文 Markdown；标题 + 正文合计不超过 60000 字符。
     content: String,
 }
 
@@ -366,6 +377,23 @@ async fn prepare_editor_call(
     load_ai_settings(state, true).await
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/ai/editor/rewrite",
+    tag = "Admin AI",
+    operation_id = "aiEditorRewrite",
+    summary = "改写选中的 Markdown 片段（SSE 流式）",
+    description = "需要 `content:manage` 权限与 `editor_assist` 功能开关。事件序列：`start`（feature/model/prompt_version）→ `delta` × N（`{text}`）→ `usage`（可选，token 用量）→ `done`；失败时以 `error`（`{code}`：`AI_PROVIDER_FAILED` / `AI_PROVIDER_TIMEOUT` / `AI_RATE_LIMITED` / `AI_INVALID_OUTPUT`）终止。每用户每分钟限 10 次。每次请求落 `ai_requests` 审计并写 Audit（不含完整 Prompt）。",
+    security(("cookieAuth" = [])),
+    request_body(content = RewriteRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "SSE 流", content_type = "text/event-stream"),
+        (status = 400, description = "输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn editor_rewrite(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -392,6 +420,23 @@ async fn editor_rewrite(
     ))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/ai/editor/summary",
+    tag = "Admin AI",
+    operation_id = "aiEditorSummary",
+    summary = "根据标题与正文生成摘要草稿（SSE 流式）",
+    description = "需要 `content:manage` 权限与 `editor_assist` 功能开关；事件序列与门禁同 `aiEditorRewrite`。",
+    security(("cookieAuth" = [])),
+    request_body(content = SummaryRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "SSE 流", content_type = "text/event-stream"),
+        (status = 400, description = "输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn editor_summary(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -417,6 +462,23 @@ async fn editor_summary(
     ))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/ai/editor/metadata",
+    tag = "Admin AI",
+    operation_id = "aiEditorMetadata",
+    summary = "建议 slug/keywords/description（SSE 流式）",
+    description = "Provider 被要求输出 JSON，服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端自行解析 delta 拼接的 JSON 文本。",
+    security(("cookieAuth" = [])),
+    request_body(content = SummaryRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "SSE 流", content_type = "text/event-stream"),
+        (status = 400, description = "输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn editor_metadata(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -444,6 +506,23 @@ async fn editor_metadata(
 }
 
 /// 标签推荐：输出 JSON `{"tags": [...]}`，前端按名称匹配/创建标签。
+#[utoipa::path(
+    post,
+    path = "/api/admin/ai/editor/tags",
+    tag = "Admin AI",
+    operation_id = "aiEditorTags",
+    summary = "根据标题与正文推荐文章标签（SSE 流式）",
+    description = "Provider 被要求输出 JSON（形如 `{\"tags\": [\"标签\"]}`），服务端在 `done` 前校验累积文本为合法 JSON，不合格以 `error`（`AI_INVALID_OUTPUT`）终止；前端按名称匹配现有标签或新建后选中。",
+    security(("cookieAuth" = [])),
+    request_body(content = SummaryRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "SSE 流", content_type = "text/event-stream"),
+        (status = 400, description = "输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn editor_tags(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -470,6 +549,23 @@ async fn editor_tags(
 }
 
 /// AI 导读：输出 150 字以内 TL;DR 纯文本，由前端写入文章 ai_brief 字段随文保存。
+#[utoipa::path(
+    post,
+    path = "/api/admin/ai/editor/brief",
+    tag = "Admin AI",
+    operation_id = "aiEditorBrief",
+    summary = "根据标题与正文生成 AI 导读 TL;DR（SSE 流式）",
+    description = "输出 150 字以内 TL;DR 纯文本；事件序列与门禁同 `aiEditorRewrite`；导读由前端写入文章 `ai_brief` 字段随文保存。",
+    security(("cookieAuth" = [])),
+    request_body(content = SummaryRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "SSE 流", content_type = "text/event-stream"),
+        (status = 400, description = "输入长度非法（INVALID_AI_INPUT）或 AI 未配置（AI_NOT_CONFIGURED）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限、AI 未启用（AI_DISABLED）或该功能未开启（AI_FEATURE_DISABLED）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn editor_brief(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -525,10 +621,11 @@ pub(crate) struct AiModelsResponse {
     security(("cookieAuth" = [])),
     responses(
         (status = 200, description = "可用模型 ID 列表", body = AiModelsResponse),
-        (status = 400, description = "未保存 api_key/base_url"),
-        (status = 401, description = "未认证"),
-        (status = 403, description = "无 settings:manage 权限"),
-        (status = 502, description = "Provider 请求失败或超时"),
+        (status = 400, description = "未保存 api_key/base_url", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 settings:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
+        (status = 502, description = "Provider 请求失败或超时", body = crate::openapi::ErrorResponse),
     )
 )]
 pub(crate) async fn list_ai_models(
@@ -559,37 +656,70 @@ pub(crate) async fn list_ai_models(
 // 用量审计查询
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 struct AiUsageParams {
+    /// 页码，从 1 开始。
     #[serde(default = "super::default_page")]
     page: u32,
+    /// 每页条数（1–100）。
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 按功能过滤：`editor_rewrite` / `editor_summary` / `editor_metadata` / `comment_moderation` / `editor_tags` / `ai_brief` / `search_ask`。
     feature: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+/// AI 请求审计记录；不存完整 Prompt。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct AiUsageItem {
     id: i64,
+    /// 功能标识，同查询参数 `feature` 的枚举值。
     feature: String,
+    /// 触发用户；null 表示系统触发（评论自动审核）。
     operator_user_id: Option<i64>,
+    /// 使用的模型 ID。
     model: String,
+    /// `success` / `failed` / `cancelled`。
     status: String,
+    /// Prompt Token 用量；失败或无用量报告时为 null。
     prompt_tokens: Option<i32>,
+    /// 补全 Token 用量；失败或无用量报告时为 null。
     completion_tokens: Option<i32>,
+    /// 端到端耗时（毫秒）。
     latency_ms: i32,
+    /// 失败分类（config/provider/timeout/rate_limited/invalid_output/store）。
     error_category: Option<String>,
     created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct AiUsagePageResponse {
+    /// 用量审计记录列表。
     items: Vec<AiUsageItem>,
+    /// 符合条件的总记录数。
     total: i64,
+    /// 当前页码。
     page: u32,
+    /// 每页条数。
     page_size: u32,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/ai/usage",
+    tag = "Admin AI",
+    operation_id = "listAiUsage",
+    summary = "AI 请求用量审计分页查询",
+    description = "需要 `settings:manage` 权限；可按 `feature` 过滤，按创建时间倒序。`operator_user_id` 为 null 表示系统触发（评论自动审核）。",
+    security(("cookieAuth" = [])),
+    params(AiUsageParams),
+    responses(
+        (status = 200, description = "用量审计分页", body = AiUsagePageResponse),
+        (status = 400, description = "feature 参数非法（INVALID_AI_PARAMETER）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 settings:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_ai_usage(
     State(state): State<AppState>,
     current: CurrentUser,

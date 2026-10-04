@@ -38,14 +38,34 @@ pub fn router() -> Router<AppState> {
 // ============================================================
 
 /// 公开页面 DTO：只回渲染后的 HTML 与展示字段，不回 Markdown 源与内部字段。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicPageResponse {
+    /// 页面 Slug。
     slug: String,
+    /// 页面标题。
     title: String,
+    /// 服务端渲染并 Sanitize 后的页面 HTML。
     content_html: String,
+    /// 最近更新时间。
     updated_at: OffsetDateTime,
 }
 
+/// 已发布页面的公开详情。
+#[utoipa::path(
+    get,
+    path = "/api/public/pages/{slug}",
+    tag = "Public Pages",
+    operation_id = "getPublicPage",
+    summary = "按 Slug 获取已发布页面详情",
+    description = "匿名可访问；只返回 `published` 页面。草稿、已删除或不存在的 Slug 一律返回 404 `PAGE_NOT_FOUND`。响应不含 Markdown 原文。",
+    params(
+        ("slug" = String, Path, description = "页面 Slug")
+    ),
+    responses(
+        (status = 200, description = "已发布页面的公开详情", body = PublicPageResponse),
+        (status = 404, description = "页面不存在或未发布（PAGE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_page(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -70,29 +90,53 @@ async fn get_page(
 // Journal
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct PublicJournalParams {
+    /// 页码，从 1 开始。
     #[serde(default = "crate::http::default_page")]
     page: u32,
+    /// 每页条数，1–100。
     #[serde(default = "crate::http::default_page_size")]
     page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+/// 公开日志条目：只含渲染后的 HTML。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicJournalResponse {
+    /// 日志 ID。
     id: i64,
+    /// 服务端渲染并 Sanitize 后的日志 HTML。
     content_html: String,
+    /// 创建时间。
     created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicJournalPageResponse {
+    /// 当前页条目。
     items: Vec<PublicJournalResponse>,
+    /// 总条目数。
     total: i64,
+    /// 当前页码。
     page: u32,
+    /// 每页条数。
     page_size: u32,
 }
 
+/// 公开日志分页列表。
+#[utoipa::path(
+    get,
+    path = "/api/public/journals",
+    tag = "Public Journals",
+    operation_id = "listPublicJournals",
+    summary = "分页获取公开日志列表",
+    description = "匿名可访问；只返回 `visibility = public` 的日志，`private` 内容永不进入结果集。稳定排序 `created_at DESC, id DESC`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(PublicJournalParams),
+    responses(
+        (status = 200, description = "公开日志分页；列表项只含渲染后的 HTML", body = PublicJournalPageResponse),
+        (status = 404, description = "越界分页（PAGE_OUT_OF_RANGE）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_journals(
     State(state): State<AppState>,
     Query(params): Query<PublicJournalParams>,
@@ -126,30 +170,55 @@ async fn list_journals(
 // Gallery
 // ============================================================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct PublicGalleryParams {
+    /// 页码，从 1 开始。
     #[serde(default = "crate::http::default_page")]
     page: u32,
+    /// 每页条数，1–100。
     #[serde(default = "crate::http::default_page_size")]
     page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+/// 公开图库摘要。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicGallerySummary {
+    /// 图库 Slug。
     slug: String,
+    /// 图库标题。
     title: String,
+    /// 图库描述。
     description: String,
+    /// 封面媒体公开 URL；无封面为 null。
     cover_url: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicGalleryPageResponse {
+    /// 当前页图库摘要。
     items: Vec<PublicGallerySummary>,
+    /// 总条目数。
     total: i64,
+    /// 当前页码。
     page: u32,
+    /// 每页条数。
     page_size: u32,
 }
 
+/// 公开图库摘要分页列表。
+#[utoipa::path(
+    get,
+    path = "/api/public/galleries",
+    tag = "Public Galleries",
+    operation_id = "listPublicGalleries",
+    summary = "分页获取公开图库摘要列表",
+    description = "匿名可访问；只返回 `published` 图库摘要，`cover_url` 取封面媒体的公开 URL。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(PublicGalleryParams),
+    responses(
+        (status = 200, description = "公开图库摘要分页", body = PublicGalleryPageResponse),
+        (status = 404, description = "越界分页（PAGE_OUT_OF_RANGE）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_galleries(
     State(state): State<AppState>,
     Query(params): Query<PublicGalleryParams>,
@@ -184,23 +253,48 @@ async fn list_galleries(
 }
 
 /// 公开图库条目：只回展示字段与媒体 URL/尺寸，不回内部 asset 元数据。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicGalleryItemResponse {
+    /// 媒体公开 URL。
     url: String,
+    /// 替代文本；条目未填时回退媒体资产自身的 `alt`。
     alt: String,
+    /// 拍摄地点。
     location: String,
+    /// 媒体宽度（像素）；未知为 null。
     width: Option<i32>,
+    /// 媒体高度（像素）；未知为 null。
     height: Option<i32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicGalleryResponse {
+    /// 图库 Slug。
     slug: String,
+    /// 图库标题。
     title: String,
+    /// 图库描述。
     description: String,
+    /// 图库条目列表；媒体缺失（软删除）的条目已被跳过。
     items: Vec<PublicGalleryItemResponse>,
 }
 
+/// 已发布图库的公开详情（含条目）。
+#[utoipa::path(
+    get,
+    path = "/api/public/galleries/{slug}",
+    tag = "Public Galleries",
+    operation_id = "getPublicGallery",
+    summary = "按 Slug 获取已发布图库详情",
+    description = "匿名可访问；只返回 `published` 图库，草稿、已删除或不存在的 Slug 一律返回 404 `GALLERY_NOT_FOUND`。条目携带媒体公开 URL 与尺寸；条目未填 `alt` 时回退媒体资产自身的 `alt`。",
+    params(
+        ("slug" = String, Path, description = "图库 Slug")
+    ),
+    responses(
+        (status = 200, description = "公开图库详情（含条目）", body = PublicGalleryResponse),
+        (status = 404, description = "图库不存在或未发布（GALLERY_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_gallery(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -247,18 +341,38 @@ async fn get_gallery(
 // ============================================================
 
 /// 公开照片墙条目：跨相册平铺，字段已含解析后的媒体 URL/尺寸与分类名。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicPhotoResponse {
+    /// 媒体公开 URL。
     url: String,
+    /// 替代文本。
     alt: String,
+    /// 拍摄地点。
     location: String,
+    /// 媒体宽度（像素）；未知为 null。
     width: Option<i32>,
+    /// 媒体高度（像素）；未知为 null。
     height: Option<i32>,
+    /// 所属图库 Slug。
     gallery_slug: String,
+    /// 所属图库标题。
     gallery_title: String,
+    /// 所属图库分类名；无分类为 null。
     category_name: Option<String>,
 }
 
+/// 公开照片墙列表。
+#[utoipa::path(
+    get,
+    path = "/api/public/photos",
+    tag = "Public Galleries",
+    operation_id = "listPhotos",
+    summary = "获取公开照片墙列表",
+    description = "匿名可访问的照片墙：跨相册平铺所有 `published` 且未删除相册的条目，不分页（对齐旧版 xue 主题的 GetAll 行为）。稳定排序 `galleries.sort_order ASC, galleries.id ASC, gallery_items.sort_order ASC`。",
+    responses(
+        (status = 200, description = "公开照片墙列表", body = [PublicPhotoResponse]),
+    )
+)]
 async fn list_photos(State(state): State<AppState>) -> Result<Response, ApiError> {
     // 不分页：个人博客照片量级一次拉完，对齐旧版 xue 的 GetAll 行为；
     // published/软删除过滤与排序规则在 Repository 的 JOIN 查询中固定。
@@ -285,16 +399,34 @@ async fn list_photos(State(state): State<AppState>) -> Result<Response, ApiError
 
 /// 公开友链 DTO：不回 status/sort_order 等管理字段；
 /// `category_name` 供前端按分类分组展示（对齐旧版 xue 主题的分组标题）。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct PublicLinkResponse {
+    /// 友链标题。
     title: String,
+    /// 友链 URL。
     url: String,
+    /// 图标 URL；无图标为 null。
     icon_url: Option<String>,
+    /// 友链描述。
     description: String,
+    /// 所属分类 ID；无分类为 null。
     category_id: Option<i64>,
+    /// 所属分类名（供前端分组展示）；无分类或解析失败为 null。
     category_name: Option<String>,
 }
 
+/// 公开友情链接列表。
+#[utoipa::path(
+    get,
+    path = "/api/public/links",
+    tag = "Public Links",
+    operation_id = "listPublicLinks",
+    summary = "获取公开友情链接列表",
+    description = "匿名可访问；只返回 `status = active` 的友情链接，不含管理字段。稳定排序 `sort_order ASC, id ASC`。",
+    responses(
+        (status = 200, description = "公开友情链接列表", body = [PublicLinkResponse]),
+    )
+)]
 async fn list_links(State(state): State<AppState>) -> Result<Response, ApiError> {
     // list_public 在 Repository 固定 status = 'active'。
     let links = state.links.list_public().await?;
@@ -329,14 +461,22 @@ async fn list_links(State(state): State<AppState>) -> Result<Response, ApiError>
 
 /// 公开导航节点：两级树，children 为一级节点的子菜单。
 /// `href` 为服务端解析后的路由地址，前端直接用于 NuxtLink，无需关心 target 拼路由规则。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(no_recursion)]
 struct PublicNavigationNode {
+    /// 菜单显示名。
     label: String,
+    /// 目标类型：`article` / `page` / `category` / `url`。
     target_type: String,
+    /// 内部目标 ID（article/page/category 时存在）。
     target_id: Option<i64>,
+    /// 外链地址；非 url 类型为 null。
     url: Option<String>,
+    /// 服务端解析后的可访问路由地址。
     href: Option<String>,
+    /// 是否新标签页打开。
     open_in_new_tab: bool,
+    /// 子菜单（仅一级节点可能有子节点）。
     children: Vec<PublicNavigationNode>,
 }
 
@@ -401,6 +541,18 @@ async fn to_public_node(
     }))
 }
 
+/// 公开导航两级树。
+#[utoipa::path(
+    get,
+    path = "/api/public/navigation",
+    tag = "Public Navigation",
+    operation_id = "listPublicNavigation",
+    summary = "获取公开导航两级树",
+    description = "匿名可访问；只返回 `visible = true` 的节点，组织为两级树（一级节点的 `children` 为其子菜单）。隐藏节点不出现在响应中。",
+    responses(
+        (status = 200, description = "公开导航两级树", body = [PublicNavigationNode]),
+    )
+)]
 async fn list_navigation(State(state): State<AppState>) -> Result<Response, ApiError> {
     // list_visible 仅返回 visible = true 的项，隐藏菜单不出现在公开响应中。
     let items = state.navigation.list_visible().await?;

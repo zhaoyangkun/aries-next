@@ -494,7 +494,7 @@ function applyArticle(article: AdminArticle) {
   seoKeywords.value = [...article.seo_keywords]
   allowComments.value = article.allow_comments
   isPinned.value = article.is_pinned
-  categoryId.value = article.category_id
+  categoryId.value = article.category_id ?? null
   tagIds.value = [...article.tag_ids]
   passwordProtected.value = article.password_protected
   newPassword.value = ''
@@ -1110,7 +1110,7 @@ function formatRevisionTime(value: string) {
                     </div>
                     <div class="flex gap-2">
                       <dt class="shrink-0 text-muted-foreground">分类</dt>
-                      <dd class="min-w-0 truncate">{{ categoryName(revision.category_id) }}</dd>
+                      <dd class="min-w-0 truncate">{{ categoryName(revision.category_id ?? null) }}</dd>
                     </div>
                     <div v-if="revision.seo_keywords.length" class="flex gap-2">
                       <dt class="shrink-0 text-muted-foreground">关键词</dt>

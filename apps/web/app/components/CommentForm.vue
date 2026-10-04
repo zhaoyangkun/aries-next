@@ -99,7 +99,8 @@ async function submit() {
       // 隐私模式等写入失败不影响提交结果
     }
     content.value = ''
-    emit('submitted', created.status)
+    // 后端契约中 status 为 string（仅返回 pending/approved 两种值），此处收窄为字面量联合。
+    emit('submitted', created.status as 'pending' | 'approved')
   }
   catch (error) {
     errorMessage.value = resolveError(error)

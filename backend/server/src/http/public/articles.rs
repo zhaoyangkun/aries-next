@@ -48,7 +48,7 @@ pub fn router() -> Router<AppState> {
         .route("/archives", get(list_public_archives))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct PublicArticleListParams {
     #[serde(default = "crate::http::default_page")]
     page: u32,
@@ -63,7 +63,7 @@ pub struct PublicArticleListParams {
 }
 
 /// Public 列表项剥离 `markdown_source`、`author_id`、`version` 等内部字段。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct PublicArticleListItem {
     id: i64,
     slug: String,
@@ -99,7 +99,7 @@ impl From<&Article> for PublicArticleListItem {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct PublicArticlePageResponse {
     pub items: Vec<PublicArticleListItem>,
     pub total: i64,
@@ -107,14 +107,14 @@ pub struct PublicArticlePageResponse {
     pub page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct TaxonomyRef {
     id: i64,
     name: String,
     slug: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct NeighborRef {
     slug: String,
     title: String,
@@ -122,7 +122,7 @@ struct NeighborRef {
 
 /// 公开详情：受密码保护且未解锁时 `rendered_html` 为 `null`；
 /// `markdown_source` 绝不出现在公开响应中。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct PublicArticleDetail {
     id: i64,
     slug: String,
@@ -152,31 +152,42 @@ pub struct PublicArticleDetail {
     updated_at: time::OffsetDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct UnlockRequest {
+    /// 访问密码。
     password: String,
 }
 
-#[derive(Debug, Deserialize)]
+/// 解锁成功响应：`Set-Cookie` 同时携带访问凭据。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+struct UnlockResponse {
+    /// 恒为 `true`。
+    unlocked: bool,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct SearchParams {
+    /// 搜索关键词，1–100 字符。
     q: Option<String>,
     #[serde(default = "crate::http::default_page")]
     page: u32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct SuggestParams {
+    /// 搜索关键词，1–100 字符。
     q: Option<String>,
+    /// 返回条数上限（1–20，默认 8）。
     limit: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct SearchSuggestionResponse {
     slug: String,
     title: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ArchiveArticleResponse {
     slug: String,
     title: String,
@@ -184,7 +195,7 @@ struct ArchiveArticleResponse {
     published_at: time::OffsetDateTime,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct ArchiveMonthResponse {
     year: i32,
     month: i32,
@@ -211,6 +222,19 @@ impl From<ArchiveMonth> for ArchiveMonthResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/articles",
+    tag = "Public Articles",
+    operation_id = "listPublicArticles",
+    summary = "已发布文章分页列表",
+    description = "匿名可访问；只返回 `published` 状态文章。固定排序 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`，不提供排序参数。缺省分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200），阻止爬虫沿 `?page=N` 生成无限重复 URL。",
+    params(PublicArticleListParams),
+    responses(
+        (status = 200, description = "返回已发布文章的分页结果；列表项不含 Markdown 原文与内部字段", body = PublicArticlePageResponse),
+        (status = 404, description = "越界分页（`PAGE_OUT_OF_RANGE`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_public_articles(
     State(state): State<AppState>,
     Query(params): Query<PublicArticleListParams>,
@@ -246,6 +270,21 @@ async fn list_public_articles(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/articles/{slug}",
+    tag = "Public Articles",
+    operation_id = "getPublicArticle",
+    summary = "已发布文章公开详情",
+    description = "匿名可访问；Slug 不区分大小写。草稿、回收站或不存在的 Slug 一律返回 404 `ARTICLE_NOT_FOUND`。受密码保护的文章返回 `password_protected: true` 且 `rendered_html: null`，携带有效解锁 Cookie（见 access 端点）后返回正文。普通文章响应 `Cache-Control: public, max-age=60`，密码文章为 `private, no-store`。",
+    params(
+        ("slug" = String, Path, description = "文章 Slug（不区分大小写）"),
+    ),
+    responses(
+        (status = 200, description = "返回已发布文章的公开详情；不含 `markdown_source`、`author_id`、`version`", body = PublicArticleDetail),
+        (status = 404, description = "文章不存在或未发布（`ARTICLE_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_public_article(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -337,12 +376,13 @@ const ASK_DAY_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 const ASK_MAX_QUESTION_CHARS: usize = 300;
 const ASK_CHUNK_LIMIT: usize = 8;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct RelatedParams {
+    /// 返回篇数上限（1–12，默认 6）。
     limit: Option<usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct RelatedArticleResponse {
     slug: String,
     title: String,
@@ -362,13 +402,14 @@ impl From<aries_core::retrieval::RelatedArticle> for RelatedArticleResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct AskRequest {
+    /// 用户问题，1–300 字符。
     question: String,
 }
 
 /// 对话式搜索引用的来源文章。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 struct AskSource {
     slug: String,
     title: String,
@@ -394,6 +435,22 @@ async fn smart_search_settings(state: &AppState) -> Result<aries_core::ai::AiSet
 
 /// 相关文章：以文章标题 + 摘要为查询向量，取相近的已发布文章。
 /// 文章无已发布状态或 AI 检索未开启时返回 404，空结果返回 200 空数组。
+#[utoipa::path(
+    get,
+    path = "/api/public/articles/{slug}/related",
+    tag = "Public Articles",
+    operation_id = "relatedArticles",
+    summary = "相关文章推荐",
+    description = "以文章标题 + 摘要为查询向量，返回内容相近的其他已发布文章（默认 6 篇，最多 12 篇）。`features.smart_search` 未开启、Embedding 未配置或文章不存在时返回 404；无相近文章返回 200 空数组。",
+    params(
+        ("slug" = String, Path, description = "文章 Slug（不区分大小写）"),
+        RelatedParams,
+    ),
+    responses(
+        (status = 200, description = "相关文章列表（可能为空数组）", body = [RelatedArticleResponse]),
+        (status = 404, description = "文章不存在或 AI 检索未开启（`ARTICLE_NOT_FOUND` / `AI_RETRIEVAL_DISABLED`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn related_articles(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -478,6 +535,21 @@ impl AskOut {
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/public/search/ask",
+    tag = "Public Articles",
+    operation_id = "searchAsk",
+    summary = "对话式站内搜索（AI 问答）",
+    description = "检索已发布文章内容块（配置 Embedding 时取向量近邻，否则降级为关键词搜索摘要），由 LLM 流式生成带引用序号的回答。SSE 事件序列：`start` → `delta` × N → `sources`（引用文章列表，`done` 之前）→ `usage` → `done`；失败以 `error` 事件终止。`features.smart_search` 未开启或 AI 未启用时返回 404 `AI_RETRIEVAL_DISABLED`；匿名限流 5 次/分钟 + 50 次/天（按客户端指纹）。",
+    request_body(content = AskRequest, description = "用户问题"),
+    responses(
+        (status = 200, description = "SSE 流（`text/event-stream`）", content_type = "text/event-stream"),
+        (status = 400, description = "问题为空或超过 300 字符（`INVALID_AI_INPUT`）", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "AI 检索未开启（`AI_RETRIEVAL_DISABLED`）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "超过匿名限流（5 次/分钟 + 50 次/天）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn search_ask(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -702,6 +774,25 @@ fn neighbor_ref(neighbors: &ArticleNeighbors, previous: bool) -> Option<Neighbor
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/public/articles/{slug}/access",
+    tag = "Public Articles",
+    operation_id = "unlockArticle",
+    summary = "密码文章解锁",
+    description = "校验访问密码；成功后下发 HttpOnly Cookie `aries_article_access_{article_id}`（Path `/`、SameSite=Lax、2 小时），值为 HMAC-SHA256 凭据，密码修改后自动失效。同一客户端对同一文章限流 5 次/分钟。响应对所有缓存 `no-store`。",
+    params(
+        ("slug" = String, Path, description = "文章 Slug（不区分大小写）"),
+    ),
+    request_body(content = UnlockRequest, description = "访问密码"),
+    responses(
+        (status = 200, description = "解锁成功，`Set-Cookie` 携带访问凭据", body = UnlockResponse),
+        (status = 400, description = "文章未设置访问密码（`ARTICLE_NOT_PROTECTED`）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "密码错误（`INVALID_ARTICLE_PASSWORD`）", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在或未发布（`ARTICLE_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+        (status = 429, description = "解锁尝试过于频繁（5 次/分钟）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn unlock_article(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -767,6 +858,28 @@ async fn unlock_article(
     Ok(response)
 }
 
+/// 浏览计数响应。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+struct ArticleViewResponse {
+    /// 当前浏览量。
+    visit_count: i64,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/public/articles/{slug}/views",
+    tag = "Public Articles",
+    operation_id = "recordArticleView",
+    summary = "记录文章浏览量",
+    description = "浏览量 +1；同一客户端（IP + User-Agent 指纹）30 分钟滑动窗口内重复调用只计一次，窗口内重复调用返回当前计数。客户端不能指定计数值。响应 `no-store`。",
+    params(
+        ("slug" = String, Path, description = "文章 Slug（不区分大小写）"),
+    ),
+    responses(
+        (status = 200, description = "当前浏览量", body = ArticleViewResponse),
+        (status = 404, description = "文章不存在或未发布（`ARTICLE_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn record_article_view(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -798,6 +911,20 @@ async fn record_article_view(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/search",
+    tag = "Public Articles",
+    operation_id = "searchPublicArticles",
+    summary = "全文搜索已发布文章",
+    description = "PostgreSQL FTS `simple` 分词，OR ILIKE 兜底标题与摘要，只命中 Published；结果不含正文全文。按相关度排序（标题命中 > 摘要命中 > 仅正文命中，同档按发布时间倒序）。摘要未覆盖的正文命中在 `matched_excerpt` 返回纯文本片段（Markdown 已剥离、两端可带 `…`），由前端负责关键词高亮；摘要已含关键词时不返回该字段。分页大小取站点设置 `page_size_search`。`page > 1` 且当前页无命中时返回 404 `PAGE_OUT_OF_RANGE`；page=1 无命中保持 200。",
+    params(SearchParams),
+    responses(
+        (status = 200, description = "搜索命中分页", body = PublicArticlePageResponse),
+        (status = 400, description = "关键词为空或过长（`INVALID_SEARCH_KEYWORD`）", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "越界分页（`PAGE_OUT_OF_RANGE`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn search_public_articles(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -835,6 +962,19 @@ async fn search_public_articles(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/search/suggest",
+    tag = "Public Articles",
+    operation_id = "searchSuggest",
+    summary = "搜索建议（输入即搜下拉）",
+    description = "标题/摘要包含匹配，标题前缀命中优先，按发布时间倒序取前 `limit` 条，只命中 Published。响应不可缓存。",
+    params(SuggestParams),
+    responses(
+        (status = 200, description = "建议列表（可能为空数组）", body = [SearchSuggestionResponse]),
+        (status = 400, description = "关键词为空或过长（`INVALID_SEARCH_KEYWORD`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn search_suggest(
     State(state): State<AppState>,
     Query(params): Query<SuggestParams>,
@@ -859,6 +999,17 @@ async fn search_suggest(
     Ok(json_with_cache(&body, CACHE_NO_STORE))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/archives",
+    tag = "Public Articles",
+    operation_id = "listPublicArchives",
+    summary = "文章归档聚合",
+    description = "Published 文章按 year/month 聚合，组间倒序、组内按发布时间倒序。",
+    responses(
+        (status = 200, description = "归档分组列表", body = [ArchiveMonthResponse]),
+    )
+)]
 async fn list_public_archives(State(state): State<AppState>) -> Result<Response, ApiError> {
     let months = state.content.list_public_archives().await?;
     let body: Vec<ArchiveMonthResponse> = months.into_iter().map(Into::into).collect();

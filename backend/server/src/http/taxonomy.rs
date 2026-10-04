@@ -30,16 +30,27 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    title = "CreateTaxonomyRequest",
+    description = "创建/更新分类或标签的请求体。"
+)]
 struct CreateTaxonomyRequest {
+    /// 显示名称；`slug` 缺省时以 name 归一化生成。
     name: String,
+    /// 自定义 Slug；缺省时取 name。
     slug: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct CategoryResponse {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "CategoryResponse",
+    description = "管理端分类 DTO；`/api/admin/categories` 固定 `kind = article`，link / gallery 分类由各自模块管理。"
+)]
+pub(crate) struct CategoryResponse {
     id: i64,
     parent_id: Option<i64>,
+    /// 分类类型（本模块固定为 `article`）。
     kind: String,
     name: String,
     slug: String,
@@ -59,7 +70,8 @@ impl From<Category> for CategoryResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "TagResponse", description = "管理端标签 DTO。")]
 struct TagResponse {
     id: i64,
     name: String,
@@ -76,6 +88,20 @@ impl From<Tag> for TagResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/categories",
+    tag = "Admin Taxonomy",
+    operation_id = "listCategories",
+    summary = "获取文章分类列表",
+    description = "管理端分类接口固定 article kind（link / gallery 分类由各自模块管理），返回可用于 Article Editor 的 Category 列表。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "分类列表", body = [CategoryResponse]),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_categories(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -86,6 +112,23 @@ async fn list_categories(
     Ok(Json(categories.into_iter().map(Into::into).collect()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/categories",
+    tag = "Admin Taxonomy",
+    operation_id = "createCategory",
+    summary = "新建文章分类",
+    description = "创建 article kind 分类；slug 缺省时以 name 归一化生成，唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    request_body(content = CreateTaxonomyRequest, description = "分类名称与可选 Slug"),
+    responses(
+        (status = 201, description = "返回新建的分类", body = CategoryResponse),
+        (status = 400, description = "参数校验失败", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "name 或 slug 已存在（`TAXONOMY_CONFLICT`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn create_category(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -115,6 +158,20 @@ async fn create_category(
     Ok((StatusCode::CREATED, Json(category.into())))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/tags",
+    tag = "Admin Taxonomy",
+    operation_id = "listTags",
+    summary = "获取标签列表",
+    description = "返回可用于 Article Editor 的 Tag 列表。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "标签列表", body = [TagResponse]),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_tags(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -124,6 +181,23 @@ async fn list_tags(
     Ok(Json(tags.into_iter().map(Into::into).collect()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/tags",
+    tag = "Admin Taxonomy",
+    operation_id = "createTag",
+    summary = "新建标签",
+    description = "slug 缺省时以 name 归一化生成，唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    request_body(content = CreateTaxonomyRequest, description = "标签名称与可选 Slug"),
+    responses(
+        (status = 201, description = "返回新建的标签", body = TagResponse),
+        (status = 400, description = "参数校验失败", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "name 或 slug 已存在（`TAXONOMY_CONFLICT`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn create_tag(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -143,6 +217,25 @@ async fn create_tag(
     Ok((StatusCode::CREATED, Json(tag.into())))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/categories/{id}",
+    tag = "Admin Taxonomy",
+    operation_id = "updateCategory",
+    summary = "更新文章分类",
+    description = "更新分类的 `name` / `slug`；slug 复用统一 Normalize 规则，唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "分类 ID")),
+    request_body(content = CreateTaxonomyRequest, description = "分类名称与可选 Slug"),
+    responses(
+        (status = 200, description = "返回更新后的分类", body = CategoryResponse),
+        (status = 400, description = "参数校验失败", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "分类不存在（`TAXONOMY_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "name 或 slug 已存在（`TAXONOMY_CONFLICT`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn update_category(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -174,6 +267,23 @@ async fn update_category(
     Ok(Json(category.into()))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/admin/categories/{id}",
+    tag = "Admin Taxonomy",
+    operation_id = "deleteCategory",
+    summary = "删除文章分类",
+    description = "仍被 Article 引用时返回 409，并在 `error.details` 携带引用信息。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "分类 ID")),
+    responses(
+        (status = 204, description = "分类已删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "分类不存在（`TAXONOMY_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "分类仍被引用", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn delete_category(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -196,6 +306,25 @@ async fn delete_category(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/tags/{id}",
+    tag = "Admin Taxonomy",
+    operation_id = "updateTag",
+    summary = "更新标签",
+    description = "更新标签的 `name` / `slug`；唯一冲突返回 409 `TAXONOMY_CONFLICT`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "标签 ID")),
+    request_body(content = CreateTaxonomyRequest, description = "标签名称与可选 Slug"),
+    responses(
+        (status = 200, description = "返回更新后的标签", body = TagResponse),
+        (status = 400, description = "参数校验失败", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "标签不存在（`TAXONOMY_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "name 或 slug 已存在（`TAXONOMY_CONFLICT`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn update_tag(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -219,6 +348,23 @@ async fn update_tag(
     Ok(Json(tag.into()))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/admin/tags/{id}",
+    tag = "Admin Taxonomy",
+    operation_id = "deleteTag",
+    summary = "删除标签",
+    description = "仍被 Article 引用时返回 409，并在 `error.details` 携带引用信息。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "标签 ID")),
+    responses(
+        (status = 204, description = "标签已删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "标签不存在（`TAXONOMY_NOT_FOUND`）", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "标签仍被引用", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn delete_tag(
     State(state): State<AppState>,
     current: CurrentUser,

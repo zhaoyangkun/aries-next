@@ -43,46 +43,60 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct CommentListParams {
     #[serde(default = "super::default_page")]
     page: u32,
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 按状态筛选：`pending` / `approved` / `rejected` / `spam` / `recycled`。
     status: Option<String>,
+    /// 按目标类型筛选：`article` / `page` / `link`。
     target_type: Option<String>,
+    /// 按目标 ID 筛选。
     target_id: Option<i64>,
+    /// 对内容 Markdown 与评论者名称做模糊匹配。
     keyword: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 struct CommentPageResponse {
     items: Vec<CommentResponse>,
+    /// 当前筛选条件下的评论总数。
     total: i64,
     page: u32,
     page_size: u32,
 }
 
 /// 评论 DTO：不返回 `ip_hash`/`user_agent_digest` 等内部字段。
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(super) struct CommentResponse {
     pub(super) id: i64,
+    /// 评论目标类型：`article` / `page` / `link`。
     target_type: String,
     target_id: i64,
+    /// 所属根评论 ID（根评论为自身 ID）。
     root_id: Option<i64>,
+    /// 直接父评论 ID；根评论为 null。
     parent_id: Option<i64>,
     author_name: String,
+    /// 仅 Admin API 返回，Public API 永不暴露。
     author_email: String,
     author_url: Option<String>,
     content_markdown: String,
+    /// 服务端 Comrak 渲染并 Sanitize 后的 HTML，可安全直出。
     content_html: String,
+    /// `pending` / `approved` / `rejected` / `spam` / `recycled`。
     status: String,
     is_admin_reply: bool,
+    /// 审核备注（状态变更时可选填写）。
     moderation_reason: Option<String>,
     moderated_at: Option<OffsetDateTime>,
     /// AI 审核结论（未审核为 null），供管理端辅助判断。
     ai_risk: Option<String>,
+    /// AI 给出的简短理由。
     ai_reason: Option<String>,
+    /// AI 置信度（0–1）。
     ai_confidence: Option<f32>,
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
@@ -114,6 +128,22 @@ impl From<Comment> for CommentResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/comments",
+    tag = "Admin Comments",
+    operation_id = "listComments",
+    summary = "Admin 评论列表",
+    description = "返回访客 Email 辅助审核判断；Public API 永不暴露该字段。支持按状态、目标类型/ID、关键词筛选。",
+    security(("cookieAuth" = [])),
+    params(CommentListParams),
+    responses(
+        (status = 200, description = "具备稳定 Total 语义的评论分页", body = CommentPageResponse),
+        (status = 400, description = "status / target_type 参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无评论审核权限", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_comments(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -154,6 +184,21 @@ async fn list_comments(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/comments/{id}",
+    tag = "Admin Comments",
+    operation_id = "getComment",
+    summary = "评论详情",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "评论 ID")),
+    responses(
+        (status = 200, description = "评论详情", body = CommentResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无评论审核权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "评论不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_comment(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -168,12 +213,33 @@ async fn get_comment(
     Ok(Json(comment.into()))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ChangeCommentStatusRequest {
+    /// 目标状态：`pending` / `approved` / `rejected` / `spam` / `recycled`。
     status: String,
+    /// 审核备注（可选，trim 后非空才持久化）。
     reason: Option<String>,
 }
 
+#[utoipa::path(
+    patch,
+    path = "/api/admin/comments/{id}/status",
+    tag = "Admin Comments",
+    operation_id = "changeCommentStatus",
+    summary = "评论审核（状态变更）",
+    description = "状态转换遵循 core 状态机：pending → approved/rejected/spam；approved/rejected/spam → recycled；recycled → approved（恢复并公开）。非法转换返回 409 `INVALID_COMMENT_TRANSITION`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "评论 ID")),
+    request_body(content = ChangeCommentStatusRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "状态变更成功", body = CommentResponse),
+        (status = 400, description = "status 参数非法", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无评论审核权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "评论不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "非法状态转换（INVALID_COMMENT_TRANSITION）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn change_comment_status(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -221,11 +287,30 @@ async fn change_comment_status(
     Ok(Json(comment.into()))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 struct ReplyCommentRequest {
+    /// Markdown 源文本，长度 1–2000 字符。
     content_markdown: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/admin/comments/{id}/reply",
+    tag = "Admin Comments",
+    operation_id = "replyToComment",
+    summary = "管理员回复评论",
+    description = "Markdown 渲染并 Sanitize 后返回，状态直接为 `approved` 并公开，署名取操作管理员的展示名。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "被回复的评论 ID")),
+    request_body(content = ReplyCommentRequest, content_type = "application/json"),
+    responses(
+        (status = 201, description = "回复已创建并公开", body = CommentResponse),
+        (status = 400, description = "内容长度非法（INVALID_COMMENT_CONTENT）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无评论审核权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "被回复的评论不存在", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn reply_to_comment(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -269,6 +354,23 @@ async fn reply_to_comment(
     Ok((StatusCode::CREATED, Json(comment.into())))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/admin/comments/{id}",
+    tag = "Admin Comments",
+    operation_id = "deleteComment",
+    summary = "物理删除评论",
+    description = "仅 `recycled` 状态允许物理删除，其余状态返回 409 `COMMENT_NOT_RECYCLED`。删除不可恢复。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "评论 ID")),
+    responses(
+        (status = 204, description = "评论已物理删除"),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无评论审核权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "评论不存在", body = crate::openapi::ErrorResponse),
+        (status = 409, description = "评论未进入 recycled 状态（COMMENT_NOT_RECYCLED）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn delete_comment(
     State(state): State<AppState>,
     current: CurrentUser,

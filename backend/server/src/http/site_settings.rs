@@ -15,18 +15,28 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/site-settings", get(get_settings).put(update_settings))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "SiteSettingsResponse", description = "单行站点设置。")]
 struct SiteSettingsResponse {
+    /// 站点名称（1–100 字符）。
     site_name: String,
     site_description: String,
+    /// 站点外部 URL；非空时必须是合法 http/https URL。
     site_url: String,
     logo_url: String,
+    /// ICP 备案号文本，展示在 Footer。
     icp_text: String,
+    /// 文章默认封面 URL。
     default_cover_url: String,
+    /// 首页分页大小（1–100）。
     page_size_index: i32,
+    /// 归档页分页大小（1–100）。
     page_size_archive: i32,
+    /// 搜索页分页大小（1–100）。
     page_size_search: i32,
+    /// 评论策略：`closed` / `moderated` / `auto_approve`。
     comment_policy: String,
+    /// 评论每页条数（5–100）。
     comments_per_page: i32,
     #[serde(with = "time::serde::rfc3339")]
     updated_at: time::OffsetDateTime,
@@ -51,8 +61,13 @@ impl From<SiteSettings> for SiteSettingsResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[schema(
+    title = "UpdateSiteSettingsRequest",
+    description = "全量更新站点设置。`site_url`/`logo_url`/`default_cover_url` 允许为空或以 `/` 开头的站内绝对路径，非空外链必须是 http/https URL（400 `INVALID_URL`）；三个 Page Size 取值 1–100（400 `INVALID_PAGE_SIZE`）；`comments_per_page` 取值 5–100；`comment_policy` 为 `closed`/`moderated`/`auto_approve`（400 `INVALID_COMMENT_POLICY`）。"
+)]
 struct UpdateSiteSettingsRequest {
+    /// 站点名称，Trim 后 1–100 字符（400 `INVALID_SITE_NAME`）。
     site_name: String,
     #[serde(default)]
     site_description: String,
@@ -67,8 +82,10 @@ struct UpdateSiteSettingsRequest {
     page_size_index: i32,
     page_size_archive: i32,
     page_size_search: i32,
+    /// 评论策略，缺省 `moderated`。
     #[serde(default = "default_comment_policy")]
     comment_policy: String,
+    /// 评论每页条数，缺省 20。
     #[serde(default = "default_comments_per_page")]
     comments_per_page: i32,
 }
@@ -81,6 +98,20 @@ fn default_comments_per_page() -> i32 {
     20
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/site-settings",
+    tag = "Admin Site Settings",
+    operation_id = "getSiteSettings",
+    summary = "读取站点设置",
+    description = "读取单行站点设置，仅 Owner（`settings:manage`）可访问。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "单行站点设置", body = SiteSettingsResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "非 Owner（settings:manage）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn get_settings(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -90,6 +121,22 @@ async fn get_settings(
     Ok(Json(settings.into()))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/admin/site-settings",
+    tag = "Admin Site Settings",
+    operation_id = "updateSiteSettings",
+    summary = "全量更新站点设置",
+    description = "全量更新站点设置；URL 字段允许为空、站内绝对路径或 http/https 外链，Page Size 取值 1–100，`comments_per_page` 取值 5–100。写 Audit（`site_settings.update`）。",
+    security(("cookieAuth" = [])),
+    request_body(content = UpdateSiteSettingsRequest, content_type = "application/json", description = "站点设置入参"),
+    responses(
+        (status = 200, description = "站点设置已更新", body = SiteSettingsResponse),
+        (status = 400, description = "字段校验失败（INVALID_SITE_NAME / INVALID_URL / INVALID_PAGE_SIZE 等）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "非 Owner（settings:manage）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn update_settings(
     State(state): State<AppState>,
     current: CurrentUser,

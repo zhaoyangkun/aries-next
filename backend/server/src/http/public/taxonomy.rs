@@ -23,29 +23,52 @@ pub fn router() -> Router<AppState> {
         .route("/tags/{slug}/articles", get(list_tag_articles))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "PublicCategoryResponse",
+    description = "公开分类摘要，含实时 Published 文章数。"
+)]
 struct PublicCategoryResponse {
     id: i64,
     name: String,
     slug: String,
     description: String,
+    /// 实时统计的 Published 文章数。
     article_count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "PublicTagResponse",
+    description = "公开标签摘要，含实时 Published 文章数。"
+)]
 struct PublicTagResponse {
     id: i64,
     name: String,
     slug: String,
+    /// 实时统计的 Published 文章数。
     article_count: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 struct TaxonomyArticlesParams {
+    /// 页码，从 1 开始。
     #[serde(default = "crate::http::default_page")]
     page: u32,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/categories",
+    tag = "Public Taxonomy",
+    operation_id = "listPublicCategories",
+    summary = "获取公开分类列表",
+    description = "kind 为 `article` 的分类列表，含实时 Published 文章数。",
+    responses(
+        (status = 200, description = "分类摘要列表", body = [PublicCategoryResponse]),
+    )
+)]
 async fn list_public_categories(State(state): State<AppState>) -> Result<Response, ApiError> {
     let categories = state.content.list_public_categories().await?;
     let body: Vec<PublicCategoryResponse> = categories
@@ -61,6 +84,17 @@ async fn list_public_categories(State(state): State<AppState>) -> Result<Respons
     Ok(json_with_cache(&body, CACHE_AGGREGATE))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/tags",
+    tag = "Public Taxonomy",
+    operation_id = "listPublicTags",
+    summary = "获取公开标签列表",
+    description = "标签列表，含实时 Published 文章数。",
+    responses(
+        (status = 200, description = "标签摘要列表", body = [PublicTagResponse]),
+    )
+)]
 async fn list_public_tags(State(state): State<AppState>) -> Result<Response, ApiError> {
     let tags = state.content.list_public_tags().await?;
     let body: Vec<PublicTagResponse> = tags
@@ -75,6 +109,22 @@ async fn list_public_tags(State(state): State<AppState>) -> Result<Response, Api
     Ok(json_with_cache(&body, CACHE_AGGREGATE))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/categories/{slug}/articles",
+    tag = "Public Taxonomy",
+    operation_id = "listCategoryArticles",
+    summary = "获取分类下的公开文章分页",
+    description = "该分类下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(
+        ("slug" = String, Path, description = "分类 Slug"),
+        TaxonomyArticlesParams,
+    ),
+    responses(
+        (status = 200, description = "分页文章列表", body = PublicArticlePageResponse),
+        (status = 404, description = "分类不存在（`CATEGORY_NOT_FOUND`）或页码越界（`PAGE_OUT_OF_RANGE`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_category_articles(
     State(state): State<AppState>,
     Path(slug): Path<String>,
@@ -108,6 +158,22 @@ async fn list_category_articles(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/public/tags/{slug}/articles",
+    tag = "Public Taxonomy",
+    operation_id = "listTagArticles",
+    summary = "获取标签下的公开文章分页",
+    description = "该标签下 Published 文章分页；分页大小取站点设置 `page_size_index`。`page > 1` 且当前页结果为空时返回 404 `PAGE_OUT_OF_RANGE`（page=1 空结果保持 200）。",
+    params(
+        ("slug" = String, Path, description = "标签 Slug"),
+        TaxonomyArticlesParams,
+    ),
+    responses(
+        (status = 200, description = "分页文章列表", body = PublicArticlePageResponse),
+        (status = 404, description = "标签不存在（`TAG_NOT_FOUND`）或页码越界（`PAGE_OUT_OF_RANGE`）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_tag_articles(
     State(state): State<AppState>,
     Path(slug): Path<String>,

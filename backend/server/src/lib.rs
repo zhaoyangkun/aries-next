@@ -345,11 +345,34 @@ async fn log_request_params(request: axum::extract::Request, next: Next) -> Resp
         .await
 }
 
-async fn live() -> Json<HealthResponse> {
+#[utoipa::path(
+    get,
+    path = "/api/health/live",
+    tag = "Health",
+    operation_id = "live",
+    summary = "存活探针",
+    description = "进程存活即返回 200；不检查数据库等外部依赖。",
+    responses((status = 200, description = "服务存活", body = crate::openapi::HealthView))
+)]
+pub(crate) async fn live() -> Json<HealthResponse> {
     Json(HealthResponse::live())
 }
 
-async fn ready(State(state): State<AppState>) -> Result<Json<HealthResponse>, StatusCode> {
+#[utoipa::path(
+    get,
+    path = "/api/health/ready",
+    tag = "Health",
+    operation_id = "ready",
+    summary = "就绪探针",
+    description = "额外执行 `SELECT 1` 检查数据库连通性，不可用时返回 503。",
+    responses(
+        (status = 200, description = "服务就绪", body = crate::openapi::HealthView),
+        (status = 503, description = "数据库不可用")
+    )
+)]
+pub(crate) async fn ready(
+    State(state): State<AppState>,
+) -> Result<Json<HealthResponse>, StatusCode> {
     sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(&state.database)
         .await

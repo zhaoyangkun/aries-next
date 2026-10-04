@@ -82,7 +82,7 @@ async fn openapi_docs_mounts_only_when_enabled() {
 
 #[test]
 fn exported_yaml_matches_committed_generated_file() {
-    // 漂移守护的本地等价物：CI 跑同一命令与 docs/openapi.generated.yaml 逐字节 diff。
+    // 漂移守护的本地等价物：CI 跑同一命令与 docs/openapi.yaml 逐字节 diff。
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_openapi-export"))
         .output()
         .expect("run openapi-export");
@@ -90,12 +90,12 @@ fn exported_yaml_matches_committed_generated_file() {
     let generated = String::from_utf8(output.stdout).unwrap();
     let committed = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../docs/openapi.generated.yaml"
+        "/../../docs/openapi.yaml"
     ))
-    .expect("read committed docs/openapi.generated.yaml");
+    .expect("read committed docs/openapi.yaml");
     assert_eq!(
         generated, committed,
-        "docs/openapi.generated.yaml 与代码注解脱节：请运行 \
-         `cargo run -p aries-server --bin openapi-export > docs/openapi.generated.yaml` 并提交"
+        "docs/openapi.yaml 与代码注解脱节：请运行 \
+         `cargo run -p aries-server --bin openapi-export > docs/openapi.yaml` 并提交"
     );
 }

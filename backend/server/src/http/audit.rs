@@ -17,19 +17,25 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/audit-logs", get(list_audit_logs))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
 struct AuditListParams {
+    /// 页码，从 1 开始。
     #[serde(default = "super::default_page")]
     page: u32,
+    /// 每页条数（1–100）。
     #[serde(default = "super::default_page_size")]
     page_size: u32,
+    /// 操作人 User ID 精确过滤。
     actor_user_id: Option<i64>,
+    /// 动作精确过滤，如 `article.created`、`comment.moderated`。
     action: Option<String>,
+    /// 目标类型精确过滤，如 `article`、`comment`、`site_settings`。
     target_type: Option<String>,
+    /// 目标 ID 精确过滤。
     target_id: Option<String>,
-    /// 时间范围按 `created_at` 左闭右开过滤，格式 RFC 3339。
-    /// 用 String 接收再手动解析，保证非法值走统一的 400 JSON 错误结构。
+    /// 时间范围起点（按 `created_at` 左闭右开过滤），格式 RFC 3339；非法值返回 400 `INVALID_DATE_RANGE`。
     start: Option<String>,
+    /// 时间范围终点，格式同 `start`。
     end: Option<String>,
 }
 
@@ -43,7 +49,8 @@ fn parse_rfc3339(value: &str) -> Result<OffsetDateTime, ApiError> {
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "AuditPageResponse", description = "审计日志分页。")]
 struct AuditPageResponse {
     items: Vec<AuditLogResponse>,
     total: i64,
@@ -51,7 +58,8 @@ struct AuditPageResponse {
     page_size: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "AuditLogEntry", description = "单条审计日志记录。")]
 struct AuditLogResponse {
     id: i64,
     actor_user_id: Option<i64>,
@@ -78,6 +86,22 @@ impl From<AuditLogEntry> for AuditLogResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/admin/audit-logs",
+    tag = "Admin Audit",
+    operation_id = "listAuditLogs",
+    summary = "审计日志查询",
+    description = "Admin 敏感操作审计日志查询，仅 Owner（`settings:manage`）可访问。时间范围按 `created_at` 左闭右开过滤，格式 RFC 3339；非法时间值返回 400 `INVALID_DATE_RANGE`。",
+    security(("cookieAuth" = [])),
+    params(AuditListParams),
+    responses(
+        (status = 200, description = "审计日志分页", body = AuditPageResponse),
+        (status = 400, description = "start/end 非合法 RFC 3339 时间", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "非 Owner（settings:manage）", body = crate::openapi::ErrorResponse),
+    )
+)]
 async fn list_audit_logs(
     State(state): State<AppState>,
     current: CurrentUser,
