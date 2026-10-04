@@ -89,6 +89,10 @@ impl AiProvider for FakeAiProvider {
             .extend(texts.iter().cloned());
         Ok(texts.iter().map(|_| vec![1.0_f32, 0.0, 0.0]).collect())
     }
+
+    async fn list_models(&self, _settings: &AiSettings) -> Result<Vec<String>, AiError> {
+        Ok(vec!["fake-model".to_owned()])
+    }
 }
 
 /// 解析 SSE 原始字节为 (event, data) 序列。

@@ -214,6 +214,10 @@ pub trait AiProvider: Send + Sync {
         settings: &AiSettings,
         texts: &[String],
     ) -> Result<Vec<Vec<f32>>, AiError>;
+
+    /// 拉取 Provider 当前账号可用的模型 ID 列表（管理端「获取模型」用）。
+    /// 只依赖 base_url/api_key/protocol，不要求 model 已配置或总开关已启用。
+    async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError>;
 }
 
 // ============================================================

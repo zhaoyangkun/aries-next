@@ -42,6 +42,7 @@ pub fn router() -> Router<AppState> {
         .route("/ai/editor/metadata", post(editor_metadata))
         .route("/ai/editor/tags", post(editor_tags))
         .route("/ai/editor/brief", post(editor_brief))
+        .route("/ai/models", get(list_ai_models))
         .route("/ai/usage", get(list_ai_usage))
 }
 
@@ -490,6 +491,46 @@ async fn editor_brief(
         input_len,
         false,
     ))
+}
+
+// ============================================================
+// 模型列表（管理端「获取模型」）
+// ============================================================
+
+/// 「获取模型」限流：每用户每分钟 10 次（内存滑动窗口）。
+const LIST_MODELS_RATE_LIMIT: usize = 10;
+const LIST_MODELS_RATE_WINDOW: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Serialize)]
+struct AiModelsResponse {
+    models: Vec<String>,
+}
+
+/// 拉取当前 Provider 账号的可用模型列表。
+/// 与编辑器助手不同：不要求总开关已启用、也不要求 model 已配置——
+/// 典型场景是配置阶段拉列表选模型；只要求已保存 api_key。
+async fn list_ai_models(
+    State(state): State<AppState>,
+    current: CurrentUser,
+) -> Result<Json<AiModelsResponse>, ApiError> {
+    current.require(Permission::ManageSettings)?;
+    let rate_key = format!("ai-models:{}", current.user.id);
+    let decision =
+        state
+            .rate_limiter
+            .check(&rate_key, LIST_MODELS_RATE_LIMIT, LIST_MODELS_RATE_WINDOW);
+    if !decision.allowed() {
+        return Err(ApiError::rate_limited_retry_after(decision.retry_after()));
+    }
+
+    let record = state.settings.get_group(SettingGroup::Ai).await?;
+    let settings: AiSettings =
+        serde_json::from_value(record.payload).map_err(|_| ApiError::internal())?;
+    if settings.api_key.as_deref().is_none_or(str::is_empty) {
+        return Err(AiError::Unconfigured.into());
+    }
+    let models = state.ai.list_models(&settings).await?;
+    Ok(Json(AiModelsResponse { models }))
 }
 
 // ============================================================

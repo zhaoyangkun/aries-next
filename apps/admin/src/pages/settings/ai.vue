@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2Icon, LoaderCircleIcon, SparklesIcon } from '@lucide/vue'
+import { CheckCircle2Icon, LoaderCircleIcon, RefreshCwIcon, SparklesIcon } from '@lucide/vue'
 import dayjs from 'dayjs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { AppDataTablePagination } from '@/shared/components/data-table'
 import AppEmptyState from '@/shared/components/AppEmptyState.vue'
 import { aiApi, type AiFeature, type AiRequestStatus, type AiUsageItem } from '@/modules/ai/api/ai'
 import { settingsGroupApi, type AiProtocol } from '@/modules/settings/api/settings'
-import { getApiError } from '@/shared/api/client'
+import { getApiError, getApiErrorCode } from '@/shared/api/client'
 
 import SettingsLayout from './components/settings-layout.vue'
 
@@ -38,6 +38,11 @@ const loading = ref(true)
 const saving = ref(false)
 const message = ref('')
 const error = ref('')
+
+// 「获取模型」：由服务端用已保存的 Provider 配置请求 /models，前端只做选择回填。
+const modelsLoading = ref(false)
+const modelOptions = ref<string[]>([])
+const modelsError = ref('')
 
 // 用量记录
 const usageItems = ref<AiUsageItem[]>([])
@@ -137,6 +142,26 @@ async function save() {
   }
 }
 
+async function fetchModels() {
+  if (modelsLoading.value) return
+  modelsLoading.value = true
+  modelsError.value = ''
+  try {
+    const models = await aiApi.listModels()
+    modelOptions.value = models
+    if (models.length === 0) modelsError.value = 'Provider 未返回可用模型，请手动输入'
+  }
+  catch (requestError) {
+    modelOptions.value = []
+    modelsError.value = getApiErrorCode(requestError) === 'AI_NOT_CONFIGURED'
+      ? '请先在下方保存 API Key（OpenAI 兼容协议还需 Base URL）后再获取'
+      : getApiError(requestError, '获取模型列表失败')
+  }
+  finally {
+    modelsLoading.value = false
+  }
+}
+
 async function loadUsage() {
   usageLoading.value = true
   usageError.value = ''
@@ -214,7 +239,31 @@ function tokenText(item: AiUsageItem) {
                 </div>
                 <div class="grid gap-2">
                   <label for="ai-model" class="text-sm font-medium leading-none">Model</label>
-                  <Input id="ai-model" v-model="form.model" :placeholder="modelPlaceholder" :disabled="loading || saving" />
+                  <div class="flex gap-2">
+                    <Input id="ai-model" v-model="form.model" class="flex-1" :placeholder="modelPlaceholder" :disabled="loading || saving" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      :disabled="loading || saving || modelsLoading"
+                      @click="fetchModels"
+                    >
+                      <LoaderCircleIcon v-if="modelsLoading" class="animate-spin" />
+                      <RefreshCwIcon v-else />
+                      {{ modelsLoading ? '获取中…' : '获取模型' }}
+                    </Button>
+                  </div>
+                  <select
+                    v-if="modelOptions.length > 0"
+                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    :value="form.model"
+                    :disabled="loading || saving"
+                    @change="form.model = ($event.target as HTMLSelectElement).value"
+                  >
+                    <option value="" disabled>选择模型…</option>
+                    <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
+                  </select>
+                  <p v-if="modelsError" class="text-xs text-destructive" role="alert">{{ modelsError }}</p>
+                  <p v-else-if="modelOptions.length > 0" class="text-xs text-muted-foreground">使用已保存的 API Key 从 Provider 拉取；选择后仍需点击「保存设置」生效。</p>
                 </div>
                 <p class="-mt-2 text-xs text-muted-foreground sm:col-span-2">{{ baseUrlHint }}</p>
               </div>

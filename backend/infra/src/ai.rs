@@ -19,6 +19,10 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 const ANTHROPIC_DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 /// Anthropic 强制要求 max_tokens，调用方未指定时的兜底值。
 const ANTHROPIC_DEFAULT_MAX_TOKENS: u32 = 1024;
+/// 拉取模型列表的短超时：管理端手动触发，Provider 不应让用户久等。
+const LIST_MODELS_TIMEOUT: Duration = Duration::from_secs(15);
+/// 模型列表上限：防止异常 Provider 返回超长列表撑爆响应。
+const LIST_MODELS_MAX: usize = 500;
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -270,6 +274,48 @@ impl AiProvider for OpenAiCompatibleProvider {
         let body: serde_json::Value = response.json().await.map_err(map_reqwest)?;
         parse_embedding_response(&body, texts.len())
     }
+
+    async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
+        // OpenAI 兼容协议没有默认端点，base_url 必填。
+        let base_url = settings
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(AiError::Unconfigured)?
+            .trim_end_matches('/');
+        let request = self
+            .client
+            .get(format!("{base_url}/models"))
+            .bearer_auth(settings.api_key.as_deref().unwrap_or_default());
+        let response = tokio::time::timeout(LIST_MODELS_TIMEOUT, request.send())
+            .await
+            .map_err(|_| AiError::Timeout)?
+            .map_err(map_reqwest)?;
+        ensure_success(&response)?;
+        let body: serde_json::Value = response.json().await.map_err(map_reqwest)?;
+        Ok(parse_model_list(&body))
+    }
+}
+
+/// 解析 `/models` 响应：`data` 数组每项取 `id`，去重排序并截断上限。
+fn parse_model_list(body: &serde_json::Value) -> Vec<String> {
+    let mut models: Vec<String> = body
+        .get("data")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(serde_json::Value::as_str))
+                .filter(|id| !id.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    models.sort();
+    models.dedup();
+    models.truncate(LIST_MODELS_MAX);
+    models
 }
 
 /// 解析 `/embeddings` 响应：`data` 数组每项取 `embedding`，数量须与输入一致（顺序即输入顺序）。
@@ -475,6 +521,27 @@ impl AiProvider for AnthropicProvider {
         tracing::warn!("anthropic provider does not support embeddings");
         Err(AiError::ProviderFailed)
     }
+
+    async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
+        let base_url = settings
+            .base_url
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .unwrap_or(ANTHROPIC_DEFAULT_BASE_URL)
+            .trim_end_matches('/');
+        let request = self
+            .client
+            .get(format!("{base_url}/v1/models"))
+            .header("x-api-key", settings.api_key.as_deref().unwrap_or_default())
+            .header("anthropic-version", ANTHROPIC_VERSION);
+        let response = tokio::time::timeout(LIST_MODELS_TIMEOUT, request.send())
+            .await
+            .map_err(|_| AiError::Timeout)?
+            .map_err(map_reqwest)?;
+        ensure_success(&response)?;
+        let body: serde_json::Value = response.json().await.map_err(map_reqwest)?;
+        Ok(parse_model_list(&body))
+    }
 }
 
 // ============================================================
@@ -531,6 +598,13 @@ impl AiProvider for DispatchingAiProvider {
         // embedding_base_url 固定为 OpenAI 兼容协议，与 chat 的 protocol 无关，
         // 因此 embed 始终路由到 OpenAI 适配器（Anthropic 适配器不支持 embed）。
         self.openai.embed(settings, texts).await
+    }
+
+    async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
+        match settings.protocol {
+            aries_core::ai::AiProtocol::OpenAi => self.openai.list_models(settings).await,
+            aries_core::ai::AiProtocol::Anthropic => self.anthropic.list_models(settings).await,
+        }
     }
 }
 
@@ -666,6 +740,23 @@ mod tests {
             }
             other => panic!("expected usage, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn model_list_parses_ids_and_dedups() {
+        let body = serde_json::json!({
+            "object": "list",
+            "data": [
+                { "id": "gpt-4o" },
+                { "id": "gpt-4o-mini", "created": 1 },
+                { "id": "gpt-4o" },
+                { "object": "model", "id": "" }
+            ]
+        });
+        assert_eq!(parse_model_list(&body), vec!["gpt-4o", "gpt-4o-mini"]);
+        // 缺 data / data 非数组 → 空列表（由 HTTP 层决定是否视为 InvalidOutput）。
+        assert!(parse_model_list(&serde_json::json!({})).is_empty());
+        assert!(parse_model_list(&serde_json::json!({ "data": "nope" })).is_empty());
     }
 
     #[test]

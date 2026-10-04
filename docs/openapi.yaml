@@ -2491,6 +2491,32 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /api/admin/ai/models:
+    get:
+      tags: [Admin AI]
+      operationId: listAiModels
+      description: 从已保存的 Provider 配置拉取当前账号可用模型列表（管理端「获取模型」）。只要求已保存 `api_key`，不要求总开关已启用或 `model` 已配置；OpenAI 兼容协议还要求已保存 `base_url`。每用户限流 10 次/分钟。
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: 可用模型 ID 列表（去重排序）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiModelsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '502':
+          description: Provider 请求失败（`AI_PROVIDER_FAILED`）或超时（`AI_PROVIDER_TIMEOUT`）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/admin/ai/usage:
     get:
       tags: [Admin AI]
@@ -5011,6 +5037,14 @@ components:
         total: { type: integer, format: int64 }
         page: { type: integer }
         page_size: { type: integer }
+    AiModelsResponse:
+      type: object
+      required: [models]
+      properties:
+        models:
+          type: array
+          items: { type: string }
+          description: Provider 返回的模型 ID 列表（去重排序，上限 500）。
     AppearanceSettings:
       type: object
       description: 外观设置；只含结构化字段，禁止任意 Script/head_content 注入。

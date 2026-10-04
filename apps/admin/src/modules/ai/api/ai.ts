@@ -28,6 +28,12 @@ export const aiApi = {
     const { data } = await api.get<AiUsagePage>('/api/admin/ai/usage', { params })
     return data
   },
+
+  /** 从服务端已保存的 Provider 配置拉取可用模型列表（服务端代理请求，不触浏览器 CORS）。 */
+  async listModels() {
+    const { data } = await api.get<{ models: string[] }>('/api/admin/ai/models')
+    return data.models
+  },
 }
 
 // ============================================================

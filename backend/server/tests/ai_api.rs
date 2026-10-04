@@ -118,6 +118,10 @@ impl AiProvider for FakeAiProvider {
             .extend(texts.iter().cloned());
         Ok(texts.iter().map(|_| vec![1.0_f32, 0.0, 0.0]).collect())
     }
+
+    async fn list_models(&self, _settings: &AiSettings) -> Result<Vec<String>, AiError> {
+        Ok(vec!["fake-model-a".to_owned(), "fake-model-b".to_owned()])
+    }
 }
 
 /// 解析 SSE 原始字节为 (event, data) 序列。
@@ -137,6 +141,99 @@ fn parse_sse(bytes: &[u8]) -> Vec<(String, String)> {
             event.zip(data)
         })
         .collect()
+}
+
+/// 「获取模型」：已保存 api_key 即可拉取（不要求启用总开关），未配置返回 400。
+#[tokio::test]
+async fn list_ai_models_requires_saved_api_key_but_not_enabled() -> anyhow::Result<()> {
+    let provider = Arc::new(FakeAiProvider::new());
+    let Some(app) = common::maybe_app_with_ai(Some(provider.clone())).await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        // 未配置 api_key → 400 AI_NOT_CONFIGURED。
+        let unconfigured = app
+            .admin_get("/api/admin/ai/models", &owner_cookie)
+            .await?;
+        ensure!(
+            unconfigured.status == StatusCode::BAD_REQUEST,
+            "{}",
+            unconfigured.body
+        );
+        ensure!(
+            unconfigured.body["error"]["code"] == "AI_NOT_CONFIGURED",
+            "{}",
+            unconfigured.body
+        );
+
+        // 只保存 api_key 与 base_url、不启用总开关 → 200。
+        let current = app.admin_get("/api/admin/settings/ai", &owner_cookie).await?;
+        let version = current.body["version"].as_i64().context("missing version")?;
+        let updated = app
+            .admin_put(
+                "/api/admin/settings/ai",
+                serde_json::json!({
+                    "expected_version": version,
+                    "settings": {
+                        "base_url": "https://fake.example.com/v1",
+                        "api_key": "sk-fake"
+                    }
+                }),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(updated.status == StatusCode::OK, "{}", updated.body);
+
+        let listed = app.admin_get("/api/admin/ai/models", &owner_cookie).await?;
+        ensure!(listed.status == StatusCode::OK, "{}", listed.body);
+        let models = listed.body["models"]
+            .as_array()
+            .context("missing models")?;
+        ensure!(
+            models.iter().any(|model| model == "fake-model-a"),
+            "{}",
+            listed.body
+        );
+
+        // editor（无 ManageSettings）→ 403。
+        let password_hash = app.state.passwords.hash("editor-pass-1")?;
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, display_name, role, status) \
+             VALUES ('models-editor', 'models-editor@example.com', $1, 'Editor', 'editor', 'active')",
+        )
+        .bind(&password_hash)
+        .execute(&app.state.database)
+        .await?;
+        let login = app
+            .admin_post(
+                "/api/admin/auth/login",
+                serde_json::json!({ "login": "models-editor", "password": "editor-pass-1" }),
+                None,
+            )
+            .await?;
+        ensure!(login.status == StatusCode::OK, "{}", login.body);
+        let editor_cookie = login
+            .set_cookie
+            .context("login did not set cookie")?
+            .split(';')
+            .next()
+            .context("failed to parse session cookie")?
+            .to_owned();
+        let forbidden = app.admin_get("/api/admin/ai/models", &editor_cookie).await?;
+        ensure!(
+            forbidden.status == StatusCode::FORBIDDEN,
+            "{}",
+            forbidden.body
+        );
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
 }
 
 /// 开启 AI 设置（editor_assist 与 comment_moderation 按需）。
