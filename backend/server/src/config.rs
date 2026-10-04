@@ -18,6 +18,9 @@ pub struct ServerConfig {
     pub slow_request_ms: u64,
     /// ERROR 尖峰阈值：最近 5 分钟 ERROR 日志数达到即打 WARN（未来可挂通知通道），0 关闭。
     pub log_error_spike_threshold: u64,
+    /// 是否挂载 OpenAPI 文档（Scalar UI，spec 内嵌页面）到 /api/docs。默认关闭：
+    /// 文档会暴露全部端点结构，生产环境按需显式开启。
+    pub openapi_docs_enabled: bool,
 }
 
 impl ServerConfig {
@@ -47,14 +50,16 @@ impl ServerConfig {
         }
 
         let app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_owned());
-        let cookie_secure =
-            parse_bool(env::var("SESSION_COOKIE_SECURE").ok().as_deref().unwrap_or(
+        let cookie_secure = parse_bool(
+            "SESSION_COOKIE_SECURE",
+            env::var("SESSION_COOKIE_SECURE").ok().as_deref().unwrap_or(
                 if app_env == "production" {
                     "true"
                 } else {
                     "false"
                 },
-            ))?;
+            ),
+        )?;
 
         let media_public_base_url =
             env::var("MEDIA_PUBLIC_BASE_URL").unwrap_or_else(|_| "/api/media/files".to_owned());
@@ -73,6 +78,10 @@ impl ServerConfig {
             .unwrap_or_else(|_| "10".to_owned())
             .parse::<u64>()
             .context("LOG_ERROR_SPIKE_THRESHOLD must be a non-negative integer")?;
+        let openapi_docs_enabled = parse_bool(
+            "OPENAPI_DOCS",
+            env::var("OPENAPI_DOCS").ok().as_deref().unwrap_or("false"),
+        )?;
 
         Ok(Self {
             address,
@@ -84,6 +93,7 @@ impl ServerConfig {
             media_provider,
             slow_request_ms,
             log_error_spike_threshold,
+            openapi_docs_enabled,
         })
     }
 }
@@ -120,11 +130,11 @@ fn parse_origins(value: &str) -> anyhow::Result<Vec<String>> {
     Ok(origins)
 }
 
-fn parse_bool(value: &str) -> anyhow::Result<bool> {
+fn parse_bool(name: &str, value: &str) -> anyhow::Result<bool> {
     match value {
         "true" | "1" => Ok(true),
         "false" | "0" => Ok(false),
-        _ => bail!("SESSION_COOKIE_SECURE must be true or false"),
+        _ => bail!("{name} must be true or false"),
     }
 }
 

@@ -503,15 +503,35 @@ async fn editor_brief(
 const LIST_MODELS_RATE_LIMIT: usize = 10;
 const LIST_MODELS_RATE_WINDOW: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Serialize)]
-struct AiModelsResponse {
-    models: Vec<String>,
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "AiModelsResponse",
+    description = "Provider 返回的模型 ID 列表（去重排序，上限 500）。"
+)]
+pub(crate) struct AiModelsResponse {
+    pub(crate) models: Vec<String>,
 }
 
 /// 拉取当前 Provider 账号的可用模型列表。
 /// 与编辑器助手不同：不要求总开关已启用、也不要求 model 已配置——
 /// 典型场景是配置阶段拉列表选模型；只要求已保存 api_key。
-async fn list_ai_models(
+#[utoipa::path(
+    get,
+    path = "/api/admin/ai/models",
+    tag = "Admin AI",
+    operation_id = "listAiModels",
+    summary = "拉取当前 Provider 账号的可用模型列表",
+    description = "只要求已保存 api_key，不要求总开关已启用或 model 已配置；OpenAI 兼容协议还要求已保存 base_url。每用户限流 10 次/分钟。",
+    security(("cookieAuth" = [])),
+    responses(
+        (status = 200, description = "可用模型 ID 列表", body = AiModelsResponse),
+        (status = 400, description = "未保存 api_key/base_url"),
+        (status = 401, description = "未认证"),
+        (status = 403, description = "无 settings:manage 权限"),
+        (status = 502, description = "Provider 请求失败或超时"),
+    )
+)]
+pub(crate) async fn list_ai_models(
     State(state): State<AppState>,
     current: CurrentUser,
 ) -> Result<Json<AiModelsResponse>, ApiError> {

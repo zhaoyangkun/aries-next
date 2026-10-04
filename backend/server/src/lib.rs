@@ -19,11 +19,14 @@ use tower_http::{
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     trace::TraceLayer,
 };
+use utoipa::OpenApi as _;
+use utoipa_scalar::Servable as _;
 
 pub mod config;
 pub mod http;
 pub mod log_store;
 pub mod logging;
+pub mod openapi;
 pub mod rate_limit;
 pub mod security;
 pub mod state;
@@ -124,7 +127,7 @@ pub fn build_app(state: AppState) -> anyhow::Result<Router> {
         );
 
     let hsts = hsts_enabled();
-    Ok(Router::new()
+    let mut router = Router::new()
         .route("/api/health/live", get(live))
         .route("/api/health/ready", get(ready))
         .route(
@@ -135,7 +138,24 @@ pub fn build_app(state: AppState) -> anyhow::Result<Router> {
         .route("/admin/", get(http::admin_spa::serve_root))
         .route("/admin/{*path}", get(http::admin_spa::serve))
         .nest("/api/admin", http::admin_router(state.clone()))
-        .nest("/api/public", http::public::router())
+        .nest("/api/public", http::public::router());
+
+    // OpenAPI 文档（Scalar UI，spec 内嵌于页面）仅在显式开启时挂载：
+    // 文档会暴露全部端点结构，生产默认关闭（OPENAPI_DOCS=true 开启）。
+    // 与其他路由同一中间件链（安全响应头/超时/request-id）。
+    if state.config.openapi_docs_enabled {
+        // spec 以 serde_json::Value 传入：避免 utoipa 主版本与 utoipa-scalar 内部
+        // 依赖版本不一致造成的类型冲突，Scalar 对 Value 与 OpenApi 同等支持。
+        // spec 由宏静态生成，序列化失败属于编程错误，启动期即失败优于静默空文档。
+        let spec = serde_json::to_value(openapi::ApiDoc::openapi())
+            .expect("OpenAPI spec serialization failed");
+        router = router.merge(Router::<AppState>::from(utoipa_scalar::Scalar::with_url(
+            "/api/docs",
+            spec,
+        )));
+    }
+
+    Ok(router
         .with_state(state)
         .layer(middleware::from_fn(log_request_params))
         .layer(trace_layer)

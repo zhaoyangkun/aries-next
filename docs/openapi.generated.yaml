@@ -1,0 +1,53 @@
+openapi: 3.1.0
+info:
+  title: Aries Next API
+  description: Aries Next 博客系统 API（utoipa 自动生成的迁移中子集，完整契约见 docs/openapi.yaml）
+  license:
+    name: MIT
+    identifier: MIT
+  version: 0.1.0
+servers:
+- url: /
+paths:
+  /api/admin/ai/models:
+    get:
+      tags:
+      - Admin AI
+      summary: 拉取当前 Provider 账号的可用模型列表
+      description: 只要求已保存 api_key，不要求总开关已启用或 model 已配置；OpenAI 兼容协议还要求已保存 base_url。每用户限流 10 次/分钟。
+      operationId: listAiModels
+      responses:
+        '200':
+          description: 可用模型 ID 列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiModelsResponse'
+        '400':
+          description: 未保存 api_key/base_url
+        '401':
+          description: 未认证
+        '403':
+          description: 无 settings:manage 权限
+        '502':
+          description: Provider 请求失败或超时
+      security:
+      - cookieAuth: []
+components:
+  schemas:
+    AiModelsResponse:
+      type: object
+      title: AiModelsResponse
+      description: Provider 返回的模型 ID 列表（去重排序，上限 500）。
+      required:
+      - models
+      properties:
+        models:
+          type: array
+          items:
+            type: string
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: aries_admin_session
