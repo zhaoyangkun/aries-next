@@ -95,7 +95,6 @@ fn exported_yaml_matches_committed_generated_file() {
     .expect("read committed docs/openapi.yaml");
     assert_eq!(
         generated, committed,
-        "docs/openapi.yaml 与代码注解脱节：请运行 \
-         `cargo run -p aries-server --bin openapi-export > docs/openapi.yaml` 并提交"
+        "docs/openapi.yaml 与代码注解脱节：请在仓库根目录运行 `pnpm sync:api` 并提交"
     );
 }

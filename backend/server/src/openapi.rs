@@ -3,8 +3,8 @@
 //! 全部端点已从手写 `docs/openapi.yaml` 迁移到代码注解，机器生成物即
 //! `docs/openapi.yaml` 本身，由 CI 漂移检查（导出结果与提交文件逐字节 diff）
 //! 和 `backend/server/tests/openapi_docs.rs` 保证代码与契约永不脱节。
-//! 修改 API 时只需更新注解后重新导出（`cargo run -p aries-server --bin
-//! openapi-export > docs/openapi.yaml`）。
+//! 修改 API 时只需更新注解后运行根目录 `pnpm sync:api`（重新导出 YAML 并刷新
+//! 前端类型），CI 漂移检查保证注解与生成物永不脱节。
 
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::{Modify, OpenApi};

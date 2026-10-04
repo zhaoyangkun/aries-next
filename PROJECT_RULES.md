@@ -90,7 +90,7 @@ API 路径按访问边界划分：
 - 公开接口不得返回密码、Token、内部路径、未发布内容或供应商密钥。
 - 错误响应使用统一结构，不能把 Rust/PgSQL 原始错误直接返回给客户端。
 - 写操作必须校验权限、输入格式和资源归属。
-- API Contract 由 utoipa 代码注解生成：`docs/openapi.yaml` 是机器生成物（`cargo run -p aries-server --bin openapi-export > docs/openapi.yaml`），端点变化必须同步更新注解并重新导出，CI 漂移检查与 `openapi_docs.rs` 测试会逐字节比对；前端 API Client 从生成物派生，导出后须重新 `pnpm --filter @aries/api-client generate`。
+- API Contract 由 utoipa 代码注解生成：`docs/openapi.yaml` 是机器生成物（注解改完后在仓库根目录跑 `pnpm sync:api` 一次性重新导出并刷新前端类型），CI 漂移检查与 `openapi_docs.rs` 测试会逐字节比对；前端 API Client 从生成物派生。
 
 ## 6. PostgreSQL 规范
 

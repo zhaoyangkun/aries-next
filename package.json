@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm --if-present -r test"
+    "test": "pnpm --if-present -r test",
+    "sync:api": "cargo run -p aries-server --bin openapi-export --quiet > docs/openapi.yaml && pnpm --filter @aries/api-client generate"
   }
 }

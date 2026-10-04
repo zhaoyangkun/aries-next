@@ -31,5 +31,5 @@
 ## 维护规则
 
 - 架构变化必须新增 ADR（见 `adr/0001` 的格式），而不是直接改写旧结论。
-- API 契约变化只改 `backend/server/src/http/` 下的 utoipa 注解并重新导出 `openapi.yaml`（其他文档引用它，不复制端点细节）；CI 漂移检查保证注解与生成物永不脱节。
+- API 契约变化只改 `backend/server/src/http/` 下的 utoipa 注解，然后在仓库根目录跑 `pnpm sync:api` 重新导出 `openapi.yaml` 并刷新前端类型（其他文档引用它，不复制端点细节）；CI 漂移检查保证注解与生成物永不脱节。
 - 功能完成后更新对应 Phase 文档的状态标记，并在文末记录与原计划的关键偏差。
