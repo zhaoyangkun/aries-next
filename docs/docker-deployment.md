@@ -357,7 +357,8 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 
 ```caddyfile
 www.example.com {
-    @backend path /api/* /admin/*    # 浏览器端公开 API、媒体文件与 Admin SPA
+    # /api/*、/admin 与 /admin/* 都要显式列出：path 通配 /admin/* 不匹配不带斜杠的 /admin
+    @backend path /api/* /admin /admin/*
     handle @backend {
         reverse_proxy server:8088   # 同源转发到 aries-server；密码文章解锁 Cookie 与
                                     # Admin Session Cookie（Path /api/admin）都依赖这条同源链路

@@ -179,6 +179,11 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # /admin 精确匹配重定向：location /admin/ 前缀不匹配不带斜杠的 /admin
+    location = /admin {
+        return 301 /admin/;
+    }
+
     location /admin/ {
         proxy_pass http://127.0.0.1:8088;
         proxy_set_header Host $host;

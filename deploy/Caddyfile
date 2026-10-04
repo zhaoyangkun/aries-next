@@ -40,7 +40,9 @@
 
 cangmang.xyz {
     import common                        # 复用压缩与安全头
-	@backend path /api/* /admin/*
+	# /admin 与 /admin/ 都要显式列出：path 通配 /admin/* 不匹配不带斜杠的 /admin，
+	# 漏掉会落到默认 handle 被转给 Nuxt 404（后端 /admin 自身有 308 → /admin/）
+	@backend path /api/* /admin /admin/*
 	handle @backend {
 		reverse_proxy aries-server:8088
 	}
