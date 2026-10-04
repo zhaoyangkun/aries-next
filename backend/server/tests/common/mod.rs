@@ -506,3 +506,57 @@ impl TestApp {
             .context("failed to parse session cookie")
     }
 }
+
+/// 惰性连接的 AppState：全部 Repository 为真实 PostgreSQL 实现但连接 lazy（不真正建连），
+/// 供不触库的纯 HTTP 层测试（/admin 静态服务、/api/docs 等）构造 Router，
+/// 避免在多个测试 Target 重复拼装 AppState。
+#[allow(dead_code)] // 共享 Harness：仅部分测试 Target 使用
+pub fn lazy_state(config: aries_server::config::ServerConfig) -> aries_server::state::AppState {
+    use std::sync::Arc;
+
+    let database = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://test:test@127.0.0.1:1/test")
+        .expect("lazy postgres pool");
+    aries_server::state::AppState {
+        database: database.clone(),
+        auth: Arc::new(aries_infra::PostgresAuthRepository::new(database.clone())),
+        content: Arc::new(aries_infra::PostgresContentRepository::new(
+            database.clone(),
+        )),
+        markdown: Arc::new(aries_infra::ComrakMarkdownRenderer),
+        passwords: Arc::new(aries_infra::Argon2PasswordHasher),
+        media: Arc::new(aries_infra::PostgresMediaRepository::new(database.clone())),
+        storage: Arc::new(aries_infra::storage::LocalMediaStorage::new(
+            std::env::temp_dir(),
+            MEDIA_PUBLIC_BASE_URL,
+        )),
+        jobs: Arc::new(aries_infra::PostgresJobRepository::new(database.clone())),
+        site_settings: Arc::new(aries_infra::PostgresSiteSettingsRepository::new(
+            database.clone(),
+        )),
+        comments: Arc::new(aries_infra::PostgresCommentRepository::new(
+            database.clone(),
+        )),
+        pages: Arc::new(aries_infra::PostgresPageRepository::new(database.clone())),
+        journals: Arc::new(aries_infra::PostgresJournalRepository::new(
+            database.clone(),
+        )),
+        galleries: Arc::new(aries_infra::PostgresGalleryRepository::new(
+            database.clone(),
+        )),
+        links: Arc::new(aries_infra::PostgresLinkRepository::new(database.clone())),
+        logs: Arc::new(aries_infra::PostgresLogRepository::new(database.clone())),
+        navigation: Arc::new(aries_infra::PostgresNavigationRepository::new(
+            database.clone(),
+        )),
+        settings: Arc::new(aries_infra::PostgresSettingRepository::new(
+            database.clone(),
+        )),
+        chunks: Arc::new(aries_infra::PostgresChunkRepository::new(database.clone())),
+        ai: Arc::new(aries_infra::DispatchingAiProvider::new()),
+        ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(database)),
+        config: Arc::new(config),
+        rate_limiter: Default::default(),
+        log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
+    }
+}

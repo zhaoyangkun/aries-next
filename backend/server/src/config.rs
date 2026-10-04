@@ -18,7 +18,7 @@ pub struct ServerConfig {
     pub slow_request_ms: u64,
     /// ERROR 尖峰阈值：最近 5 分钟 ERROR 日志数达到即打 WARN（未来可挂通知通道），0 关闭。
     pub log_error_spike_threshold: u64,
-    /// 是否挂载 OpenAPI 文档（Scalar UI + spec JSON）到 /api/docs。默认关闭：
+    /// 是否挂载 OpenAPI 文档（Scalar UI，spec 内嵌页面）到 /api/docs。默认关闭：
     /// 文档会暴露全部端点结构，生产环境按需显式开启。
     pub openapi_docs_enabled: bool,
 }
