@@ -99,6 +99,7 @@ pub async fn maybe_app_with_ai(
             media_provider: "local".to_owned(),
             slow_request_ms: 0,
             log_error_spike_threshold: 0,
+            openapi_docs_enabled: false,
         };
         // 与 main.rs 保持一致的组合方式，保证测试覆盖真实的 AppState 组装路径。
         let state = aries_server::state::AppState {

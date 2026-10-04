@@ -752,6 +752,7 @@ fn test_app_with_hasher(
             media_provider: "local".to_owned(),
             slow_request_ms: 0,
             log_error_spike_threshold: 0,
+            openapi_docs_enabled: false,
         }),
         rate_limiter: RateLimiter::default(),
         log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
