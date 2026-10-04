@@ -84,9 +84,18 @@ const deleting = ref(false)
 const reorderMode = computed(() => sort.value === 'sort_order')
 const reordering = ref(false)
 const dragIndex = ref<number | null>(null)
+const dropTargetIndex = ref<number | null>(null)
 watch(sort, (field) => {
   if (field === 'sort_order') order.value = 'asc'
 })
+
+// 拖拽视觉反馈：被拖行半透明，悬停目标行高亮（含顶部插入线语义）。
+const reorderRowClass = (row: AdminArticle) => {
+  const index = articles.value.indexOf(row)
+  if (index === dragIndex.value) return 'opacity-40'
+  if (index === dropTargetIndex.value) return 'bg-primary/10 shadow-[inset_0_2px_0_0_var(--primary)]'
+  return ''
+}
 
 const hasActiveFilter = computed(
   () => Boolean(keyword.value.trim()) || status.value !== 'all' || categoryId.value !== null || tagId.value !== null,
@@ -287,27 +296,38 @@ function moveBy(index: number, delta: -1 | 1) {
   void saveReorder(next)
 }
 
-function handleDragStart(index: number, event: DragEvent) {
-  dragIndex.value = index
-  event.dataTransfer?.setData('text/plain', String(index))
+// 整行拖拽（排序模式下由 AppDataTable 透传事件）：整行任意位置都可落下。
+function handleRowDragStart(row: AdminArticle, event: DragEvent) {
+  dragIndex.value = articles.value.indexOf(row)
+  event.dataTransfer?.setData('text/plain', String(dragIndex.value))
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
 }
 
-function handleDragOver(index: number, event: DragEvent) {
-  if (dragIndex.value === null || dragIndex.value === index) return
+function handleRowDragOver(row: AdminArticle, event: DragEvent) {
+  if (dragIndex.value === null || reordering.value) return
+  const target = articles.value.indexOf(row)
+  if (target === -1 || target === dragIndex.value) return
   event.preventDefault()
+  dropTargetIndex.value = target
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
 }
 
-function handleDrop(index: number, event: DragEvent) {
+function handleRowDrop(row: AdminArticle, event: DragEvent) {
   event.preventDefault()
   const from = dragIndex.value
+  const target = articles.value.indexOf(row)
   dragIndex.value = null
-  if (from === null || from === index) return
+  dropTargetIndex.value = null
+  if (from === null || target === -1 || from === target) return
   const next = [...articles.value]
   const [moved] = next.splice(from, 1)
-  next.splice(index, 0, moved)
+  next.splice(target, 0, moved)
   void saveReorder(next)
+}
+
+function handleRowDragEnd() {
+  dragIndex.value = null
+  dropTargetIndex.value = null
 }
 
 async function loadTaxonomy() {  try {
@@ -487,24 +507,20 @@ function authorText(article: AdminArticle) {
           <AppDataTable ref="tableRef" v-model:selection="selection" :data="articles" :columns="articleColumns"
             :loading="loading" :error="error" :sort-field="sort" :sort-order="order" selectable clickable
             :row-key="(article: AdminArticle) => article.id" :empty-icon="FileTextIcon"
+            :row-draggable="reorderMode" :row-class="reorderMode ? reorderRowClass : undefined"
             :empty-title="hasActiveFilter ? '没有匹配的文章' : '还没有文章'"
             :empty-description="hasActiveFilter ? '尝试修改关键词、筛选条件或切换文章状态。' : '创建第一篇草稿，开始整理站点内容。'"
-            @update:sort="handleSort" @row-click="openEditEditor" @retry="loadArticles">
+            @update:sort="handleSort" @row-click="openEditEditor" @retry="loadArticles"
+            @row-dragstart="handleRowDragStart" @row-dragover="handleRowDragOver"
+            @row-drop="handleRowDrop" @row-dragend="handleRowDragEnd">
             <template #cell-reorder="{ row }">
-              <div
-                class="flex h-full items-center gap-0.5"
-                @dragover="handleDragOver(articles.indexOf(row), $event)"
-                @drop="handleDrop(articles.indexOf(row), $event)"
-                @dragend="dragIndex = null"
-              >
+              <div class="flex h-full items-center gap-0.5">
                 <button
                   type="button"
                   class="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
                   :disabled="reordering"
-                  draggable="true"
                   aria-label="拖拽排序"
                   @click.stop
-                  @dragstart="handleDragStart(articles.indexOf(row), $event)"
                 >
                   <GripVerticalIcon class="size-4" />
                 </button>

@@ -48,14 +48,22 @@ const props = withDefaults(
     emptyTitle?: string
     emptyDescription?: string
     emptyIcon?: typeof FileQuestionIcon
+    /** 排序模式：整行可拖拽（仅建议排序场景开启，会禁用行内文本选择），事件经 row-drag* 透传父级。 */
+    rowDraggable?: boolean
+    /** 附加行 class（如拖拽高亮），由父级按行数据返回。 */
+    rowClass?: (row: TData) => string
   }>(),
-  { loading: false, error: '', sortOrder: 'desc', selectable: false, clickable: false },
+  { loading: false, error: '', sortOrder: 'desc', selectable: false, clickable: false, rowDraggable: false },
 )
 
 const emit = defineEmits<{
   'update:sort': [field: string]
   'update:selection': [selection: RowSelectionState]
   'row-click': [row: TData]
+  'row-dragstart': [row: TData, event: DragEvent]
+  'row-dragover': [row: TData, event: DragEvent]
+  'row-drop': [row: TData, event: DragEvent]
+  'row-dragend': [event: DragEvent]
   retry: []
 }>()
 
@@ -182,8 +190,17 @@ defineExpose({ table })
           v-for="row in rows"
           :key="row.id"
           :data-state="row.getIsSelected() ? 'selected' : undefined"
-          :class="[loading ? 'opacity-60' : '', clickable ? 'cursor-pointer' : '']"
+          :class="[
+            loading ? 'opacity-60' : '',
+            clickable ? 'cursor-pointer' : '',
+            rowClass?.(row.original) ?? '',
+          ]"
+          :draggable="rowDraggable || undefined"
           @click="clickable && emit('row-click', row.original)"
+          @dragstart="rowDraggable && emit('row-dragstart', row.original, $event)"
+          @dragover="rowDraggable && emit('row-dragover', row.original, $event)"
+          @drop="rowDraggable && emit('row-drop', row.original, $event)"
+          @dragend="rowDraggable && emit('row-dragend', $event)"
         >
           <TableCell
             v-for="cell in row.getVisibleCells()"
