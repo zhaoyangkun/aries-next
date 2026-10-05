@@ -4,11 +4,14 @@ import type { ColumnDef, RowSelectionState } from '@tanstack/vue-table'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ChevronsDownIcon,
+  ChevronsUpIcon,
   EllipsisIcon,
   FileTextIcon,
   FileUpIcon,
   GripVerticalIcon,
   PencilIcon,
+  PinIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
@@ -40,6 +43,7 @@ import {
 } from '@/modules/articles/api/articles'
 import { useSessionStore } from '@/modules/auth/stores/session'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 import {
   AppDataTable,
@@ -72,6 +76,10 @@ const total = ref(0)
 const loading = ref(false)
 const error = ref('')
 const operationError = ref('')
+// 非阻断性提示（如跨置顶分组移动被定序规则拒绝），走全局 toast。
+function showHint(message: string) {
+  toast.warning(message)
+}
 const confirmOpen = ref(false)
 const pendingArticle = ref<AdminArticle | null>(null)
 const pendingCommand = ref<ArticleStatusCommand | null>(null)
@@ -83,6 +91,8 @@ const deleting = ref(false)
 // 「排序」模式（sort_order 升序）下展示拖拽手柄与上下箭头；切到该模式固定升序。
 const reorderMode = computed(() => sort.value === 'sort_order')
 const reordering = ref(false)
+// 是否存在下一页：排序模式下据此判断页尾下移是否可用。
+const hasNextPage = computed(() => page.value * pageSize.value < total.value)
 const dragIndex = ref<number | null>(null)
 const dropTargetIndex = ref<number | null>(null)
 watch(sort, (field) => {
@@ -107,7 +117,7 @@ const reorderColumn: ColumnDef<AdminArticle, unknown> = {
   id: 'reorder',
   header: '排序',
   enableHiding: false,
-  meta: { headerClass: 'w-24', cellClass: 'w-24' },
+  meta: { headerClass: 'w-32', cellClass: 'w-32' },
 }
 
 const articleColumns = computed<ColumnDef<AdminArticle, unknown>[]>(() =>
@@ -227,6 +237,12 @@ const confirmation = computed(() => {
 onMounted(() => {
   loadArticles()
   loadTaxonomy()
+  // 空闲时预取 Vditor chunk（体积较大），首次打开编辑器时已下载解析完成；
+  // Safari 无 requestIdleCallback，用 setTimeout 兜底。
+  const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 2000))
+  idle(() => {
+    void import('vditor')
+  })
 })
 
 // 过滤/排序变化时回到第一页；翻页与每页数量变化时直接重新请求。
@@ -287,13 +303,59 @@ async function saveReorder(ordered: AdminArticle[]) {
   }
 }
 
-// 上下箭头：与相邻条目交换；页首/页尾跨页边界不可用。
+// 上下箭头：页内与相邻条目交换；页首上移（非第一页）与页尾下移（存在下一页）走跨页移动接口。
 function moveBy(index: number, delta: -1 | 1) {
   const target = index + delta
-  if (target < 0 || target >= articles.value.length) return
-  const next = [...articles.value]
-  ;[next[index], next[target]] = [next[target], next[index]]
-  void saveReorder(next)
+  if (target >= 0 && target < articles.value.length) {
+    // 定序规则为置顶恒前：跨置顶分组的交换刷新后会被弹回，直接拒绝并提示。
+    if (articles.value[index].is_pinned !== articles.value[target].is_pinned) {
+      showHint('置顶文章始终排在最前，不能跨越置顶分组调整顺序')
+      return
+    }
+    const next = [...articles.value]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    void saveReorder(next)
+    return
+  }
+  const article = articles.value[index]
+  if (!article || reordering.value) return
+  void moveAcrossPage(article, delta)
+}
+
+// 跨页移动：无法乐观交换，直接调 move 接口，成功后重新加载当前页对齐服务端状态；
+// moved=false 表示文章已在置顶分组边界（后端 no-op），给出提示。
+async function moveAcrossPage(article: AdminArticle, delta: -1 | 1) {
+  reordering.value = true
+  operationError.value = ''
+  try {
+    const moved = await articlesApi.move(article.id, delta === -1 ? 'up' : 'down')
+    if (!moved) showHint('置顶文章始终排在最前，该文章已到分组边界，无法继续移动')
+    await loadArticles()
+  }
+  catch (requestError) {
+    operationError.value = getApiError(requestError, '文章移动失败')
+  }
+  finally {
+    reordering.value = false
+  }
+}
+
+// 移到所在置顶分组的最前/最后：后端单条 UPDATE 完成，moved=false 表示已在分组边缘。
+async function moveToGroupEdge(article: AdminArticle, edge: 'top' | 'bottom') {
+  if (reordering.value) return
+  reordering.value = true
+  operationError.value = ''
+  try {
+    const moved = await articlesApi.move(article.id, edge)
+    if (!moved) showHint(edge === 'top' ? '该文章已在分组最前' : '该文章已在分组最后')
+    await loadArticles()
+  }
+  catch (requestError) {
+    operationError.value = getApiError(requestError, '文章移动失败')
+  }
+  finally {
+    reordering.value = false
+  }
 }
 
 // 整行拖拽（排序模式下由 AppDataTable 透传事件）：整行任意位置都可落下。
@@ -319,6 +381,11 @@ function handleRowDrop(row: AdminArticle, event: DragEvent) {
   dragIndex.value = null
   dropTargetIndex.value = null
   if (from === null || target === -1 || from === target) return
+  // 定序规则为置顶恒前：把文章拖到另一置顶分组刷新后会被弹回，直接拒绝并提示。
+  if (articles.value[from].is_pinned !== articles.value[target].is_pinned) {
+    showHint('置顶文章始终排在最前，不能跨越置顶分组调整顺序')
+    return
+  }
   const next = [...articles.value]
   const [moved] = next.splice(from, 1)
   next.splice(target, 0, moved)
@@ -527,7 +594,16 @@ function authorText(article: AdminArticle) {
                 <button
                   type="button"
                   class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
-                  :disabled="articles.indexOf(row) === 0 || reordering"
+                  :disabled="(articles.indexOf(row) === 0 && page === 1) || reordering"
+                  :aria-label="`将《${row.title}》移到最前`"
+                  @click.stop="moveToGroupEdge(row, 'top')"
+                >
+                  <ChevronsUpIcon class="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                  :disabled="(articles.indexOf(row) === 0 && page === 1) || reordering"
                   :aria-label="`上移《${row.title}》`"
                   @click.stop="moveBy(articles.indexOf(row), -1)"
                 >
@@ -536,17 +612,32 @@ function authorText(article: AdminArticle) {
                 <button
                   type="button"
                   class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
-                  :disabled="articles.indexOf(row) === articles.length - 1 || reordering"
+                  :disabled="(articles.indexOf(row) === articles.length - 1 && !hasNextPage) || reordering"
                   :aria-label="`下移《${row.title}》`"
                   @click.stop="moveBy(articles.indexOf(row), 1)"
                 >
                   <ArrowDownIcon class="size-3.5" />
                 </button>
+                <button
+                  type="button"
+                  class="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                  :disabled="(articles.indexOf(row) === articles.length - 1 && !hasNextPage) || reordering"
+                  :aria-label="`将《${row.title}》移到最后`"
+                  @click.stop="moveToGroupEdge(row, 'bottom')"
+                >
+                  <ChevronsDownIcon class="size-3.5" />
+                </button>
               </div>
             </template>
             <template #cell-title="{ row }">
               <div class="min-w-0 py-1">
-                <p class="truncate font-medium">{{ row.title }}</p>
+                <div class="flex items-center gap-1.5">
+                  <p class="truncate font-medium">{{ row.title }}</p>
+                  <Badge v-if="row.is_pinned" variant="secondary" class="shrink-0 gap-0.5 px-1.5">
+                    <PinIcon class="size-3" />
+                    置顶
+                  </Badge>
+                </div>
                 <p class="mt-0.5 truncate text-xs text-muted-foreground">/{{ row.slug }}</p>
               </div>
             </template>

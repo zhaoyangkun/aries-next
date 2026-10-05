@@ -102,6 +102,13 @@ export const articlesApi = {
     await api.put('/api/admin/articles/reorder', { article_ids: articleIds })
   },
 
+  // 跨页边界移动一篇文章（排序模式下页首上移/页尾下移，top/bottom 移到所在置顶分组最前/最后）；
+  // moved=false 表示文章已在置顶分组边界，位置未变（前端据此提示）。
+  async move(articleId: number, direction: 'up' | 'down' | 'top' | 'bottom') {
+    const { data } = await api.put<{ moved: boolean }>(`/api/admin/articles/${articleId}/move`, { direction })
+    return data.moved
+  },
+
   async changeStatus(
     articleId: number,
     command: ArticleStatusCommand,
