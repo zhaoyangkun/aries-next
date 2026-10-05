@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use crate::http::error::ApiError;
+use crate::http::extract::ApiJson;
 use crate::security::secrets_equal;
 use crate::state::AppState;
 
@@ -553,7 +554,7 @@ impl AskOut {
 async fn search_ask(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<AskRequest>,
+    ApiJson(request): ApiJson<AskRequest>,
 ) -> Result<Response, ApiError> {
     let question = request.question.trim().to_owned();
     if question.is_empty() || question.chars().count() > ASK_MAX_QUESTION_CHARS {
@@ -797,7 +798,7 @@ async fn unlock_article(
     State(state): State<AppState>,
     Path(slug): Path<String>,
     headers: HeaderMap,
-    Json(request): Json<UnlockRequest>,
+    ApiJson(request): ApiJson<UnlockRequest>,
 ) -> Result<Response, ApiError> {
     let article = state
         .content

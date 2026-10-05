@@ -17,7 +17,7 @@ use time::OffsetDateTime;
 
 use crate::state::AppState;
 
-use super::{articles::render_markdown, auth::CurrentUser, error::ApiError};
+use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -169,7 +169,7 @@ pub(crate) async fn list_pages(
 pub(crate) async fn create_page(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<PagePayload>,
+    ApiJson(request): ApiJson<PagePayload>,
 ) -> Result<(StatusCode, Json<PageResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request
@@ -249,7 +249,7 @@ pub(crate) async fn update_page(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(page_id): Path<i64>,
-    Json(request): Json<PagePayload>,
+    ApiJson(request): ApiJson<PagePayload>,
 ) -> Result<Json<PageResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request

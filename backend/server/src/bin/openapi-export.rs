@@ -1,10 +1,10 @@
-//! 导出 utoipa 自动生成的 OpenAPI 契约（已迁移模块子集）为 YAML 到 stdout。
+//! 导出 utoipa 注解生成的 OpenAPI 契约为 YAML 到 stdout。
 //!
-//! 用法（仓库根目录）：
-//!   cargo run -p aries-server --bin openapi-export > docs/openapi.generated.yaml
+//! docs/openapi.yaml 即由本命令生成（机器生成物，禁止手改），同步命令：
+//!   pnpm sync:api   # 重新导出 docs/openapi.yaml 并重新生成 packages/api-client 类型
 //!
-//! 该文件由 CI 漂移检查守护：改了注解必须重新导出并提交，否则构建失败。
-//! 全部端点迁移完成前，完整权威契约仍是手写的 docs/openapi.yaml。
+//! 漂移由契约测试 exported_yaml_matches_committed_generated_file 守护：
+//! 改了注解必须重新同步并提交，否则测试失败。
 
 fn main() -> anyhow::Result<()> {
     print!("{}", aries_server::openapi::to_yaml()?);

@@ -21,7 +21,7 @@ use time::OffsetDateTime;
 
 use crate::state::AppState;
 
-use super::{articles::render_markdown, auth::CurrentUser, error::ApiError};
+use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 const MIN_COMMENT_LENGTH: usize = 1;
 const MAX_COMMENT_LENGTH: usize = 2_000;
@@ -244,7 +244,7 @@ async fn change_comment_status(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(comment_id): Path<i64>,
-    Json(request): Json<ChangeCommentStatusRequest>,
+    ApiJson(request): ApiJson<ChangeCommentStatusRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
     current.require(Permission::ModerateComments)?;
     let target = CommentStatus::from_str(&request.status)?;
@@ -315,7 +315,7 @@ async fn reply_to_comment(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(comment_id): Path<i64>,
-    Json(request): Json<ReplyCommentRequest>,
+    ApiJson(request): ApiJson<ReplyCommentRequest>,
 ) -> Result<(StatusCode, Json<CommentResponse>), ApiError> {
     current.require(Permission::ModerateComments)?;
     let content = request.content_markdown.trim().to_owned();

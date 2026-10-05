@@ -30,7 +30,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::{articles::render_markdown, auth::CurrentUser, error::ApiError};
+use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 /// 上传请求体上限：5 个 5MB 文件 + Multipart 边界开销。
 const MAX_UPLOAD_REQUEST_BYTES: usize = MAX_BATCH_FILES * MAX_FILE_BYTES + 1024 * 1024;
@@ -290,7 +290,7 @@ async fn update_media(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(asset_id): Path<i64>,
-    Json(request): Json<UpdateMediaRequest>,
+    ApiJson(request): ApiJson<UpdateMediaRequest>,
 ) -> Result<Json<MediaAssetResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let existing = find_active_asset(&state, asset_id).await?;
@@ -413,7 +413,7 @@ async fn delete_media(
 async fn batch_delete_media(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<BatchDeleteMediaRequest>,
+    ApiJson(request): ApiJson<BatchDeleteMediaRequest>,
 ) -> Result<Json<BatchDeleteMediaResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     if request.ids.is_empty() || request.ids.len() > MAX_BATCH_DELETE {
@@ -567,7 +567,7 @@ async fn upload_media(
 async fn upload_remote(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<RemoteUploadRequest>,
+    ApiJson(request): ApiJson<RemoteUploadRequest>,
 ) -> Result<(StatusCode, Json<MediaAssetResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let file = fetch_remote(&request.url).await?;
@@ -1128,7 +1128,7 @@ async fn commit_import(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(job_id): Path<i64>,
-    Json(request): Json<CommitImportRequest>,
+    ApiJson(request): ApiJson<CommitImportRequest>,
 ) -> Result<Json<CommitResultResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let job = find_import_job(&state, job_id).await?;

@@ -22,6 +22,7 @@ use crate::state::AppState;
 use super::{
     auth::CurrentUser,
     error::ApiError,
+    extract::ApiJson,
     taxonomy::{CategoryResponse, map_taxonomy_error},
 };
 
@@ -196,7 +197,7 @@ pub(crate) async fn list_links(
 pub(crate) async fn create_link(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<LinkPayload>,
+    ApiJson(request): ApiJson<LinkPayload>,
 ) -> Result<(StatusCode, Json<LinkResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request
@@ -274,7 +275,7 @@ pub(crate) async fn update_link(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(link_id): Path<i64>,
-    Json(request): Json<LinkPayload>,
+    ApiJson(request): ApiJson<LinkPayload>,
 ) -> Result<Json<LinkResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request
@@ -377,7 +378,7 @@ pub(crate) async fn list_link_categories(
 pub(crate) async fn create_link_category(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<CategoryPayload>,
+    ApiJson(request): ApiJson<CategoryPayload>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());
@@ -420,7 +421,7 @@ pub(crate) async fn update_link_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(category_id): Path<i64>,
-    Json(request): Json<CategoryPayload>,
+    ApiJson(request): ApiJson<CategoryPayload>,
 ) -> Result<Json<CategoryResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());

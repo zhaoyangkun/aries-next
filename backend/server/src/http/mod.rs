@@ -6,6 +6,7 @@ pub mod auth;
 pub mod comments;
 pub mod dashboard;
 pub mod error;
+pub mod extract;
 pub mod galleries;
 pub mod journals;
 pub mod links;

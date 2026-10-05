@@ -24,7 +24,7 @@ use time::OffsetDateTime;
 
 use crate::state::AppState;
 
-use super::{auth::CurrentUser, error::ApiError};
+use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new().route(
@@ -298,7 +298,7 @@ async fn update_setting_group(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(group): Path<String>,
-    Json(request): Json<SettingUpdateRequest>,
+    ApiJson(request): ApiJson<SettingUpdateRequest>,
 ) -> Result<Json<SettingGroupResponse>, ApiError> {
     current.require(Permission::ManageSettings)?;
     let group = SettingGroup::from_str(&group)?;

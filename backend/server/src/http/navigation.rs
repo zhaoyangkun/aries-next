@@ -17,7 +17,7 @@ use time::OffsetDateTime;
 
 use crate::state::AppState;
 
-use super::{auth::CurrentUser, error::ApiError};
+use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -139,7 +139,7 @@ pub(crate) async fn list_navigation(
 pub(crate) async fn create_navigation_item(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<NavigationPayload>,
+    ApiJson(request): ApiJson<NavigationPayload>,
 ) -> Result<(StatusCode, Json<NavigationItemResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let target_type = NavigationTargetType::from_str(&request.target_type)?;
@@ -183,7 +183,7 @@ pub(crate) async fn update_navigation_item(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(item_id): Path<i64>,
-    Json(request): Json<NavigationPayload>,
+    ApiJson(request): ApiJson<NavigationPayload>,
 ) -> Result<Json<NavigationItemResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let target_type = NavigationTargetType::from_str(&request.target_type)?;
@@ -256,7 +256,7 @@ pub(crate) async fn delete_navigation_item(
 pub(crate) async fn reorder_navigation(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<NavigationOrderPayload>,
+    ApiJson(request): ApiJson<NavigationOrderPayload>,
 ) -> Result<StatusCode, ApiError> {
     current.require(Permission::ManageContent)?;
     // 事务内原子重写 sort_order；任一 id 不存在则整体回滚。

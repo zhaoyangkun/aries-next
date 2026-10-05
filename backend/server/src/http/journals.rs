@@ -20,7 +20,7 @@ use time::OffsetDateTime;
 
 use crate::state::AppState;
 
-use super::{articles::render_markdown, auth::CurrentUser, error::ApiError};
+use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -156,7 +156,7 @@ async fn list_journals(
 async fn create_journal(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<JournalPayload>,
+    ApiJson(request): ApiJson<JournalPayload>,
 ) -> Result<(StatusCode, Json<JournalResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let visibility = request
@@ -230,7 +230,7 @@ async fn update_journal(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(journal_id): Path<i64>,
-    Json(request): Json<JournalPayload>,
+    ApiJson(request): ApiJson<JournalPayload>,
 ) -> Result<Json<JournalResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let visibility = request

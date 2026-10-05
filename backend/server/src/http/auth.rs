@@ -22,7 +22,7 @@ use crate::{
     state::AppState,
 };
 
-use super::error::ApiError;
+use super::{error::ApiError, extract::ApiJson};
 
 const SESSION_COOKIE: &str = "aries_admin_session";
 const LOGIN_LIMIT: usize = 5;
@@ -251,7 +251,7 @@ async fn bootstrap(
     State(state): State<AppState>,
     jar: CookieJar,
     headers: HeaderMap,
-    Json(request): Json<BootstrapRequest>,
+    ApiJson(request): ApiJson<BootstrapRequest>,
 ) -> Result<(CookieJar, Json<SessionResponse>), ApiError> {
     let decision = state
         .rate_limiter
@@ -331,7 +331,7 @@ async fn login(
     jar: CookieJar,
     headers: HeaderMap,
     peer: Option<ClientPeer>,
-    Json(request): Json<LoginRequest>,
+    ApiJson(request): ApiJson<LoginRequest>,
 ) -> Result<(CookieJar, Json<SessionResponse>), ApiError> {
     let login = request.login.trim().to_ascii_lowercase();
     let rate_key = format!("login:{login}");
@@ -497,7 +497,7 @@ async fn session(current: CurrentUser) -> Json<SessionResponse> {
 )]
 async fn forgot_password(
     State(state): State<AppState>,
-    Json(request): Json<ForgotPasswordRequest>,
+    ApiJson(request): ApiJson<ForgotPasswordRequest>,
 ) -> Result<(StatusCode, Json<MessageResponse>), ApiError> {
     let email = normalize_email(&request.email)?;
     let decision = state
@@ -556,7 +556,7 @@ async fn forgot_password(
 )]
 async fn reset_password(
     State(state): State<AppState>,
-    Json(request): Json<ResetPasswordRequest>,
+    ApiJson(request): ApiJson<ResetPasswordRequest>,
 ) -> Result<StatusCode, ApiError> {
     validate_password(&request.password)?;
     let token_hash = hash_token(&request.token);

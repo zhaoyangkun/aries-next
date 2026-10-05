@@ -26,7 +26,7 @@ use tokio::sync::mpsc;
 
 use crate::state::AppState;
 
-use super::{auth::CurrentUser, error::ApiError};
+use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 /// 编辑器助手限流：每用户每分钟 10 次（内存滑动窗口，进程重启清零）。
 const AI_RATE_LIMIT: usize = 10;
@@ -397,7 +397,7 @@ async fn prepare_editor_call(
 async fn editor_rewrite(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<RewriteRequest>,
+    ApiJson(request): ApiJson<RewriteRequest>,
 ) -> Result<Response, ApiError> {
     let text = request.text.trim().to_owned();
     let settings =
@@ -440,7 +440,7 @@ async fn editor_rewrite(
 async fn editor_summary(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SummaryRequest>,
+    ApiJson(request): ApiJson<SummaryRequest>,
 ) -> Result<Response, ApiError> {
     let input_len = request.title.chars().count() + request.content.chars().count();
     let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;
@@ -482,7 +482,7 @@ async fn editor_summary(
 async fn editor_metadata(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SummaryRequest>,
+    ApiJson(request): ApiJson<SummaryRequest>,
 ) -> Result<Response, ApiError> {
     let input_len = request.title.chars().count() + request.content.chars().count();
     let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;
@@ -526,7 +526,7 @@ async fn editor_metadata(
 async fn editor_tags(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SummaryRequest>,
+    ApiJson(request): ApiJson<SummaryRequest>,
 ) -> Result<Response, ApiError> {
     let input_len = request.title.chars().count() + request.content.chars().count();
     let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;
@@ -569,7 +569,7 @@ async fn editor_tags(
 async fn editor_brief(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SummaryRequest>,
+    ApiJson(request): ApiJson<SummaryRequest>,
 ) -> Result<Response, ApiError> {
     let input_len = request.title.chars().count() + request.content.chars().count();
     let settings = prepare_editor_call(&state, &current, input_len, MAX_CONTENT_LENGTH).await?;

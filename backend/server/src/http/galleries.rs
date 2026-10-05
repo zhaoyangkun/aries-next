@@ -25,6 +25,7 @@ use crate::state::AppState;
 use super::{
     auth::CurrentUser,
     error::ApiError,
+    extract::ApiJson,
     taxonomy::{CategoryResponse, map_taxonomy_error},
 };
 
@@ -292,7 +293,7 @@ pub(crate) async fn list_galleries(
 pub(crate) async fn create_gallery(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<GalleryPayload>,
+    ApiJson(request): ApiJson<GalleryPayload>,
 ) -> Result<(StatusCode, Json<GalleryResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request
@@ -371,7 +372,7 @@ pub(crate) async fn update_gallery(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(gallery_id): Path<i64>,
-    Json(request): Json<GalleryPayload>,
+    ApiJson(request): ApiJson<GalleryPayload>,
 ) -> Result<Json<GalleryResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let status = request
@@ -488,7 +489,7 @@ pub(crate) async fn add_gallery_item(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(gallery_id): Path<i64>,
-    Json(request): Json<GalleryItemPayload>,
+    ApiJson(request): ApiJson<GalleryItemPayload>,
 ) -> Result<(StatusCode, Json<GalleryItemResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let item = state
@@ -531,7 +532,7 @@ pub(crate) async fn update_gallery_item(
     State(state): State<AppState>,
     current: CurrentUser,
     Path((gallery_id, item_id)): Path<(i64, i64)>,
-    Json(request): Json<GalleryItemUpdatePayload>,
+    ApiJson(request): ApiJson<GalleryItemUpdatePayload>,
 ) -> Result<Json<GalleryItemResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let item = state
@@ -601,7 +602,7 @@ pub(crate) async fn reorder_gallery_items(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(gallery_id): Path<i64>,
-    Json(request): Json<GalleryItemOrderPayload>,
+    ApiJson(request): ApiJson<GalleryItemOrderPayload>,
 ) -> Result<StatusCode, ApiError> {
     current.require(Permission::ManageContent)?;
     state
@@ -661,7 +662,7 @@ pub(crate) async fn list_gallery_categories(
 pub(crate) async fn create_gallery_category(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<CategoryPayload>,
+    ApiJson(request): ApiJson<CategoryPayload>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());
@@ -704,7 +705,7 @@ pub(crate) async fn update_gallery_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(category_id): Path<i64>,
-    Json(request): Json<CategoryPayload>,
+    ApiJson(request): ApiJson<CategoryPayload>,
 ) -> Result<Json<CategoryResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());

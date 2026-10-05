@@ -24,6 +24,7 @@ use time::OffsetDateTime;
 
 use crate::http::articles::render_markdown;
 use crate::http::error::ApiError;
+use crate::http::extract::ApiJson;
 use crate::state::AppState;
 
 use super::{
@@ -431,7 +432,7 @@ async fn prepare_submission(
 async fn create_comment(
     State(state): State<AppState>,
     headers: HeaderMap,
-    axum::Json(request): axum::Json<CreateCommentRequest>,
+    ApiJson(request): ApiJson<CreateCommentRequest>,
 ) -> Result<Response, ApiError> {
     let target_type = CommentTargetType::from_str(&request.target_type)?;
     let target_id = resolve_target(&state, target_type, &request.target_slug).await?;
@@ -499,7 +500,7 @@ async fn reply_comment(
     State(state): State<AppState>,
     Path(comment_id): Path<i64>,
     headers: HeaderMap,
-    axum::Json(request): axum::Json<ReplyCommentRequest>,
+    ApiJson(request): ApiJson<ReplyCommentRequest>,
 ) -> Result<Response, ApiError> {
     let parent = state
         .comments

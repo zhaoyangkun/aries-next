@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-use super::{auth::CurrentUser, error::ApiError};
+use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -132,7 +132,7 @@ async fn list_categories(
 async fn create_category(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<CreateTaxonomyRequest>,
+    ApiJson(request): ApiJson<CreateTaxonomyRequest>,
 ) -> Result<(StatusCode, Json<CategoryResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());
@@ -201,7 +201,7 @@ async fn list_tags(
 async fn create_tag(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<CreateTaxonomyRequest>,
+    ApiJson(request): ApiJson<CreateTaxonomyRequest>,
 ) -> Result<(StatusCode, Json<TagResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());
@@ -240,7 +240,7 @@ async fn update_category(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(category_id): Path<i64>,
-    Json(request): Json<CreateTaxonomyRequest>,
+    ApiJson(request): ApiJson<CreateTaxonomyRequest>,
 ) -> Result<Json<CategoryResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());
@@ -329,7 +329,7 @@ async fn update_tag(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(tag_id): Path<i64>,
-    Json(request): Json<CreateTaxonomyRequest>,
+    ApiJson(request): ApiJson<CreateTaxonomyRequest>,
 ) -> Result<Json<TagResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let slug = request.slug.unwrap_or_else(|| request.name.clone());

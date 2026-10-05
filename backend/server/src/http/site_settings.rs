@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-use super::{auth::CurrentUser, error::ApiError};
+use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/site-settings", get(get_settings).put(update_settings))
@@ -140,7 +140,7 @@ async fn get_settings(
 async fn update_settings(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<UpdateSiteSettingsRequest>,
+    ApiJson(request): ApiJson<UpdateSiteSettingsRequest>,
 ) -> Result<Json<SiteSettingsResponse>, ApiError> {
     current.require(Permission::ManageSettings)?;
     let site_name = request.site_name.trim().to_owned();

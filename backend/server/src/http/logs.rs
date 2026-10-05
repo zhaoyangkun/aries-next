@@ -19,6 +19,7 @@ use crate::state::AppState;
 
 use super::auth::CurrentUser;
 use super::error::ApiError;
+use super::extract::ApiJson;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -390,7 +391,7 @@ pub(crate) async fn get_sql_logging(
 pub(crate) async fn set_sql_logging(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SqlLoggingRequest>,
+    ApiJson(request): ApiJson<SqlLoggingRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     current.require(Permission::ManageSettings)?;
     state
@@ -470,7 +471,7 @@ pub(crate) async fn get_filter_override(
 pub(crate) async fn set_filter_override(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<SetFilterOverrideRequest>,
+    ApiJson(request): ApiJson<SetFilterOverrideRequest>,
 ) -> Result<Json<FilterOverrideResponse>, ApiError> {
     current.require(Permission::ManageSettings)?;
     // 自动复位封顶一天：级别覆盖是排障临时手段，不应长期悬挂。
