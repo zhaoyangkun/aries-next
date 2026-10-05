@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 顶部阅读进度条：仅文章详情页挂载，随滚动以 scaleX 推进（无过渡动画，天然兼容 reduced-motion）
+// 顶部滚动进度条：全局挂载于默认布局，随滚动以 scaleX 推进（无过渡动画，天然兼容 reduced-motion）
 const progress = ref(0)
 
 onMounted(() => {

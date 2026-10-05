@@ -69,6 +69,7 @@ useHead(
 
 <template>
   <div class="site-shell">
+    <ReadingProgress />
     <header class="site-header" :class="{ 'is-scrolled': scrolled }">
       <div class="site-header-inner">
         <NuxtLink class="site-name" to="/">{{ site.site_name }}</NuxtLink>
