@@ -28,6 +28,11 @@ migration-archive-*.jsonl
 # 代码索引工具目录
 /.codegraph/
 
+# Playwright E2E 运行输出（trace / 截图 / 报告）
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/blob-report/
+
 # 误建的 docker 构建参数文件（空文件，见根目录同名文件）
 /--build-arg
 /--provenance=false
