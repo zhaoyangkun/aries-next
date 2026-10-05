@@ -5,9 +5,9 @@ use crate::logged::{logged_query, logged_query_as, logged_query_scalar};
 use aries_core::content::{
     ArchiveArticle, ArchiveMonth, Article, ArticleListQuery, ArticleNeighbor, ArticleNeighbors,
     ArticlePage, ArticleRevision, ArticleSort, ArticleStatus, ArticleUpdate, Category,
-    CategoryKind, CategorySummary, CategoryUpdate, ContentError, ContentRepository, NewArticle,
-    NewCategory, NewTag, PublicArticleQuery, RevisionMetadata, RevisionRestore, SearchHit,
-    SearchPage, SearchSuggestion, SortOrder, Tag, TagSummary, TagUpdate, normalize_slug,
+    CategoryKind, CategorySummary, CategoryUpdate, ContentError, ContentRepository, MoveDirection,
+    NewArticle, NewCategory, NewTag, PublicArticleQuery, RevisionMetadata, RevisionRestore,
+    SearchHit, SearchPage, SearchSuggestion, SortOrder, Tag, TagSummary, TagUpdate, normalize_slug,
     validate_draft, validate_publish, validate_taxonomy_name,
 };
 use aries_core::search;
@@ -23,6 +23,40 @@ pub struct PostgresContentRepository {
 impl PostgresContentRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// 查目标在同一 `is_pinned` 分组内、`sort_order ASC, id DESC` 序下的相邻文章：
+    /// Up 取前驱（值更小，或同值 id 更大中 id 最小者）、Down 取后继（对称）；
+    /// 目标已在分组边界时返回 `None`。返回 `(邻居 id, 邻居 sort_order)`。
+    async fn article_move_neighbor(
+        &self,
+        article_id: i64,
+        is_pinned: bool,
+        sort_order: i32,
+        direction: MoveDirection,
+    ) -> Result<Option<(i64, i32)>, ContentError> {
+        let query = if direction == MoveDirection::Up {
+            logged_query_as::<(i64, i32)>(
+                "SELECT id, sort_order FROM articles \
+                 WHERE deleted_at IS NULL AND is_pinned = $1 \
+                   AND (sort_order < $2 OR (sort_order = $2 AND id > $3)) \
+                 ORDER BY sort_order DESC, id ASC LIMIT 1",
+            )
+        } else {
+            logged_query_as::<(i64, i32)>(
+                "SELECT id, sort_order FROM articles \
+                 WHERE deleted_at IS NULL AND is_pinned = $1 \
+                   AND (sort_order > $2 OR (sort_order = $2 AND id < $3)) \
+                 ORDER BY sort_order ASC, id DESC LIMIT 1",
+            )
+        };
+        query
+            .bind(is_pinned)
+            .bind(sort_order)
+            .bind(article_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx)
     }
 }
 
@@ -282,6 +316,12 @@ impl ContentRepository for PostgresContentRepository {
             SortOrder::Asc => "ASC",
             SortOrder::Desc => "DESC",
         };
+        // 「排序」模式下置顶文章恒在最前，与公开列表语义一致；其余排序字段保持原逻辑。
+        let order_clause = if query.sort == ArticleSort::SortOrder {
+            format!("is_pinned DESC, sort_order {sort_direction}, id DESC")
+        } else {
+            format!("{sort_column} {sort_direction}, id DESC")
+        };
         let list_query = format!(
             "SELECT {ARTICLE_COLUMNS} FROM articles WHERE deleted_at IS NULL \
              AND ($1::text IS NULL OR status = $1) \
@@ -290,7 +330,7 @@ impl ContentRepository for PostgresContentRepository {
                  WHERE article_id = articles.id AND tag_id = $3)) \
              AND ($4::text IS NULL OR title ILIKE $4 ESCAPE '\\' \
                  OR slug::text ILIKE $4 ESCAPE '\\') \
-             ORDER BY {sort_column} {sort_direction}, id DESC LIMIT $5 OFFSET $6"
+             ORDER BY {order_clause} LIMIT $5 OFFSET $6"
         );
         let rows = logged_query_as::<ArticleRow>(&list_query)
             .bind(status.as_deref())
@@ -843,6 +883,127 @@ impl ContentRepository for PostgresContentRepository {
             return Err(ContentError::NotFound);
         }
         Ok(())
+    }
+
+    /// 局部写入语义（不做全表稠密重编号）：只在同一 `is_pinned` 分组内写受影响的行，
+    /// 组内可见顺序为 `sort_order ASC, id DESC`。Up/Down 先找该序下的相邻文章 Y
+    /// （Up 取前驱、Down 取后继，见 `article_move_neighbor`），Y 不存在说明 X 已在
+    /// 分组边界（置顶组/非置顶组的最前或最后），不做任何写入并返回 `Ok(false)`：
+    /// 1. `X.sort_order != Y.sort_order`：只 UPDATE X、Y 两行交换值。
+    /// 2. `X.sort_order == Y.sort_order`（并列组，常见于默认值 0）：组内顺序由
+    ///    `id DESC` 决定，交换必须让 X 与 Y 取不同的值。Up（Y 在 X 前，Y.id > X.id）
+    ///    时把 `{组内 id < X.id} ∪ {Y}` 整体上抬一个值（s+1）：X 与组内 id 更大的成员
+    ///    留在 s，按 id DESC 仍排在 X 前，Y 落到 s+1 值层，于是 X 恰好越过 Y 一位；
+    ///    Down（Y.id < X.id）对称地把 `{组内 id > X.id} ∪ {Y}` 下沉到 s-1。两条
+    ///    UPDATE 的 WHERE 都限定 `is_pinned + sort_order = s`，不触碰组外与其他值层
+    ///    的行。正确性反例说明：若改为「X 与其前方成员整体平移」（同值平移且不分离
+    ///    X、Y），并列组内相对顺序不变，移动是无效 no-op——因此平移集必须只含 X、Y
+    ///    中的一侧。精确性边界：纯并列组（默认全 0）与纯 distinct 值状态下 X 恰好
+    ///    逐位移动；混合状态（distinct 交换中邻居属于另一个并列组，或 s±1 值层已被
+    ///    其他成员占据）下 X 的落位由目标值层的 `id DESC` 决定，可能一次越过整个
+    ///    并列组——这是局部写入相对旧全表稠密重编号的语义折衷，移动方向与边界判定
+    ///    保持一致。
+    /// Top/Bottom：边界判定等价于「Up 无前驱 / Down 无后继」；不在边界时单条
+    /// UPDATE 把 X 写到分组 `MIN(sort_order) - 1` / `MAX(sort_order) + 1`（Top 落到
+    /// 分组最前、Bottom 落到分组最后），不写其他行。
+    /// 与 reorder_articles 一致，不更新 `updated_at`。
+    async fn move_article(
+        &self,
+        article_id: i64,
+        direction: MoveDirection,
+    ) -> Result<bool, ContentError> {
+        let (is_pinned, sort_order) = logged_query_as::<(bool, i32)>(
+            "SELECT is_pinned, sort_order FROM articles WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(article_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx)?
+        .ok_or(ContentError::NotFound)?;
+
+        // Top 已在分组最前等价于「Up 无前驱」，Bottom 已在最后等价于「Down 无后继」。
+        let neighbor_direction = match direction {
+            MoveDirection::Top => MoveDirection::Up,
+            MoveDirection::Bottom => MoveDirection::Down,
+            step => step,
+        };
+        let neighbor = self
+            .article_move_neighbor(article_id, is_pinned, sort_order, neighbor_direction)
+            .await?;
+        let Some((neighbor_id, neighbor_order)) = neighbor else {
+            return Ok(false);
+        };
+
+        match direction {
+            MoveDirection::Top | MoveDirection::Bottom => {
+                let query = if direction == MoveDirection::Top {
+                    logged_query(
+                        "UPDATE articles SET sort_order = ( \
+                             SELECT MIN(sort_order) FROM articles \
+                             WHERE deleted_at IS NULL AND is_pinned = $1 \
+                         ) - 1 WHERE id = $2",
+                    )
+                } else {
+                    logged_query(
+                        "UPDATE articles SET sort_order = ( \
+                             SELECT MAX(sort_order) FROM articles \
+                             WHERE deleted_at IS NULL AND is_pinned = $1 \
+                         ) + 1 WHERE id = $2",
+                    )
+                };
+                query
+                    .bind(is_pinned)
+                    .bind(article_id)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(map_sqlx)?;
+            }
+            MoveDirection::Up | MoveDirection::Down if neighbor_order != sort_order => {
+                // 值不同：只 UPDATE X、Y 两行交换 sort_order，单条语句自身原子。
+                logged_query(
+                    "UPDATE articles SET sort_order = CASE id WHEN $1 THEN $3 WHEN $2 THEN $4 END \
+                     WHERE id IN ($1, $2)",
+                )
+                .bind(article_id)
+                .bind(neighbor_id)
+                .bind(neighbor_order)
+                .bind(sort_order)
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx)?;
+            }
+            MoveDirection::Up => {
+                // 并列组（Y.id > X.id）：上抬 {组内 id < X.id} ∪ {Y} 到 s+1。
+                logged_query(
+                    "UPDATE articles SET sort_order = sort_order + 1 \
+                     WHERE deleted_at IS NULL AND is_pinned = $1 AND sort_order = $2 \
+                       AND (id < $3 OR id = $4)",
+                )
+                .bind(is_pinned)
+                .bind(sort_order)
+                .bind(article_id)
+                .bind(neighbor_id)
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx)?;
+            }
+            MoveDirection::Down => {
+                // 并列组（Y.id < X.id）：下沉 {组内 id > X.id} ∪ {Y} 到 s-1。
+                logged_query(
+                    "UPDATE articles SET sort_order = sort_order - 1 \
+                     WHERE deleted_at IS NULL AND is_pinned = $1 AND sort_order = $2 \
+                       AND (id > $3 OR id = $4)",
+                )
+                .bind(is_pinned)
+                .bind(sort_order)
+                .bind(article_id)
+                .bind(neighbor_id)
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx)?;
+            }
+        }
+        Ok(true)
     }
 
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError> {
@@ -1406,6 +1567,351 @@ mod tests {
             .context("failed to remove isolated content test schema");
         admin_pool.close().await;
 
+        scenario_result?;
+        cleanup_result?;
+        Ok(())
+    }
+
+    /// 「排序」模式下的列表顺序（置顶优先 + sort_order 升序 + id 倒序兜底）。
+    async fn list_sort_order_ids(
+        repository: &PostgresContentRepository,
+    ) -> anyhow::Result<Vec<i64>> {
+        let page = repository
+            .list_articles(ArticleListQuery {
+                page: 1,
+                page_size: 10,
+                sort: ArticleSort::SortOrder,
+                order: SortOrder::Asc,
+                ..ArticleListQuery::default()
+            })
+            .await?;
+        Ok(page.items.iter().map(|article| article.id).collect())
+    }
+
+    /// 全表 `(id, sort_order)` 快照，用于断言未涉及行的值未被改写（局部性）。
+    async fn sort_order_snapshot(pool: &PgPool) -> anyhow::Result<Vec<(i64, i32)>> {
+        Ok(
+            logged_query_as::<(i64, i32)>("SELECT id, sort_order FROM articles ORDER BY id")
+                .fetch_all(pool)
+                .await?,
+        )
+    }
+
+    fn sort_order_of(snapshot: &[(i64, i32)], id: i64) -> i32 {
+        snapshot
+            .iter()
+            .find(|(row_id, _)| *row_id == id)
+            .map(|(_, order)| *order)
+            .unwrap()
+    }
+
+    /// move_article 测试的公共搭建：随机 Schema + 迁移 + editor + 4 篇 sort_order 全 0 的文章。
+    /// 返回 (admin_pool, test_pool, test_schema, repository, ids)，调用方负责 teardown_move_scenario。
+    async fn setup_move_scenario()
+    -> anyhow::Result<(PgPool, PgPool, String, PostgresContentRepository, Vec<i64>)> {
+        let _ = dotenvy::dotenv();
+        let base_config = crate::PostgresConfig::from_env()?;
+        let admin_pool = crate::connect_postgres(&base_config).await?;
+        let test_schema = format!("aries_test_{}", Uuid::now_v7().simple());
+        logged_query(&format!("CREATE SCHEMA \"{test_schema}\""))
+            .execute(&admin_pool)
+            .await
+            .context("failed to create isolated content test schema")?;
+        let test_config = crate::PostgresConfig {
+            options: base_config.options.clone(),
+            schema: format!("{test_schema},{}", base_config.schema()),
+            slow_query_ms: 0,
+        };
+        let test_pool = crate::connect_postgres(&test_config).await?;
+        crate::run_migrations(&test_pool).await?;
+        let user_id = logged_query_scalar::<i64>(
+            "INSERT INTO users \
+             (username, email, password_hash, display_name, role, status) \
+             VALUES ('editor', 'editor@example.com', 'hash', 'Editor', 'editor', 'active') \
+             RETURNING id",
+        )
+        .fetch_one(&test_pool)
+        .await?;
+        let repository = PostgresContentRepository::new(test_pool.clone());
+        let rendered = "<p>x</p>".to_owned();
+        let mut ids = Vec::new();
+        for index in 0..4 {
+            let article = repository
+                .create_article(NewArticle {
+                    author_id: user_id,
+                    category_id: None,
+                    slug: format!("move-{index}"),
+                    title: format!("Move {index}"),
+                    summary: String::new(),
+                    ai_brief: None,
+                    cover_url: None,
+                    markdown_source: "x".to_owned(),
+                    rendered_html: rendered.clone(),
+                    seo_keywords: Vec::new(),
+                    access_password_hash: None,
+                    allow_comments: true,
+                    is_pinned: false,
+                    tag_ids: Vec::new(),
+                })
+                .await?;
+            ids.push(article.id);
+        }
+        Ok((admin_pool, test_pool, test_schema, repository, ids))
+    }
+
+    async fn teardown_move_scenario(
+        admin_pool: PgPool,
+        test_pool: PgPool,
+        test_schema: &str,
+    ) -> anyhow::Result<()> {
+        test_pool.close().await;
+        let cleanup_result = logged_query(&format!("DROP SCHEMA \"{test_schema}\" CASCADE"))
+            .execute(&admin_pool)
+            .await
+            .context("failed to remove isolated content test schema");
+        admin_pool.close().await;
+        cleanup_result?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn postgresql_repository_move_article_swaps_neighbors() -> anyhow::Result<()> {
+        if std::env::var("ARIES_RUN_DATABASE_TESTS").as_deref() != Ok("1") {
+            return Ok(());
+        }
+        let (admin_pool, test_pool, test_schema, repository, ids) = setup_move_scenario().await?;
+        let scenario_result = async {
+            // 初始 sort_order 全为默认 0（并列组）：可见顺序退化为 id DESC。
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[3], ids[2], ids[1], ids[0]]
+            );
+
+            // 并列组连续同向逐位上移：底部文章每次恰好越过一位邻居。
+            ensure!(repository.move_article(ids[0], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[3], ids[2], ids[0], ids[1]]
+            );
+            ensure!(repository.move_article(ids[0], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[3], ids[0], ids[2], ids[1]]
+            );
+            ensure!(repository.move_article(ids[0], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[3], ids[2], ids[1]]
+            );
+            // 已在分组最前，上移为 no-op。
+            ensure!(!repository.move_article(ids[0], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[3], ids[2], ids[1]]
+            );
+
+            // 反向（并列组连续下移）：重置为全 0 后顶部文章逐位下沉到底部。
+            logged_query("UPDATE articles SET sort_order = 0")
+                .execute(&test_pool)
+                .await?;
+            ensure!(repository.move_article(ids[3], MoveDirection::Down).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[3], ids[1], ids[0]]
+            );
+            ensure!(repository.move_article(ids[3], MoveDirection::Down).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[1], ids[3], ids[0]]
+            );
+            ensure!(repository.move_article(ids[3], MoveDirection::Down).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[1], ids[0], ids[3]]
+            );
+            // 已在分组最后，下移为 no-op。
+            ensure!(!repository.move_article(ids[3], MoveDirection::Down).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[1], ids[0], ids[3]]
+            );
+
+            // distinct 值交换：制造可区分槽位 id*10，上移只交换 X、Y 两行的值。
+            logged_query("UPDATE articles SET sort_order = id * 10")
+                .execute(&test_pool)
+                .await?;
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[2], ids[3]]
+            );
+            let before = sort_order_snapshot(&test_pool).await?;
+            ensure!(repository.move_article(ids[2], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[2], ids[1], ids[3]]
+            );
+            let after = sort_order_snapshot(&test_pool).await?;
+            // X、Y 交换值；未涉及行的 sort_order 严格不变（局部性）。
+            ensure!(sort_order_of(&after, ids[2]) == sort_order_of(&before, ids[1]));
+            ensure!(sort_order_of(&after, ids[1]) == sort_order_of(&before, ids[2]));
+            ensure!(sort_order_of(&after, ids[0]) == sort_order_of(&before, ids[0]));
+            ensure!(sort_order_of(&after, ids[3]) == sort_order_of(&before, ids[3]));
+
+            // 混合值层下的并列组平移也只写并列组内的行：ids[1]/ids[2] 并列于 50，
+            // 两侧 10/90 值层的行不被触碰。
+            logged_query(
+                "UPDATE articles SET sort_order = CASE id \
+                 WHEN $1 THEN 10 WHEN $2 THEN 50 WHEN $3 THEN 50 WHEN $4 THEN 90 END",
+            )
+            .bind(ids[0])
+            .bind(ids[1])
+            .bind(ids[2])
+            .bind(ids[3])
+            .execute(&test_pool)
+            .await?;
+            // 50 并列组内 id DESC：ids[2] 在 ids[1] 前。
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[2], ids[1], ids[3]]
+            );
+            ensure!(repository.move_article(ids[1], MoveDirection::Up).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[2], ids[3]]
+            );
+            let after = sort_order_snapshot(&test_pool).await?;
+            ensure!(sort_order_of(&after, ids[0]) == 10);
+            ensure!(sort_order_of(&after, ids[1]) == 50);
+            ensure!(sort_order_of(&after, ids[2]) == 51);
+            ensure!(sort_order_of(&after, ids[3]) == 90);
+
+            // 不存在的 id → NotFound。
+            ensure!(matches!(
+                repository.move_article(i64::MAX, MoveDirection::Up).await,
+                Err(ContentError::NotFound)
+            ));
+
+            // 置顶组边界：把 ids[2] 置顶并给一个大于其他文章的 sort_order（1000 vs 0），
+            // 回归断言「排序」模式 list_articles 恒置顶优先。
+            logged_query("UPDATE articles SET is_pinned = TRUE, sort_order = 1000 WHERE id = $1")
+                .bind(ids[2])
+                .execute(&test_pool)
+                .await?;
+            logged_query("UPDATE articles SET sort_order = 0 WHERE is_pinned = FALSE")
+                .execute(&test_pool)
+                .await?;
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[3], ids[1], ids[0]]
+            );
+            // 非置顶第一篇上移跨分组 → no-op 且顺序不变；置顶文章组内下移 → no-op。
+            ensure!(!repository.move_article(ids[3], MoveDirection::Up).await?);
+            ensure!(!repository.move_article(ids[2], MoveDirection::Down).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[3], ids[1], ids[0]]
+            );
+            Ok(())
+        }
+        .await;
+
+        let cleanup_result = teardown_move_scenario(admin_pool, test_pool, &test_schema).await;
+        scenario_result?;
+        cleanup_result?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn postgresql_repository_move_article_top_bottom() -> anyhow::Result<()> {
+        if std::env::var("ARIES_RUN_DATABASE_TESTS").as_deref() != Ok("1") {
+            return Ok(());
+        }
+        let (admin_pool, test_pool, test_schema, repository, ids) = setup_move_scenario().await?;
+        let scenario_result = async {
+            // 非置顶组 distinct 值：id*10，可见顺序即 id 升序。
+            logged_query("UPDATE articles SET sort_order = id * 10")
+                .execute(&test_pool)
+                .await?;
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[2], ids[3]]
+            );
+
+            // Top：ids[2] 落到分组 MIN-1，单条 UPDATE 不写其他行。
+            let before = sort_order_snapshot(&test_pool).await?;
+            ensure!(repository.move_article(ids[2], MoveDirection::Top).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[2], ids[0], ids[1], ids[3]]
+            );
+            let after = sort_order_snapshot(&test_pool).await?;
+            ensure!(sort_order_of(&after, ids[2]) == sort_order_of(&before, ids[0]) - 1);
+            ensure!(sort_order_of(&after, ids[0]) == sort_order_of(&before, ids[0]));
+            ensure!(sort_order_of(&after, ids[1]) == sort_order_of(&before, ids[1]));
+            ensure!(sort_order_of(&after, ids[3]) == sort_order_of(&before, ids[3]));
+            // 已在分组最前 → no-op。
+            ensure!(!repository.move_article(ids[2], MoveDirection::Top).await?);
+
+            // Bottom：ids[2] 落到分组 MAX+1；已在最后再 Bottom 为 no-op。
+            let before = sort_order_snapshot(&test_pool).await?;
+            ensure!(
+                repository
+                    .move_article(ids[2], MoveDirection::Bottom)
+                    .await?
+            );
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[3], ids[2]]
+            );
+            let after = sort_order_snapshot(&test_pool).await?;
+            ensure!(sort_order_of(&after, ids[2]) == sort_order_of(&before, ids[3]) + 1);
+            ensure!(sort_order_of(&after, ids[0]) == sort_order_of(&before, ids[0]));
+            ensure!(sort_order_of(&after, ids[1]) == sort_order_of(&before, ids[1]));
+            ensure!(sort_order_of(&after, ids[3]) == sort_order_of(&before, ids[3]));
+            ensure!(
+                !repository
+                    .move_article(ids[2], MoveDirection::Bottom)
+                    .await?
+            );
+
+            // 置顶 ids[0]/ids[1]（保留各自的 id*10 值，组内 ids[0] 在前）。
+            logged_query("UPDATE articles SET is_pinned = TRUE WHERE id IN ($1, $2)")
+                .bind(ids[0])
+                .bind(ids[1])
+                .execute(&test_pool)
+                .await?;
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[3], ids[2]]
+            );
+
+            // 非置顶组 Top = 紧接置顶组之后，不是全站最前。
+            ensure!(repository.move_article(ids[2], MoveDirection::Top).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[2], ids[3]]
+            );
+            // 已在非置顶组最前 → no-op（尽管它前面还有置顶组文章）。
+            ensure!(!repository.move_article(ids[2], MoveDirection::Top).await?);
+
+            // 置顶组 Top = 全站最前；已在最前 → no-op。
+            ensure!(repository.move_article(ids[1], MoveDirection::Top).await?);
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[1], ids[0], ids[2], ids[3]]
+            );
+            ensure!(!repository.move_article(ids[1], MoveDirection::Top).await?);
+
+            // 置顶组 Bottom = 置顶组最后（全站第 2），不会落入非置顶组。
+            ensure!(
+                repository
+                    .move_article(ids[1], MoveDirection::Bottom)
+                    .await?
+            );
+            ensure!(
+                list_sort_order_ids(&repository).await? == vec![ids[0], ids[1], ids[2], ids[3]]
+            );
+            ensure!(
+                !repository
+                    .move_article(ids[1], MoveDirection::Bottom)
+                    .await?
+            );
+
+            // 单成员分组的 Top/Bottom 均为 no-op：取消 ids[0] 置顶后置顶组只剩 ids[1]。
+            logged_query("UPDATE articles SET is_pinned = FALSE WHERE id = $1")
+                .bind(ids[0])
+                .execute(&test_pool)
+                .await?;
+            ensure!(!repository.move_article(ids[1], MoveDirection::Top).await?);
+            ensure!(
+                !repository
+                    .move_article(ids[1], MoveDirection::Bottom)
+                    .await?
+            );
+            Ok(())
+        }
+        .await;
+
+        let cleanup_result = teardown_move_scenario(admin_pool, test_pool, &test_schema).await;
         scenario_result?;
         cleanup_result?;
         Ok(())

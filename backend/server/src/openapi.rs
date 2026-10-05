@@ -37,6 +37,7 @@ use utoipa::{Modify, OpenApi};
         crate::http::articles::list_revisions,
         crate::http::articles::restore_revision,
         crate::http::articles::reorder_articles,
+        crate::http::articles::move_article,
         // Admin Taxonomy
         crate::http::taxonomy::list_categories,
         crate::http::taxonomy::create_category,

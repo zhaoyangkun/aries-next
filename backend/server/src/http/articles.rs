@@ -4,7 +4,7 @@ use aries_core::{
     auth::{AuditEvent, Permission},
     content::{
         Article, ArticleListQuery, ArticleRevision, ArticleSort, ArticleStatus, ContentError,
-        NewArticle, RevisionRestore, SortOrder,
+        MoveDirection, NewArticle, RevisionRestore, SortOrder,
     },
 };
 use axum::{
@@ -20,6 +20,7 @@ use crate::state::AppState;
 use super::{
     auth::{CurrentUser, hash_password},
     error::ApiError,
+    extract::ApiJson,
 };
 
 const MAX_MARKDOWN_LENGTH: usize = 1_000_000;
@@ -35,6 +36,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/articles/{id}/status", axum::routing::patch(change_status))
         .route("/articles/reorder", put(reorder_articles))
+        .route("/articles/{id}/move", put(move_article))
         .route("/articles/{id}/revisions", get(list_revisions))
         .route(
             "/articles/{id}/revisions/{rev}/restore",
@@ -445,7 +447,7 @@ async fn get_article(
 async fn create_article(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<CreateArticleRequest>,
+    ApiJson(request): ApiJson<CreateArticleRequest>,
 ) -> Result<(StatusCode, Json<ArticleResponse>), ApiError> {
     current.require(Permission::ManageContent)?;
     let title = request.title.trim().to_owned();
@@ -529,7 +531,7 @@ async fn update_article(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(article_id): Path<i64>,
-    Json(request): Json<UpdateArticleRequest>,
+    ApiJson(request): ApiJson<UpdateArticleRequest>,
 ) -> Result<Json<ArticleResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let title = request.title.trim().to_owned();
@@ -637,7 +639,7 @@ async fn change_status(
     State(state): State<AppState>,
     current: CurrentUser,
     Path(article_id): Path<i64>,
-    Json(request): Json<ChangeArticleStatusRequest>,
+    ApiJson(request): ApiJson<ChangeArticleStatusRequest>,
 ) -> Result<Json<ArticleResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     let target = request.command.target();
@@ -686,7 +688,7 @@ async fn change_status(
 async fn preview_article(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<PreviewArticleRequest>,
+    ApiJson(request): ApiJson<PreviewArticleRequest>,
 ) -> Result<Json<PreviewArticleResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     validate_markdown_length(&request.markdown_source)?;
@@ -788,7 +790,7 @@ async fn restore_revision(
     State(state): State<AppState>,
     current: CurrentUser,
     Path((article_id, revision_no)): Path<(i64, i64)>,
-    Json(request): Json<RestoreRevisionRequest>,
+    ApiJson(request): ApiJson<RestoreRevisionRequest>,
 ) -> Result<Json<ArticleResponse>, ApiError> {
     current.require(Permission::ManageContent)?;
     current.require(Permission::ManageContent)?;
@@ -861,7 +863,7 @@ struct ReorderArticlesRequest {
 async fn reorder_articles(
     State(state): State<AppState>,
     current: CurrentUser,
-    Json(request): Json<ReorderArticlesRequest>,
+    ApiJson(request): ApiJson<ReorderArticlesRequest>,
 ) -> Result<StatusCode, ApiError> {
     current.require(Permission::ManageContent)?;
     let ids = request.article_ids;
@@ -895,6 +897,95 @@ async fn reorder_articles(
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum MoveDirectionPayload {
+    Up,
+    Down,
+    Top,
+    Bottom,
+}
+
+impl MoveDirectionPayload {
+    const fn to_domain(&self) -> MoveDirection {
+        match self {
+            Self::Up => MoveDirection::Up,
+            Self::Down => MoveDirection::Down,
+            Self::Top => MoveDirection::Top,
+            Self::Bottom => MoveDirection::Bottom,
+        }
+    }
+
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+struct MoveArticleRequest {
+    /// 移动方向：`up`/`down` 逐位移动，`top`/`bottom` 移至所在置顶分组的最前/最后。
+    direction: MoveDirectionPayload,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+struct MoveArticleResponse {
+    /// 是否实际发生了位置变化；`false` 表示文章已在置顶分组边界，位置未变。
+    moved: bool,
+}
+
+/// 调整文章排序位置：在同一置顶分组内逐位交换（up/down）或直接移至分组
+/// 最前/最后（top/bottom），适合「排序」模式的箭头跨页调整（reorder 只覆盖当前可视页）。
+/// 已在分组边界时不做改动，响应体 `moved` 为 `false`，前端据此给出提示。
+#[utoipa::path(
+    put,
+    path = "/api/admin/articles/{id}/move",
+    tag = "Admin Articles",
+    operation_id = "moveArticle",
+    summary = "调整文章排序位置",
+    description = "在同一置顶分组（置顶组/非置顶组）内调整排序位置：`up`/`down` 与相邻文章逐位交换，`top`/`bottom` 直接移至分组最前/最后（置顶组内 top 即全站最前，非置顶组 top 紧接置顶组之后）；已在分组边界时不做改动，响应体 `moved` 为 `false`。",
+    security(("cookieAuth" = [])),
+    params(("id" = i64, Path, description = "文章 ID")),
+    request_body(content = MoveArticleRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "返回是否实际发生位置变化（分组边界 no-op 时 `moved` 为 false）", body = MoveArticleResponse),
+        (status = 400, description = "请求体缺失或格式非法（direction 仅接受 up / down / top / bottom，INVALID_REQUEST_BODY）", body = crate::openapi::ErrorResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
+        (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
+    )
+)]
+async fn move_article(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(article_id): Path<i64>,
+    ApiJson(request): ApiJson<MoveArticleRequest>,
+) -> Result<Json<MoveArticleResponse>, ApiError> {
+    current.require(Permission::ManageContent)?;
+    let moved = state
+        .content
+        .move_article(article_id, request.direction.to_domain())
+        .await?;
+    state
+        .auth
+        .write_audit(AuditEvent {
+            actor_user_id: Some(current.user.id),
+            action: "article.moved".to_owned(),
+            target_type: "article".to_owned(),
+            target_id: Some(article_id.to_string()),
+            metadata: serde_json::json!({
+                "direction": request.direction.as_str(),
+                "moved": moved,
+            }),
+        })
+        .await?;
+    Ok(Json(MoveArticleResponse { moved }))
 }
 
 /// 非法排序参数静默回退默认值，列表接口不因排序参数报错。

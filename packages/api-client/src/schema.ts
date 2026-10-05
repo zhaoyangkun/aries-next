@@ -256,6 +256,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/articles/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 调整文章排序位置
+         * @description 在同一置顶分组（置顶组/非置顶组）内调整排序位置：`up`/`down` 与相邻文章逐位交换，`top`/`bottom` 直接移至分组最前/最后（置顶组内 top 即全站最前，非置顶组 top 紧接置顶组之后）；已在分组边界时不做改动，响应体 `moved` 为 `false`。
+         */
+        put: operations["moveArticle"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/articles/{id}/revisions": {
         parameters: {
             query?: never;
@@ -2882,6 +2902,16 @@ export interface components {
             /** @description 人类可读结果信息。 */
             message: string;
         };
+        MoveArticleRequest: {
+            /** @description 移动方向：`up`/`down` 逐位移动，`top`/`bottom` 移至所在置顶分组的最前/最后。 */
+            direction: components["schemas"]["MoveDirectionPayload"];
+        };
+        MoveArticleResponse: {
+            /** @description 是否实际发生了位置变化；`false` 表示文章已在置顶分组边界，位置未变。 */
+            moved: boolean;
+        };
+        /** @enum {string} */
+        MoveDirectionPayload: "up" | "down" | "top" | "bottom";
         /** @description 导航节点响应体（平铺，前端按 `parent_id` 组树）。 */
         NavigationItemResponse: {
             /** Format: date-time */
@@ -4531,6 +4561,69 @@ export interface operations {
             };
             /** @description 文章非 recycled 状态（ARTICLE_NOT_RECYCLED） */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    moveArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 文章 ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveArticleRequest"];
+            };
+        };
+        responses: {
+            /** @description 返回是否实际发生位置变化（分组边界 no-op 时 `moved` 为 false） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveArticleResponse"];
+                };
+            };
+            /** @description 请求体缺失或格式非法（direction 仅接受 up / down / top / bottom，INVALID_REQUEST_BODY） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 content:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 文章不存在（ARTICLE_NOT_FOUND） */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

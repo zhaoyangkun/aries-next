@@ -11,7 +11,7 @@ use aries_core::auth::{
 use aries_core::content::{
     Article, ArticleListQuery, ArticlePage, ArticleRevision, ArticleStatus, ArticleUpdate,
     Category, CategoryKind, CategoryUpdate, ContentError, ContentRepository, MarkdownRenderer,
-    NewArticle, NewCategory, NewTag, RevisionRestore, Tag, TagUpdate,
+    MoveDirection, NewArticle, NewCategory, NewTag, RevisionRestore, Tag, TagUpdate,
 };
 use aries_server::{build_app, config::ServerConfig, rate_limit::RateLimiter, state::AppState};
 use async_trait::async_trait;
@@ -280,6 +280,14 @@ impl ContentRepository for UnusedContentRepository {
     }
 
     async fn reorder_articles(&self, _ordered_ids: Vec<i64>) -> Result<(), ContentError> {
+        Err(ContentError::StoreUnavailable)
+    }
+
+    async fn move_article(
+        &self,
+        _article_id: i64,
+        _direction: MoveDirection,
+    ) -> Result<bool, ContentError> {
         Err(ContentError::StoreUnavailable)
     }
 

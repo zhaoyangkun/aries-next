@@ -176,6 +176,16 @@ pub enum SortOrder {
     Desc,
 }
 
+/// 排序移动方向：Up/Down 逐位移动（向列表顶部/底部），Top/Bottom 直接移至
+/// 所在置顶分组的最前/最后（非置顶组的 Top 即紧接置顶组之后，不是全表最前）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveDirection {
+    Up,
+    Down,
+    Top,
+    Bottom,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ArticleListQuery {
     pub page: u32,
@@ -498,6 +508,17 @@ pub trait ContentRepository: Send + Sync {
     /// 对全表 `sort_order` 相同（如全部为默认值 0）的数据也有效：新区块值全部小于
     /// `base`，因此批内顺序立即可见。
     async fn reorder_articles(&self, ordered_ids: Vec<i64>) -> Result<(), ContentError>;
+    /// 排序移动：目标在同一 `is_pinned` 分组（置顶组/非置顶组）内调整位置；
+    /// 跨分组移动由 `is_pinned` 字段承担，不属于本方法职责。
+    /// `Up`/`Down` 与 `ORDER BY sort_order ASC, id DESC` 下的相邻文章逐位交换；
+    /// `Top`/`Bottom` 直接移至分组最前/最后。实现只写受影响的分组内行，
+    /// 不做全表重编号。返回是否实际移动；目标已在分组边界时不做改动，
+    /// 返回 `Ok(false)`；目标不存在返回 `NotFound`。
+    async fn move_article(
+        &self,
+        article_id: i64,
+        direction: MoveDirection,
+    ) -> Result<bool, ContentError>;
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError>;
     async fn find_revision(
         &self,

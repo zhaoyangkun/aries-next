@@ -9,8 +9,8 @@ use aries_core::{
     content::{
         Article, ArticleListQuery, ArticlePage, ArticleRevision, ArticleSort, ArticleStatus,
         ArticleUpdate, Category, CategoryKind, CategoryUpdate, ContentError, ContentRepository,
-        NewArticle, NewCategory, NewTag, RevisionMetadata, RevisionRestore, SortOrder, Tag,
-        TagUpdate,
+        MoveDirection, NewArticle, NewCategory, NewTag, RevisionMetadata, RevisionRestore,
+        SortOrder, Tag, TagUpdate,
     },
 };
 use aries_infra::ComrakMarkdownRenderer;
@@ -241,13 +241,45 @@ impl ContentRepository for MockContentRepository {
             .cloned())
     }
 
-    // ---- Public 只读方法：本文件只测 Admin 行为，全部返回 StoreUnavailable ----
+    // ---- Public 只读方法：除列表外本文件不涉及，全部返回 StoreUnavailable ----
 
     async fn list_public_articles(
         &self,
-        _query: aries_core::content::PublicArticleQuery,
+        query: aries_core::content::PublicArticleQuery,
     ) -> Result<ArticlePage, ContentError> {
-        Err(ContentError::StoreUnavailable)
+        let page = query.page.max(1);
+        let page_size = query.page_size.clamp(1, 100);
+        let mut items: Vec<Article> = self
+            .articles
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|article| article.status == ArticleStatus::Published)
+            .cloned()
+            .collect();
+        // 与 infra 公开排序一致：置顶优先、手工排序值升序、id 倒序兜底
+        //（mock 不区分 published_at，回归用例只依赖前两级）。
+        items.sort_by(|left, right| {
+            right
+                .is_pinned
+                .cmp(&left.is_pinned)
+                .then(left.sort_order.cmp(&right.sort_order))
+                .then(right.id.cmp(&left.id))
+        });
+        let total = i64::try_from(items.len()).map_err(|_| ContentError::StoreUnavailable)?;
+        let start =
+            usize::try_from(page - 1).unwrap_or(0) * usize::try_from(page_size).unwrap_or(0);
+        let items = items
+            .into_iter()
+            .skip(start)
+            .take(usize::try_from(page_size).unwrap_or(0))
+            .collect();
+        Ok(ArticlePage {
+            total,
+            items,
+            page,
+            page_size,
+        })
     }
 
     async fn search_public_articles(
@@ -450,6 +482,106 @@ impl ContentRepository for MockContentRepository {
             article.sort_order = base + position as i32;
         }
         Ok(())
+    }
+
+    async fn move_article(
+        &self,
+        article_id: i64,
+        direction: MoveDirection,
+    ) -> Result<bool, ContentError> {
+        // 与 PostgreSQL 实现一致的局部交换语义，供 HTTP 层契约测试。
+        let mut articles = self.articles.lock().unwrap();
+        let mut ordered = articles.clone();
+        ordered.sort_by(|left, right| {
+            right
+                .is_pinned
+                .cmp(&left.is_pinned)
+                .then(left.sort_order.cmp(&right.sort_order))
+                .then(right.id.cmp(&left.id))
+        });
+        let position = ordered
+            .iter()
+            .position(|article| article.id == article_id)
+            .ok_or(ContentError::NotFound)?;
+        let is_pinned = ordered[position].is_pinned;
+        let sort_order = ordered[position].sort_order;
+        // Top 的边界判定等价于「Up 无前驱」，Bottom 等价于「Down 无后继」。
+        let neighbor = match direction {
+            MoveDirection::Up | MoveDirection::Top => position.checked_sub(1),
+            MoveDirection::Down | MoveDirection::Bottom => {
+                (position + 1 < ordered.len()).then_some(position + 1)
+            }
+        };
+        let Some(neighbor) = neighbor else {
+            return Ok(false);
+        };
+        if ordered[neighbor].is_pinned != is_pinned {
+            return Ok(false);
+        }
+        let neighbor_id = ordered[neighbor].id;
+        let neighbor_order = ordered[neighbor].sort_order;
+        match direction {
+            MoveDirection::Top => {
+                let min = ordered
+                    .iter()
+                    .filter(|article| article.is_pinned == is_pinned)
+                    .map(|article| article.sort_order)
+                    .min()
+                    .unwrap_or(sort_order);
+                articles
+                    .iter_mut()
+                    .find(|article| article.id == article_id)
+                    .unwrap()
+                    .sort_order = min - 1;
+            }
+            MoveDirection::Bottom => {
+                let max = ordered
+                    .iter()
+                    .filter(|article| article.is_pinned == is_pinned)
+                    .map(|article| article.sort_order)
+                    .max()
+                    .unwrap_or(sort_order);
+                articles
+                    .iter_mut()
+                    .find(|article| article.id == article_id)
+                    .unwrap()
+                    .sort_order = max + 1;
+            }
+            MoveDirection::Up | MoveDirection::Down if neighbor_order != sort_order => {
+                // 值不同：交换两行的 sort_order。
+                articles
+                    .iter_mut()
+                    .find(|article| article.id == article_id)
+                    .unwrap()
+                    .sort_order = neighbor_order;
+                articles
+                    .iter_mut()
+                    .find(|article| article.id == neighbor_id)
+                    .unwrap()
+                    .sort_order = sort_order;
+            }
+            MoveDirection::Up | MoveDirection::Down => {
+                // 并列组：Up 上抬 {id < X.id} ∪ {Y}，Down 下沉 {id > X.id} ∪ {Y}。
+                let step: i32 = if direction == MoveDirection::Up {
+                    1
+                } else {
+                    -1
+                };
+                for article in articles.iter_mut() {
+                    let in_shift_set = article.is_pinned == is_pinned
+                        && article.sort_order == sort_order
+                        && if direction == MoveDirection::Up {
+                            article.id < article_id || article.id == neighbor_id
+                        } else {
+                            article.id > article_id || article.id == neighbor_id
+                        };
+                    if in_shift_set {
+                        article.sort_order += step;
+                    }
+                }
+            }
+        }
+        Ok(true)
     }
 
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError> {
@@ -1596,6 +1728,264 @@ async fn reorder_articles_updates_sort_order_and_validates_input() {
         .map(|item| item["id"].as_i64().unwrap())
         .collect();
     assert_eq!(listed, vec![ids[2], ids[1], ids[0]]);
+}
+
+#[tokio::test]
+async fn move_article_requires_auth_returns_404_and_moves_one_step() {
+    let app = test_app(Role::Editor);
+
+    // 未认证（无 Session Cookie）→ 401。
+    let unauthenticated = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/admin/articles/1/move")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::ORIGIN, ORIGIN)
+                .body(Body::from(
+                    serde_json::json!({ "direction": "up" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    // 不存在的文章 → 404。
+    let missing = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/999/move",
+            serde_json::json!({ "direction": "up" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    for index in 0..2 {
+        let create = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/admin/articles",
+                serde_json::json!({ "title": format!("Movable {index}") }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(create.status(), StatusCode::CREATED);
+    }
+
+    // 合法请求 → 200 且 moved=true；第二篇上移后与第一篇交换。
+    let moved = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/2/move",
+            serde_json::json!({ "direction": "up" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(moved.status(), StatusCode::OK);
+    assert!(response_body(moved).await.contains("\"moved\":true"));
+
+    // 已在最顶部再上移为 no-op → 200 且 moved=false。
+    let noop = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/2/move",
+            serde_json::json!({ "direction": "up" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(noop.status(), StatusCode::OK);
+    assert!(response_body(noop).await.contains("\"moved\":false"));
+
+    // 非法方向值被 serde 拒绝 → 统一 400 INVALID_REQUEST_BODY（全局 ApiJson 映射）。
+    let invalid = app
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/1/move",
+            serde_json::json!({ "direction": "sideways" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        response_body(invalid)
+            .await
+            .contains("INVALID_REQUEST_BODY")
+    );
+}
+
+#[tokio::test]
+async fn move_article_top_bottom_moves_to_group_edges() {
+    let app = test_app(Role::Editor);
+    for index in 0..3 {
+        let create = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/admin/articles",
+                serde_json::json!({ "title": format!("Edge {index}") }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(create.status(), StatusCode::CREATED);
+    }
+
+    // mock 初始 sort_order = id，升序列表即 [1, 2, 3]。
+    assert_eq!(admin_sorted_ids(app.clone()).await, vec![1, 2, 3]);
+
+    // bottom：直接落到分组最后；已在最后再 bottom 为 no-op。
+    assert!(
+        move_direction(app.clone(), 1, "bottom")
+            .await
+            .contains("\"moved\":true")
+    );
+    assert_eq!(admin_sorted_ids(app.clone()).await, vec![2, 3, 1]);
+    assert!(
+        move_direction(app.clone(), 1, "bottom")
+            .await
+            .contains("\"moved\":false")
+    );
+    assert_eq!(admin_sorted_ids(app.clone()).await, vec![2, 3, 1]);
+
+    // top：直接回到分组最前；已在最前再 top 为 no-op。
+    assert!(
+        move_direction(app.clone(), 1, "top")
+            .await
+            .contains("\"moved\":true")
+    );
+    assert_eq!(admin_sorted_ids(app.clone()).await, vec![1, 2, 3]);
+    assert!(
+        move_direction(app.clone(), 1, "top")
+            .await
+            .contains("\"moved\":false")
+    );
+    assert_eq!(admin_sorted_ids(app.clone()).await, vec![1, 2, 3]);
+}
+
+/// 提交一次 move 请求并返回响应体文本，供断言 `moved` 布尔值。
+async fn move_direction(app: Router, id: i64, direction: &str) -> String {
+    let response = app
+        .oneshot(json_request(
+            "PUT",
+            &format!("/api/admin/articles/{id}/move"),
+            serde_json::json!({ "direction": direction }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    response_body(response).await
+}
+
+/// 「排序」模式升序列表的文章 id 序列。
+async fn admin_sorted_ids(app: Router) -> Vec<i64> {
+    let response = app
+        .oneshot(get_request(
+            "/api/admin/articles?sort=sort_order&order=asc&page_size=10",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_body(response).await;
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    value["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_i64().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn admin_reorder_flows_through_to_public_list_with_pinned_first() {
+    let app = test_app(Role::Editor);
+
+    // 创建并立即发布三篇文章。
+    for index in 0..3 {
+        let create = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/admin/articles",
+                serde_json::json!({ "title": format!("Public Order {index}") }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(create.status(), StatusCode::CREATED);
+        let publish = app
+            .clone()
+            .oneshot(json_request(
+                "PATCH",
+                &format!("/api/admin/articles/{}/status", index + 1),
+                serde_json::json!({ "command": "publish", "expected_version": 1 }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(publish.status(), StatusCode::OK);
+    }
+
+    // 公开端顺序（不带 Cookie/Origin，验证匿名可达）。
+    let public_ids = |app: Router| async move {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/public/articles?page_size=10")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(value["total"], 3);
+        value["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["id"].as_i64().unwrap())
+            .collect::<Vec<i64>>()
+    };
+
+    // 初始：sort_order 升序即创建顺序。
+    assert_eq!(public_ids(app.clone()).await, vec![1, 2, 3]);
+
+    // admin 提交倒序重排 → 204；公开端顺序随之倒转。
+    let reorder = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/reorder",
+            serde_json::json!({ "article_ids": [3, 2, 1] }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reorder.status(), StatusCode::NO_CONTENT);
+    assert_eq!(public_ids(app.clone()).await, vec![3, 2, 1]);
+
+    // 置顶文章 1（version：创建 1 → 发布 2，update 提交 expected_version=2）→
+    // 公开端置顶优先：文章 1 排到最前，其余保持重排后的相对顺序。
+    let pin = app
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            "/api/admin/articles/1",
+            serde_json::json!({
+                "title": "Public Order 0",
+                "is_pinned": true,
+                "expected_version": 2,
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(pin.status(), StatusCode::OK);
+    let after_pin = public_ids(app.clone()).await;
+    assert_eq!(after_pin, vec![1, 3, 2]);
 }
 
 fn json_request(method: &str, uri: &str, payload: serde_json::Value) -> Request<Body> {
