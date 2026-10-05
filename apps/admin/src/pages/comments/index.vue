@@ -42,6 +42,7 @@ import {
   type CommentStatus,
 } from '@/modules/comments/api/comments'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 
 type StatusFilter = 'all' | CommentStatus
@@ -63,7 +64,6 @@ const comments = ref<Comment[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 
 // 详情 Dialog
 const detailOpen = ref(false)
@@ -179,6 +179,7 @@ async function handleReply() {
     await commentsApi.reply(replyComment.value.id, content)
     replyOpen.value = false
     detailOpen.value = false
+    toast.success('回复已发布')
     await loadComments()
   }
   catch (e) {
@@ -190,13 +191,13 @@ async function handleReply() {
 }
 
 async function handleStatusChange(comment: Comment, next: CommentStatus, reason?: string) {
-  operationError.value = ''
   try {
     await commentsApi.changeStatus(comment.id, next, reason)
+    toast.success('操作已完成')
     await loadComments()
   }
   catch (e) {
-    operationError.value = getApiError(e, '审核操作失败')
+    toast.error(getApiError(e, '审核操作失败'))
   }
 }
 
@@ -213,10 +214,11 @@ async function handleDelete() {
     await commentsApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('评论已删除')
     await loadComments()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -263,7 +265,6 @@ const hasFilter = computed(
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 5" :key="index" class="h-12 w-full" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2Icon, LoaderCircleIcon } from '@lucide/vue'
+import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -14,6 +14,7 @@ import { authApi, getApiError } from '@/modules/auth/api/auth'
 import FieldMessage from '@/modules/auth/components/FieldMessage.vue'
 import PasswordField from '@/modules/auth/components/PasswordField.vue'
 import { useSessionStore } from '@/modules/auth/stores/session'
+import { toast } from 'vue-sonner'
 import {
   validateAvatarUrl,
   validateDisplayName,
@@ -33,7 +34,6 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const loading = ref(false)
 const passwordLoading = ref(false)
-const profileMessage = ref('')
 const profileError = ref('')
 const passwordError = ref('')
 const profileFields = reactive({
@@ -67,7 +67,6 @@ async function saveProfile() {
     return
 
   loading.value = true
-  profileMessage.value = ''
   profileError.value = ''
   try {
     const profile = await authApi.updateProfile({
@@ -76,7 +75,7 @@ async function saveProfile() {
       avatar_url: avatarUrl.value || null,
     })
     session.setUser(profile)
-    profileMessage.value = '个人资料已保存'
+    toast.success('个人资料已保存')
   }
   catch (requestError) {
     profileError.value = getApiError(requestError)
@@ -98,6 +97,7 @@ async function savePassword() {
     await authApi.updatePassword(currentPassword.value, newPassword.value)
     currentPassword.value = ''
     newPassword.value = ''
+    toast.success('密码已更新，请重新登录')
     // 修改密码后所有 Session 被撤销，回到登录页。
     window.setTimeout(() => router.replace('/auth/sign-in'), 700)
   }
@@ -137,12 +137,7 @@ async function savePassword() {
             </div>
             <FieldMessage :message="profileError" error />
           </CardContent>
-          <CardFooter class="justify-between gap-4 border-t pt-6">
-            <p v-if="profileMessage" role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CheckCircle2Icon class="size-4 text-primary" />
-              {{ profileMessage }}
-            </p>
-            <span v-else />
+          <CardFooter class="justify-end gap-4 border-t pt-6">
             <Button type="submit" :disabled="loading">
               <LoaderCircleIcon v-if="loading" class="animate-spin" />
               {{ loading ? '保存中' : '保存资料' }}

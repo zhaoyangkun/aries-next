@@ -30,6 +30,7 @@ import {
 } from '@/modules/links/api/links'
 import { validateLinkIconUrl, validateLinkTitle, validateLinkUrl } from '@/modules/links/validation'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 
 type StatusFilter = 'all' | LinkStatus
@@ -43,7 +44,6 @@ const links = ref<Link[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 
 const categories = ref<LinkCategory[]>([])
 
@@ -79,7 +79,7 @@ async function loadCategories() {
     categories.value = await linksApi.listCategories()
   }
   catch (e) {
-    operationError.value = getApiError(e, '分类加载失败')
+    toast.error(getApiError(e, '分类加载失败'))
   }
 }
 
@@ -199,6 +199,7 @@ async function handleSave() {
     else
       await linksApi.create(payload)
     dialogOpen.value = false
+    toast.success(editing.value ? '友链已更新' : '友链已创建')
     await loadLinks()
   }
   catch (e) {
@@ -219,6 +220,7 @@ async function createCategory() {
     categories.value = [...categories.value, category]
     form.category_id = category.id
     newCategoryName.value = ''
+    toast.success('分类已创建')
   }
   catch (e) {
     formError.value = getApiError(e, '分类创建失败')
@@ -240,10 +242,11 @@ async function handleDelete() {
     await linksApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('友链已删除')
     await loadLinks()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -296,7 +299,6 @@ const hasFilter = computed(
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 5" :key="index" class="h-12 w-full" />

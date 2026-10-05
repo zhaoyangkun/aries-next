@@ -315,6 +315,7 @@ declare module 'vue' {
     UiSidebarTrigger: typeof import('./../components/ui/sidebar/SidebarTrigger.vue')['default']
     UiSkeleton: typeof import('./../components/ui/skeleton/Skeleton.vue')['default']
     UiSlider: typeof import('./../components/ui/slider/Slider.vue')['default']
+    UiSonner: typeof import('./../components/ui/sonner/Sonner.vue')['default']
     UiSpinner: typeof import('./../components/ui/spinner/Spinner.vue')['default']
     UiStepper: typeof import('./../components/ui/stepper/Stepper.vue')['default']
     UiStepperDescription: typeof import('./../components/ui/stepper/StepperDescription.vue')['default']

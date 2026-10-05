@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table'
 import { articlesApi, type ArticleTag } from '@/modules/articles/api/articles'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { BasicPage } from '@/components/global-layout'
 import AppConfirmDialog from '@/shared/components/AppConfirmDialog.vue'
 import AppEmptyState from '@/shared/components/AppEmptyState.vue'
@@ -93,6 +94,7 @@ async function handleSave() {
       await articlesApi.createTag(name)
     }
     dialogOpen.value = false
+    toast.success(editing.value ? '标签已更新' : '标签已创建')
     await loadTags()
   }
   catch (e) {
@@ -115,10 +117,11 @@ async function handleDelete() {
     await articlesApi.deleteTag(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('标签已删除')
     await loadTags()
   }
   catch (e) {
-    error.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false

@@ -33,6 +33,7 @@ import { BasicPage } from '@/components/global-layout'
 import { logsApi, type LogEntry, type LogFilterOverride, type LogLevel, type LogLevelCounts, type LogStatsBucket } from '@/modules/logs/api/logs'
 import { highlightJson, highlightSql } from '@/modules/logs/utils/highlight'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { toRfc3339 } from '@/utils/to-rfc3339'
 
 const page = ref(1)
@@ -313,9 +314,10 @@ async function toggleSqlLog(enabled: boolean) {
   try {
     const result = await logsApi.setSqlLog(enabled)
     sqlLogEnabled.value = result.enabled
+    toast.success(result.enabled ? 'SQL 日志已开启' : 'SQL 日志已关闭')
   }
   catch (e) {
-    sqlLogError.value = getApiError(e, 'SQL 日志开关保存失败')
+    toast.error(getApiError(e, 'SQL 日志开关保存失败'))
   }
   finally {
     sqlLogSaving.value = false
@@ -547,6 +549,7 @@ async function applyFilterOverride() {
     if (restoreMinutes.value)
       input.restore_minutes = Number(restoreMinutes.value)
     syncOverrideState(await logsApi.setFilterOverride(input))
+    toast.success('级别覆盖已应用')
   }
   catch (e) {
     // 非法 directives 后端返回 INVALID_DIRECTIVES 400，这里展示具体错误文案。
@@ -565,6 +568,7 @@ async function clearFilterOverride() {
   try {
     syncOverrideState(await logsApi.setFilterOverride({ directives: '' }))
     filterDirectives.value = ''
+    toast.success('级别覆盖已清除')
   }
   catch (e) {
     filterError.value = getApiError(e, '级别覆盖清除失败')

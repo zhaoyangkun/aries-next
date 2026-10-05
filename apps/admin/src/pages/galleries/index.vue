@@ -38,6 +38,7 @@ import {
 import { validateGalleryCategoryId, validateGallerySlug, validateGalleryTitle } from '@/modules/galleries/validation'
 import type { MediaAsset } from '@/modules/media/api/media'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 type StatusFilter = 'all' | GalleryStatus
 
@@ -50,7 +51,6 @@ const galleries = ref<Gallery[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 
 const categories = ref<GalleryCategory[]>([])
 
@@ -103,7 +103,7 @@ async function loadCategories() {
     categories.value = await galleriesApi.listCategories()
   }
   catch (e) {
-    operationError.value = getApiError(e, '分类加载失败')
+    toast.error(getApiError(e, '分类加载失败'))
   }
 }
 
@@ -225,6 +225,7 @@ async function handleSave() {
       await loadGalleries()
       // 编辑已有图库时保存即关闭；新建则留在 Dialog 内继续添加图片条目。
       dialogOpen.value = false
+      toast.success('图库已保存')
     }
     else {
       // 新建成功后直接进入编辑态，用户可立即添加条目。
@@ -252,6 +253,7 @@ async function createCategory() {
     categories.value = [...categories.value, category]
     form.category_id = category.id
     newCategoryName.value = ''
+    toast.success('分类已创建')
   }
   catch (e) {
     formError.value = getApiError(e, '分类创建失败')
@@ -352,6 +354,7 @@ async function setCover(item: GalleryItem) {
       sort_order: form.sort_order,
     })
     await loadGalleries()
+    toast.success('封面已更新')
   }
   catch (e) {
     itemsError.value = getApiError(e, '封面设置失败')
@@ -366,6 +369,7 @@ async function removeItem(item: GalleryItem) {
   try {
     await galleriesApi.removeItem(gallery.id, item.id)
     items.value = items.value.filter(entry => entry.id !== item.id)
+    toast.success('条目已移除')
   }
   catch (e) {
     itemsError.value = getApiError(e, '条目删除失败')
@@ -387,10 +391,11 @@ async function handleDelete() {
     await galleriesApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('图库已删除')
     await loadGalleries()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -443,7 +448,6 @@ const hasFilter = computed(
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 5" :key="index" class="h-12 w-full" />

@@ -46,6 +46,7 @@ import {
   usageTargetText,
 } from '@/modules/media/format'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 import {
   AppDataTable,
@@ -68,18 +69,6 @@ const assets = ref<MediaAsset[]>([])
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
-const operationError = ref('')
-const operationNotice = ref('')
-let noticeTimer: ReturnType<typeof setTimeout> | undefined
-
-function showOperationNotice(message: string) {
-  operationNotice.value = message
-  operationError.value = ''
-  if (noticeTimer) clearTimeout(noticeTimer)
-  noticeTimer = setTimeout(() => {
-    operationNotice.value = ''
-  }, 5000)
-}
 const dragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -291,6 +280,7 @@ async function saveDetail() {
     })
     detail.value = updated
     assets.value = assets.value.map((item) => (item.id === updated.id ? updated : item))
+    toast.success('媒体信息已保存')
   } catch (requestError) {
     detailError.value = getApiError(requestError, '保存失败')
   } finally {
@@ -344,19 +334,17 @@ async function confirmBatchDelete() {
     detail.value = null
     if (assets.value.length <= ids.length && page.value > 1) page.value -= 1
     else await loadAssets()
-    const notices: string[] = []
+    if (result.deleted.length > 0) {
+      toast.success(`已删除 ${result.deleted.length} 个文件`)
+    }
     if (result.referenced.length > 0) {
-      notices.push(`${result.referenced.length} 个文件仍被引用，未删除：${result.referenced.map((id) => `#${id}`).join('、')}`)
+      toast.warning(`${result.referenced.length} 个文件仍被引用，未删除：${result.referenced.map((id) => `#${id}`).join('、')}`)
     }
     if (result.not_found.length > 0) {
-      notices.push(`${result.not_found.length} 个文件已不存在，已忽略。`)
+      toast.warning(`${result.not_found.length} 个文件已不存在，已忽略`)
     }
-    if (result.deleted.length > 0) {
-      notices.push(`已删除 ${result.deleted.length} 个文件。`)
-    }
-    showOperationNotice(notices.join(' '))
   } catch (requestError) {
-    operationError.value = getApiError(requestError, '批量删除失败')
+    toast.error(getApiError(requestError, '批量删除失败'))
     batchDeleteConfirmOpen.value = false
   } finally {
     batchDeleting.value = false
@@ -364,8 +352,6 @@ async function confirmBatchDelete() {
 }
 
 function requestDelete() {
-  operationError.value = ''
-  operationNotice.value = ''
   deleteBlockedUsages.value = []
   deleteConfirmOpen.value = true
 }
@@ -381,6 +367,7 @@ async function confirmDelete() {
     detail.value = null
     if (assets.value.length === 1 && page.value > 1) page.value -= 1
     else await loadAssets()
+    toast.success('文件已删除')
   } catch (requestError) {
     // 409 MEDIA_IN_USE：展示引用位置并禁止删除，由用户先解除引用。
     const inUse = getMediaInUseUsages(requestError)
@@ -389,7 +376,7 @@ async function confirmDelete() {
       usages.value = inUse
       deleteConfirmOpen.value = false
     } else {
-      operationError.value = getApiError(requestError, '删除失败')
+      toast.error(getApiError(requestError, '删除失败'))
       deleteConfirmOpen.value = false
     }
   } finally {
@@ -640,8 +627,6 @@ function dimensionText(asset: MediaAsset) {
         </div>
 
         <CardFooter class="flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t px-4 py-3">
-          <p v-if="operationError" class="mr-auto text-xs font-medium text-destructive">{{ operationError }}</p>
-          <p v-else-if="operationNotice" class="mr-auto text-xs font-medium text-green-600 dark:text-green-500">{{ operationNotice }}</p>
           <AppDataTablePagination
             v-model:page="page"
             v-model:page-size="pageSize"

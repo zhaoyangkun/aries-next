@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2Icon, LoaderCircleIcon, RefreshCwIcon, SparklesIcon } from '@lucide/vue'
+import { LoaderCircleIcon, RefreshCwIcon, SparklesIcon } from '@lucide/vue'
 import dayjs from 'dayjs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import AppEmptyState from '@/shared/components/AppEmptyState.vue'
 import { aiApi, type AiFeature, type AiRequestStatus, type AiUsageItem } from '@/modules/ai/api/ai'
 import { settingsGroupApi, type AiProtocol } from '@/modules/settings/api/settings'
 import { getApiError, getApiErrorCode } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 
 import SettingsLayout from './components/settings-layout.vue'
 
@@ -36,8 +37,6 @@ const clearApiKey = ref(false)
 const version = ref(0)
 const loading = ref(true)
 const saving = ref(false)
-const message = ref('')
-const error = ref('')
 
 // 「获取模型」：由服务端用已保存的 Provider 配置请求 /models，前端只做选择回填。
 const modelsLoading = ref(false)
@@ -95,7 +94,7 @@ onMounted(async () => {
     form.embedding_model = record.settings.embedding_model ?? ''
   }
   catch (requestError) {
-    error.value = getApiError(requestError, 'AI 设置加载失败')
+    toast.error(getApiError(requestError, 'AI 设置加载失败'))
   }
   finally {
     loading.value = false
@@ -105,8 +104,6 @@ onMounted(async () => {
 
 async function save() {
   saving.value = true
-  message.value = ''
-  error.value = ''
   try {
     const record = await settingsGroupApi.updateAi(version.value, {
       enabled: form.enabled,
@@ -132,10 +129,10 @@ async function save() {
     apiKeySet.value = record.settings.api_key_set
     newApiKey.value = ''
     clearApiKey.value = false
-    message.value = 'AI 设置已保存'
+    toast.success('AI 设置已保存')
   }
   catch (requestError) {
-    error.value = getApiError(requestError, '保存失败')
+    toast.error(getApiError(requestError, '保存失败'))
   }
   finally {
     saving.value = false
@@ -347,14 +344,8 @@ function tokenText(item: AiUsageItem) {
               </label>
             </fieldset>
 
-            <p v-if="error" role="alert" class="text-xs font-medium text-destructive">{{ error }}</p>
           </CardContent>
-          <CardFooter class="justify-between gap-4 border-t pt-6">
-            <p v-if="message" role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CheckCircle2Icon class="size-4 text-primary" />
-              {{ message }}
-            </p>
-            <span v-else />
+          <CardFooter class="justify-end gap-4 border-t pt-6">
             <Button type="submit" :disabled="loading || saving">
               <LoaderCircleIcon v-if="saving" class="animate-spin" />
               {{ saving ? '保存中' : '保存设置' }}

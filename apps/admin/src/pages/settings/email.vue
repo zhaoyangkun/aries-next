@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { CheckCircle2Icon, LoaderCircleIcon } from '@lucide/vue'
+import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { settingsGroupApi } from '@/modules/settings/api/settings'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 
 import SettingsLayout from './components/settings-layout.vue'
 
@@ -24,8 +25,6 @@ const clearPassword = ref(false)
 const version = ref(0)
 const loading = ref(true)
 const saving = ref(false)
-const message = ref('')
-const error = ref('')
 
 onMounted(async () => {
   try {
@@ -40,7 +39,7 @@ onMounted(async () => {
     form.from_name = record.settings.from_name ?? ''
   }
   catch (requestError) {
-    error.value = getApiError(requestError, '邮件设置加载失败')
+    toast.error(getApiError(requestError, '邮件设置加载失败'))
   }
   finally {
     loading.value = false
@@ -49,8 +48,6 @@ onMounted(async () => {
 
 async function save() {
   saving.value = true
-  message.value = ''
-  error.value = ''
   try {
     const record = await settingsGroupApi.updateEmail(version.value, {
       enabled: form.enabled,
@@ -70,10 +67,10 @@ async function save() {
     passwordSet.value = record.settings.smtp_password_set
     newPassword.value = ''
     clearPassword.value = false
-    message.value = '邮件设置已保存'
+    toast.success('邮件设置已保存')
   }
   catch (requestError) {
-    error.value = getApiError(requestError, '保存失败')
+    toast.error(getApiError(requestError, '保存失败'))
   }
   finally {
     saving.value = false
@@ -152,14 +149,8 @@ async function save() {
               <Input id="from-name" v-model="form.from_name" placeholder="Aries" :disabled="loading || saving" />
             </div>
           </div>
-          <p v-if="error" role="alert" class="text-xs font-medium text-destructive">{{ error }}</p>
         </CardContent>
-        <CardFooter class="justify-between gap-4 border-t pt-6">
-          <p v-if="message" role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CheckCircle2Icon class="size-4 text-primary" />
-            {{ message }}
-          </p>
-          <span v-else />
+        <CardFooter class="justify-end gap-4 border-t pt-6">
           <Button type="submit" :disabled="loading || saving">
             <LoaderCircleIcon v-if="saving" class="animate-spin" />
             {{ saving ? '保存中' : '保存设置' }}

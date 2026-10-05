@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table'
 import { articlesApi, type ArticleCategory } from '@/modules/articles/api/articles'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { BasicPage } from '@/components/global-layout'
 import AppConfirmDialog from '@/shared/components/AppConfirmDialog.vue'
 import AppEmptyState from '@/shared/components/AppEmptyState.vue'
@@ -93,6 +94,7 @@ async function handleSave() {
       await articlesApi.createCategory(name)
     }
     dialogOpen.value = false
+    toast.success(editing.value ? '分类已更新' : '分类已创建')
     await loadCategories()
   }
   catch (e) {
@@ -115,10 +117,11 @@ async function handleDelete() {
     await articlesApi.deleteCategory(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('分类已删除')
     await loadCategories()
   }
   catch (e) {
-    error.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false

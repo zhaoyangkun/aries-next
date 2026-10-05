@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2Icon, LoaderCircleIcon } from '@lucide/vue'
+import { LoaderCircleIcon } from '@lucide/vue'
 import ContentLayout from '@/components/custom-theme/content-layout.vue'
 import CustomColor from '@/components/custom-theme/custom-color.vue'
 import CustomRadius from '@/components/custom-theme/custom-radius.vue'
@@ -15,6 +15,7 @@ import {
   type ListDensity,
 } from '@/modules/settings/api/settings'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 
 import SettingsLayout from './components/settings-layout.vue'
 
@@ -32,8 +33,6 @@ const siteForm = reactive({
 const siteVersion = ref(0)
 const siteLoading = ref(true)
 const siteSaving = ref(false)
-const siteMessage = ref('')
-const siteError = ref('')
 
 onMounted(async () => {
   if (!canManageSiteAppearance.value) {
@@ -49,7 +48,7 @@ onMounted(async () => {
     siteForm.list_density = record.settings.list_density ?? ''
   }
   catch (requestError) {
-    siteError.value = getApiError(requestError, '站点外观加载失败')
+    toast.error(getApiError(requestError, '站点外观加载失败'))
   }
   finally {
     siteLoading.value = false
@@ -58,8 +57,6 @@ onMounted(async () => {
 
 async function saveSiteAppearance() {
   siteSaving.value = true
-  siteMessage.value = ''
-  siteError.value = ''
   try {
     const settings: AppearanceSettings = {
       logo_url: siteForm.logo_url.trim() || null,
@@ -69,10 +66,10 @@ async function saveSiteAppearance() {
     }
     const record = await settingsGroupApi.updateAppearance(siteVersion.value, settings)
     siteVersion.value = record.version
-    siteMessage.value = '站点外观已保存'
+    toast.success('站点外观已保存')
   }
   catch (requestError) {
-    siteError.value = getApiError(requestError, '保存失败')
+    toast.error(getApiError(requestError, '保存失败'))
   }
   finally {
     siteSaving.value = false
@@ -129,14 +126,8 @@ async function saveSiteAppearance() {
                 </select>
               </div>
             </div>
-            <p v-if="siteError" role="alert" class="text-xs font-medium text-destructive">{{ siteError }}</p>
           </CardContent>
-          <CardFooter class="justify-between gap-4 border-t pt-6">
-            <p v-if="siteMessage" role="status" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CheckCircle2Icon class="size-4 text-primary" />
-              {{ siteMessage }}
-            </p>
-            <span v-else />
+          <CardFooter class="justify-end gap-4 border-t pt-6">
             <Button type="submit" :disabled="siteLoading || siteSaving">
               <LoaderCircleIcon v-if="siteSaving" class="animate-spin" />
               {{ siteSaving ? '保存中' : '保存设置' }}

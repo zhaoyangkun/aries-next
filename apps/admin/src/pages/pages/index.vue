@@ -25,6 +25,7 @@ import { BasicPage } from '@/components/global-layout'
 import { pagesApi, type CustomPage, type PageStatus } from '@/modules/pages/api/pages'
 import { validatePageSlug, validatePageTitle } from '@/modules/pages/validation'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 
 type StatusFilter = 'all' | PageStatus
@@ -37,7 +38,6 @@ const pages = ref<CustomPage[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 
 // 编辑 Dialog
 const dialogOpen = ref(false)
@@ -158,6 +158,7 @@ async function handleSave() {
     else
       await pagesApi.create(payload)
     dialogOpen.value = false
+    toast.success(editing.value ? '页面已更新' : '页面已创建')
     await loadPages()
   }
   catch (e) {
@@ -180,10 +181,11 @@ async function handleDelete() {
     await pagesApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('页面已删除')
     await loadPages()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -223,7 +225,6 @@ const hasFilter = computed(() => status.value !== 'all' || Boolean(keyword.value
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 5" :key="index" class="h-12 w-full" />

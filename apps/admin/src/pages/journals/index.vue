@@ -24,6 +24,7 @@ import { uploadEditorImages } from '@/shared/components/markdown-editor-upload'
 import { BasicPage } from '@/components/global-layout'
 import { journalsApi, type Journal, type JournalVisibility } from '@/modules/journals/api/journals'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 
 type VisibilityFilter = 'all' | JournalVisibility
 
@@ -34,7 +35,6 @@ const journals = ref<Journal[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 
 // 创建/编辑 Dialog
 const dialogOpen = ref(false)
@@ -128,6 +128,7 @@ async function handleSave() {
     else
       await journalsApi.create(payload)
     dialogOpen.value = false
+    toast.success(editing.value ? '日志已保存' : '日志已发布')
     await loadJournals()
   }
   catch (e) {
@@ -150,10 +151,11 @@ async function handleDelete() {
     await journalsApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('日志已删除')
     await loadJournals()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -182,7 +184,6 @@ async function handleDelete() {
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 5" :key="index" class="h-16 w-full" />

@@ -30,6 +30,7 @@ import {
 import { articlesApi, type AdminArticle, type ArticleCategory } from '@/modules/articles/api/articles'
 import { pagesApi, type CustomPage } from '@/modules/pages/api/pages'
 import { getApiError } from '@/shared/api/client'
+import { toast } from 'vue-sonner'
 
 // 两级树的本地视图：children 顺序即展示顺序。
 interface NavNode {
@@ -40,7 +41,6 @@ interface NavNode {
 const nodes = ref<NavNode[]>([])
 const loading = ref(true)
 const error = ref('')
-const operationError = ref('')
 // 本地排序偏离服务器状态时为 true，提示用户「保存排序」一次性提交。
 const orderDirty = ref(false)
 const savingOrder = ref(false)
@@ -208,6 +208,7 @@ async function handleSave() {
     else
       await navigationApi.create(payload)
     dialogOpen.value = false
+    toast.success(editing.value ? '菜单已更新' : '菜单已创建')
     await loadNavigation()
   }
   catch (e) {
@@ -245,15 +246,15 @@ function moveChild(nodeIndex: number, childIndex: number, direction: -1 | 1) {
 async function saveOrder() {
   if (!orderDirty.value || savingOrder.value) return
   savingOrder.value = true
-  operationError.value = ''
   try {
     const ids = nodes.value.flatMap(node => [node.item.id, ...node.children.map(child => child.id)])
     await navigationApi.reorder(ids)
     savedOrderSignature = orderSignature(nodes.value)
     orderDirty.value = false
+    toast.success('排序已保存')
   }
   catch (e) {
-    operationError.value = getApiError(e, '排序保存失败')
+    toast.error(getApiError(e, '排序保存失败'))
   }
   finally {
     savingOrder.value = false
@@ -272,10 +273,11 @@ async function handleDelete() {
     await navigationApi.remove(pendingDelete.value.id)
     deleteConfirmOpen.value = false
     pendingDelete.value = null
+    toast.success('菜单已删除')
     await loadNavigation()
   }
   catch (e) {
-    operationError.value = getApiError(e, '删除失败')
+    toast.error(getApiError(e, '删除失败'))
   }
   finally {
     deleting.value = false
@@ -310,7 +312,6 @@ function targetText(item: NavigationItem) {
       </CardHeader>
       <CardContent class="p-0">
         <p v-if="error" class="border-b px-4 py-3 text-sm text-destructive">{{ error }}</p>
-        <div v-if="operationError" class="border-b px-4 py-2.5 text-xs font-medium text-destructive">{{ operationError }}</div>
 
         <div v-if="loading" class="space-y-2 p-4">
           <Skeleton v-for="index in 4" :key="index" class="h-12 w-full" />
