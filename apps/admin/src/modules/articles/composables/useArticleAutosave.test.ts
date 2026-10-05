@@ -137,12 +137,29 @@ describe('useArticleAutosave', () => {
 
   it('writes an emergency backup instead of saving for a brand-new article', async () => {
     const save = vi.fn(async () => article)
-    const { autosave, storage } = createAutosave({ articleId: null, save })
+    const { autosave, timers, storage } = createAutosave({ articleId: null, save })
 
     autosave.notifyChange()
     expect(autosave.phase.value).toBe('backed_up')
     expect(save).not.toHaveBeenCalled()
+    // backup 写入本身防抖，推进定时器后才落 localStorage。
+    await timers.runLatest()
     expect(readBackup(storage, null)?.payload).toEqual(buildPayload())
+  })
+
+  it('debounces emergency backup writes for brand-new articles', async () => {
+    const save = vi.fn(async () => article)
+    const { autosave, timers, storage } = createAutosave({ articleId: null, save })
+    const setItem = vi.spyOn(storage, 'setItem')
+
+    autosave.notifyChange()
+    autosave.notifyChange()
+    autosave.notifyChange()
+    expect(setItem).not.toHaveBeenCalled()
+
+    await timers.runLatest()
+    // 连续变化只落一次盘，避免逐键整串序列化。
+    expect(setItem).toHaveBeenCalledTimes(1)
   })
 
   it('falls back to a local backup when the title is empty', async () => {

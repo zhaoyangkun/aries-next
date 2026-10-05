@@ -58,6 +58,7 @@ import {
 } from '@/modules/media/api/media'
 import type { MediaAsset } from '@/modules/media/api/media'
 import { getApiError, getApiErrorCode } from '@/shared/api/client'
+import { useDebouncedWatch } from '@/composables/use-debounced-watch'
 import AppConfirmDialog from '@/shared/components/AppConfirmDialog.vue'
 import AppMediaPicker from '@/shared/components/AppMediaPicker.vue'
 import ArticleAiAssistDialog, {
@@ -117,6 +118,9 @@ const restoreConfirmOpen = ref(false)
 const pendingRestore = ref<ArticleRevision | null>(null)
 const restoring = ref(false)
 const savedSnapshot = ref('')
+// dirty 缓存：逐键序列化整篇表单代价高，只在防抖空闲或强制重算时更新；
+// 关闭确认等需要权威值的时机先调 refreshDirty()。
+const dirtyState = ref(false)
 const coverPickerOpen = ref(false)
 const backupPrompt = ref<ArticleBackup | null>(null)
 const editorNotice = ref('')
@@ -127,11 +131,15 @@ const aiRequest = ref<Record<string, string>>({})
 const applyingAiTags = ref(false)
 const vditorEl = ref<HTMLElement | null>(null)
 let vditorInstance: Vditor | null = null
+// 每次开合递增世代号，迟到的异步加载结果据此丢弃，避免旧请求在新会话上构造编辑器。
+let openGeneration = 0
 // setValue 等程序化写入不应触发自动保存调度。
 let applyingServerState = false
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+// 最近一次算出的表单快照串，dirty 对比与自动保存复用同一份，避免同轮重复序列化。
+let latestSnapshot = ''
 
-const characterCount = computed(() => content.value.trim().length)
+const characterCount = computed(() => content.value.length)
 const editing = computed(() => Boolean(loadedArticle.value ?? props.article))
 const currentArticleId = computed(() => loadedArticle.value?.id ?? props.article?.id ?? null)
 const currentStatus = computed(() => loadedArticle.value?.status ?? props.article?.status ?? 'draft')
@@ -142,13 +150,15 @@ const currentStatusText = computed(() => {
   return '草稿'
 })
 // 快照对比驱动 Unsaved Guard：任何字段偏离最近一次加载/保存的状态都视为未保存修改。
-const isDirty = computed(() => props.open && formSnapshot() !== savedSnapshot.value)
+// dirtyState 是防抖缓存，refreshDirty() 提供任意时机的权威值。
+const isDirty = computed(() => props.open && dirtyState.value)
 
 // 自动保存：既有文章防抖 PUT（带乐观锁），新文章只写 localStorage emergency backup。
+// notifyChange 只在防抖重算快照后调用，snapshot 直接复用 latestSnapshot，不再重复序列化。
 const autosave = useArticleAutosave({
   articleId: () => currentArticleId.value,
   baseUpdatedAt: () => loadedArticle.value?.updated_at ?? props.article?.updated_at ?? null,
-  buildSnapshot: () => ({ payload: buildPayload(), snapshot: formSnapshot() }),
+  buildSnapshot: () => ({ payload: buildPayload(), snapshot: latestSnapshot }),
   save: (articleId, payload) => {
     const base = loadedArticle.value ?? props.article
     return articlesApi.update(articleId, { ...payload, expected_version: base?.version ?? 0 })
@@ -157,6 +167,8 @@ const autosave = useArticleAutosave({
     // 只更新版本与“已保存”基线，不回写表单，避免覆盖保存期间的新输入。
     loadedArticle.value = saved
     savedSnapshot.value = sent.snapshot
+    // 基线推进后同步重算 dirty：保存内容与当前表单一致时应立即恢复非脏。
+    refreshDirty()
   },
   onConflict: () => {
     conflict.value = true
@@ -193,6 +205,7 @@ const autosaveStatusTone = computed(() => {
 watch(
   () => props.open,
   async (open) => {
+    openGeneration += 1
     if (!open) {
       destroyVditor()
       autosave.reset()
@@ -201,18 +214,32 @@ watch(
     resetEditor()
     loadTaxonomy()
     await nextTick()
-    void createVditor()
-    if (props.article) void loadArticle(props.article.id)
-    else checkBackupPrompt(null)
+    if (props.article) {
+      // 编辑模式：文章详情与 Vditor chunk 并行加载完成后才构造编辑器，
+      // 避免先空构造再 setValue 触发两次全量 IR 渲染。
+      void openExistingEditor(props.article.id, openGeneration)
+    } else {
+      // 新建模式：立即构造空编辑器。
+      void createVditor()
+      checkBackupPrompt(null)
+    }
   },
 )
 
-// 任何表单字段变化都会触发自动保存调度；加载/恢复服务器状态期间不调度。
-watch(formSnapshot, () => {
-  if (!props.open || applyingServerState || loadingArticle.value) return
-  if (formSnapshot() === savedSnapshot.value) return
-  autosave.notifyChange()
-})
+// 任何表单字段变化后防抖重算一次快照（击键本身只做廉价的 ref 读取，不序列化）：
+// 更新 dirty 缓存并调度自动保存；加载/恢复服务器状态期间不调度。
+useDebouncedWatch(
+  [title, slug, summary, aiBrief, content, coverUrl, seoKeywords, allowComments, isPinned, categoryId, tagIds, newPassword, clearPassword],
+  () => {
+    if (!props.open) return
+    const snapshot = computeSnapshot()
+    dirtyState.value = snapshot !== savedSnapshot.value
+    if (applyingServerState || loadingArticle.value) return
+    if (snapshot === savedSnapshot.value) return
+    autosave.notifyChange()
+  },
+  500,
+)
 
 function handleOnline() {
   // 网络恢复后，离线期间写入 localStorage 的快照自动续存。
@@ -229,12 +256,22 @@ onBeforeUnmount(() => {
 })
 
 // Vditor 体积较大，动态加载避免拖慢首屏；CSS 一并按需引入。
-async function createVditor() {
-  if (!vditorEl.value || vditorInstance) return
+async function loadVditor() {
   const [{ default: VditorCtor }] = await Promise.all([
     import('vditor'),
     import('vditor/dist/index.css'),
   ])
+  return VditorCtor
+}
+
+// 挂载前让出一帧，避免与 Dialog 打开动画同帧造成卡顿。
+function nextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+}
+
+function mountVditor(VditorCtor: typeof Vditor, initialValue: string) {
   // 加载期间 Dialog 可能已关闭，此时容器已卸载，放弃创建。
   if (!vditorEl.value || vditorInstance) return
   vditorInstance = new VditorCtor(vditorEl.value, {
@@ -248,7 +285,7 @@ async function createVditor() {
     cache: { enable: false },
     counter: { enable: true, max: 100000 },
     placeholder: '使用 Markdown 编写正文...',
-    value: content.value,
+    value: initialValue,
     input: (value) => {
       if (applyingServerState) return
       content.value = value
@@ -262,6 +299,25 @@ async function createVditor() {
       handler: (files: File[]) => handleVditorUpload(files) as Promise<string> | Promise<null>,
     },
   })
+}
+
+// 新建模式：立即以当前（空）内容构造编辑器。
+async function createVditor() {
+  if (!vditorEl.value || vditorInstance) return
+  const VditorCtor = await loadVditor()
+  await nextFrame()
+  mountVditor(VditorCtor, content.value)
+}
+
+// 编辑模式：文章详情与 Vditor chunk 并行加载，完成后以「首个应展示的内容」一次构造
+// 编辑器——存在待确认的本地备份时先展示备份内容（丢弃备份后回退为服务器内容），
+// 保证打开过程只触发一次 IR 全量渲染。
+async function openExistingEditor(articleId: number, generation: number) {
+  const [VditorCtor] = await Promise.all([loadVditor(), loadArticle(articleId)])
+  if (generation !== openGeneration) return
+  await nextFrame()
+  if (generation !== openGeneration) return
+  mountVditor(VditorCtor, backupPrompt.value?.payload.markdown_source ?? content.value)
 }
 
 function destroyVditor() {
@@ -421,6 +477,16 @@ function restoreBackup() {
 function discardBackup() {
   clearBackup(window.localStorage, currentArticleId.value)
   backupPrompt.value = null
+  // 编辑模式下编辑器首个展示的可能是备份内容，丢弃后回退为已加载的服务器内容。
+  const article = loadedArticle.value
+  if (!article) return
+  applyingServerState = true
+  content.value = article.markdown_source
+  vditorInstance?.setValue(article.markdown_source)
+  // watcher 在下一微任务才触发，需在 flush 后再解除标记，避免把回退误判为用户输入。
+  void nextTick(() => {
+    applyingServerState = false
+  })
 }
 
 function formSnapshot() {
@@ -439,6 +505,17 @@ function formSnapshot() {
     newPassword: newPassword.value,
     clearPassword: clearPassword.value,
   })
+}
+
+// 序列化当前表单并缓存结果；同一轮内 dirty 对比与自动保存复用该字符串。
+function computeSnapshot() {
+  latestSnapshot = formSnapshot()
+  return latestSnapshot
+}
+
+// 同步重算 dirty 权威值：关闭确认等不能等防抖的时机调用。
+function refreshDirty() {
+  dirtyState.value = props.open && computeSnapshot() !== savedSnapshot.value
 }
 
 function resetEditor() {
@@ -478,6 +555,8 @@ function resetEditor() {
   restoreConfirmOpen.value = false
   pendingRestore.value = null
   savedSnapshot.value = formSnapshot()
+  latestSnapshot = savedSnapshot.value
+  dirtyState.value = false
 }
 
 // 将服务器返回的文章整体写回表单，并把当前状态记为“已保存”基线。
@@ -502,6 +581,8 @@ function applyArticle(article: AdminArticle) {
   passwordError.value = ''
   conflict.value = false
   savedSnapshot.value = formSnapshot()
+  latestSnapshot = savedSnapshot.value
+  dirtyState.value = false
   // watcher 在下一微任务才触发，需在 flush 后再解除标记，避免把服务器回写误判为用户输入。
   void nextTick(() => {
     applyingServerState = false
@@ -532,7 +613,8 @@ async function loadArticle(articleId: number) {
     const article = await articlesApi.get(articleId)
     applyArticle(article)
     checkBackupPrompt(article)
-    await loadRevisions(articleId)
+    // 历史版本不阻塞编辑器就绪，独立加载（面板自带加载态）。
+    void loadRevisions(articleId)
   } catch (requestError) {
     saveError.value = getApiError(requestError, '文章加载失败')
   } finally {
@@ -732,7 +814,9 @@ function handleOpenChange(open: boolean) {
     return
   }
   if (saving.value) return
-  // 有未保存修改时先确认，避免误触遮罩或 Escape 丢失内容。
+  // 有未保存修改时先确认，避免误触遮罩或 Escape 丢失内容；
+  // dirtyState 平时只是防抖缓存，关闭前同步重算一次拿权威值。
+  refreshDirty()
   if (isDirty.value) {
     discardConfirmOpen.value = true
     return

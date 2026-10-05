@@ -90,6 +90,8 @@ export interface UseArticleAutosaveOptions {
   onSaved?: (article: AdminArticle, sent: AutosaveSnapshot) => void
   onConflict?: () => void
   debounceMs?: number
+  // 新文章 emergency backup 写 localStorage 的防抖间隔：逐键写入会反复整串序列化。
+  backupDebounceMs?: number
   storage?: Storage
   setTimeoutFn?: typeof setTimeout
   clearTimeoutFn?: typeof clearTimeout
@@ -108,6 +110,7 @@ export interface ArticleAutosave {
 
 export function useArticleAutosave(options: UseArticleAutosaveOptions): ArticleAutosave {
   const debounceMs = options.debounceMs ?? 30_000
+  const backupDebounceMs = options.backupDebounceMs ?? 1_000
   const storage = options.storage ?? window.localStorage
   const setTimeoutFn = options.setTimeoutFn ?? setTimeout
   const clearTimeoutFn = options.clearTimeoutFn ?? clearTimeout
@@ -131,14 +134,18 @@ export function useArticleAutosave(options: UseArticleAutosaveOptions): ArticleA
     })
   }
 
-  // 内容变化时调用：既有文章防抖后自动 PUT；新文章只写 emergency backup。
+  // 内容变化时调用：既有文章防抖后自动 PUT；新文章防抖写 emergency backup。
   function notifyChange() {
     const snapshot = options.buildSnapshot()
     pending = snapshot
     const articleId = options.articleId()
     if (articleId === null) {
-      persistBackup(null, snapshot)
       phase.value = 'backed_up'
+      cancelTimer()
+      timer = setTimeoutFn(() => {
+        timer = undefined
+        persistBackup(null, snapshot)
+      }, backupDebounceMs)
       return
     }
     phase.value = 'pending'
