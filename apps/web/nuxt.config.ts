@@ -55,7 +55,15 @@ export default defineNuxtConfig({
     '/galleries/**': { swr: 300 },
     '/custom/**': { swr: 300 },
   },
+  // 原生 View Transitions：整页截图交叉淡化 + 共享元素（文章封面）平滑变形；
+  // true 表示 prefers-reduced-motion 用户自动跳过。不支持的浏览器回退到 main.css 的 .page-* 类过渡
+  experimental: {
+    viewTransition: true,
+  },
   app: {
+    // 客户端路由切换时的页面过渡（淡入 + 轻微上浮）；SSR 首屏不触发，reduced-motion 用户关闭。
+    // 注意不能用 out-in：与全站 async setup 页面的 Suspense 组合会导致客户端导航卡空白页。
+    pageTransition: { name: 'page' },
     head: {
       htmlAttrs: { lang: 'zh-CN' },
       meta: [{ name: 'description', content: 'Aries blog' }],

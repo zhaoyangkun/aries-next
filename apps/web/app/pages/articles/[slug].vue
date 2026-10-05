@@ -118,7 +118,6 @@ useHead(
     <PasswordChallenge v-if="locked" :slug="article.slug" />
 
     <div v-else class="xl:flex xl:items-start xl:gap-12">
-      <ReadingProgress />
       <article class="min-w-0 max-w-3xl flex-1">
         <header>
           <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -156,10 +155,15 @@ useHead(
           </div>
         </header>
 
+        <!-- 详情封面：原来直出原图，改为 ?w= 缩略图 + srcset（正文栏最大 768px）；
+             view-transition-name 与列表卡片封面配对，实现共享元素过渡 -->
         <img
           v-if="article.cover_url"
-          :src="article.cover_url"
+          :src="thumbUrl(article.cover_url, 768)"
+          :srcset="thumbSrcset(article.cover_url, [480, 768, 1200])"
+          sizes="(max-width: 800px) calc(100vw - 2rem), 768px"
           :alt="article.title"
+          :style="{ viewTransitionName: `cover-${article.id}` }"
           class="mt-8 w-full rounded-lg object-cover"
         />
 
@@ -188,6 +192,8 @@ useHead(
               <img
                 v-if="item.cover_url"
                 :src="thumbUrl(item.cover_url, 160)"
+                :srcset="thumbSrcset(item.cover_url, [160, 320])"
+                sizes="80px"
                 :alt="item.title"
                 loading="lazy"
                 class="h-14 w-20 shrink-0 rounded-md object-cover"

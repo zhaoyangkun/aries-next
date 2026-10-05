@@ -171,7 +171,9 @@ const chipBaseClass = 'rounded-full border px-3.5 py-1.5 text-sm transition-colo
           @click="openLightbox(index)"
         >
           <img
-            :src="photo.url"
+            :src="thumbUrl(photo.url, 768)"
+            :srcset="thumbSrcset(photo.url, [480, 768, 1200])"
+            sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 330px"
             :alt="photo.alt || photo.gallery_title"
             :width="photo.width ?? undefined"
             :height="photo.height ?? undefined"
@@ -207,7 +209,9 @@ const chipBaseClass = 'rounded-full border px-3.5 py-1.5 text-sm transition-colo
         >
           <img
             v-if="gallery.cover_url"
-            :src="gallery.cover_url"
+            :src="thumbUrl(gallery.cover_url, 768)"
+            :srcset="thumbSrcset(gallery.cover_url, [480, 768, 1200])"
+            sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 330px"
             :alt="gallery.title"
             loading="lazy"
             class="aspect-[3/2] w-full object-cover transition-transform group-hover:scale-[1.02]"

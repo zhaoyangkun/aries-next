@@ -48,3 +48,12 @@ export function thumbUrl(url: string | null | undefined, width: number): string 
   if (!url || !url.startsWith('/api/media/files/')) return url ?? ''
   return `${url}?w=${width}`
 }
+
+/**
+ * 响应式 srcset：本站托管图片按给定宽度档生成 `?w=` 描述符列表（后端支持 16–1200 按需缩放、
+   生成后落盘缓存且 immutable）；外部地址无法缩放返回 undefined（调用方省略 srcset 属性）。
+ */
+export function thumbSrcset(url: string | null | undefined, widths: number[]): string | undefined {
+  if (!url || !url.startsWith('/api/media/files/')) return undefined
+  return widths.map((width) => `${url}?w=${width} ${width}w`).join(', ')
+}

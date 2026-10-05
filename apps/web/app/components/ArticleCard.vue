@@ -70,8 +70,16 @@ const dateText = computed(() => formatDate(props.article.published_at))
       class="post-thumb"
       :aria-label="article.title"
     >
-      <!-- 列表展示面小：本地托管图片走 ?w= 按需缩略图，外部地址用原图 -->
-      <img :src="thumbUrl(article.cover_url, 480)" :alt="article.title" loading="lazy" />
+      <!-- 列表展示面小（桌面 w-52）：本地托管图片走 ?w= 按需缩略图 + srcset 响应式，
+           外部地址用原图；view-transition-name 与详情页封面配对，实现共享元素过渡 -->
+      <img
+        :src="thumbUrl(article.cover_url, 480)"
+        :srcset="thumbSrcset(article.cover_url, [480, 768, 1200])"
+        sizes="(max-width: 639px) 100vw, 208px"
+        :alt="article.title"
+        :style="{ viewTransitionName: `cover-${article.id}` }"
+        loading="lazy"
+      />
     </NuxtLink>
   </article>
 </template>

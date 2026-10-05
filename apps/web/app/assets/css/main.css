@@ -242,6 +242,41 @@
   @apply fixed top-0 left-0 z-50 h-0.5 w-full origin-left bg-primary;
 }
 
+/* 原生 View Transitions（experimental.viewTransition）：整页截图交叉淡化，时长/缓动在此定制；
+   共享元素（文章封面 card ↔ 详情，view-transition-name: cover-{id}）由浏览器自动变形过渡 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.25s;
+  animation-timing-function: ease;
+}
+
+/* 页面过渡的回退路径：仅在不支持 View Transitions API 的浏览器启用（否则与截图交叉淡化叠加） */
+@supports not (selector(::view-transition-new(root))) {
+  .page-enter-active,
+  .page-leave-active {
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+  }
+
+  .page-enter-from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  .page-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page-enter-active,
+    .page-leave-active {
+      transition: none;
+    }
+  }
+}
+
 /* 首页全屏封面：抵消 site-main 顶部留白并横向满屏，高度为视口减去 header */
 .home-hero {
   @apply relative -mt-14 flex items-center justify-center overflow-hidden sm:-mt-20;

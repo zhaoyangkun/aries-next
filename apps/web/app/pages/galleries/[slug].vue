@@ -56,7 +56,9 @@ useCanonical(computed(() => `/galleries/${slug.value}`))
         @click="openLightbox(index)"
       >
         <img
-          :src="item.url"
+          :src="thumbUrl(item.url, 768)"
+          :srcset="thumbSrcset(item.url, [480, 768, 1200])"
+          sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 330px"
           :alt="item.alt || gallery.title"
           :width="item.width ?? undefined"
           :height="item.height ?? undefined"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDate, formatDateParts, formatDateShort, siteRunDays, thumbUrl } from '../../app/utils/format'
+import { formatDate, formatDateParts, formatDateShort, siteRunDays, thumbSrcset, thumbUrl } from '../../app/utils/format'
 
 // 用不带时区的本地时间字符串构造用例，避免 UTC 解析在不同时区下日期偏移导致断言不稳定
 describe('formatDate', () => {
@@ -103,5 +103,22 @@ describe('thumbUrl', () => {
   it('returns empty string for null / undefined', () => {
     expect(thumbUrl(null, 480)).toBe('')
     expect(thumbUrl(undefined, 480)).toBe('')
+  })
+})
+
+describe('thumbSrcset', () => {
+  it('builds width descriptors for locally hosted media urls', () => {
+    expect(thumbSrcset('/api/media/files/2026/10/cover.png', [480, 768, 1200])).toBe(
+      '/api/media/files/2026/10/cover.png?w=480 480w, '
+      + '/api/media/files/2026/10/cover.png?w=768 768w, '
+      + '/api/media/files/2026/10/cover.png?w=1200 1200w',
+    )
+  })
+
+  it('returns undefined for external urls and empty input', () => {
+    expect(thumbSrcset('https://cdn.example.com/cover.png', [480])).toBeUndefined()
+    expect(thumbSrcset('/other/path.png', [480])).toBeUndefined()
+    expect(thumbSrcset(null, [480])).toBeUndefined()
+    expect(thumbSrcset(undefined, [480])).toBeUndefined()
   })
 })
