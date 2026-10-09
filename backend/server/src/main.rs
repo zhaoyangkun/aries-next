@@ -34,7 +34,18 @@ async fn main() -> anyhow::Result<()> {
     aries_infra::ensure_schema(&database, database_config.schema()).await?;
     aries_infra::run_migrations(&database).await?;
     // 日志表由 Migration 提供，跑完 Migration 再启动写入任务。
-    log_store::spawn_writer(database.clone(), receiver, retention_days);
+    // shutdown 信号端与 JoinHandle 持有到退出路径：SIGTERM 后通知 writer 排空
+    // channel 残留日志并等待其写完（退出前的启动失败/panic 前兆日志最有价值）。
+    // log_wake：writer 每次批量落库成功后广播，SSE tail 由轮询改为唤醒驱动。
+    let (log_shutdown_tx, log_shutdown_rx) = tokio::sync::watch::channel(false);
+    let log_wake = log_store::log_wake_channel();
+    let log_writer = log_store::spawn_writer(
+        database.clone(),
+        receiver,
+        retention_days,
+        log_shutdown_rx,
+        log_wake.clone(),
+    );
     let storage = aries_infra::storage::storage_from_env()?;
 
     let state = AppState {
@@ -63,10 +74,11 @@ async fn main() -> anyhow::Result<()> {
         config: Arc::new(config.clone()),
         rate_limiter: Default::default(),
         log_handle,
+        log_wake,
     };
     let app = build_app(state.clone())?;
     // 后台任务 Worker 随服务启动；失败任务按 max_attempts 自动重试。
-    worker::spawn(state);
+    let worker_handle = worker::spawn(state);
     let listener = tokio::net::TcpListener::bind(config.address).await?;
     info!(address = %config.address, "aries server started");
     // ConnectInfo 向 Handler 提供连接对端地址，用于登录限流的 IP 维度。
@@ -76,6 +88,23 @@ async fn main() -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown())
     .await?;
+
+    // axum 优雅退出完成（在途请求已处理完）后按顺序收尾：
+    // 1. 通知日志 writer 排空：先 flush 当前批次，再尽力写完 channel 残留记录。
+    //    JoinHandle 外层包 timeout 兜底（writer 内部排空本身有 5s 上限，这里再留余量），
+    //    兜底失败只记 error，不阻塞进程退出。
+    let _ = log_shutdown_tx.send(true);
+    if tokio::time::timeout(std::time::Duration::from_secs(10), log_writer)
+        .await
+        .is_err()
+    {
+        tracing::error!("log writer did not finish drain in time; exiting anyway");
+    }
+    // 2. 后台任务轮询语义是「可直接停」（任务按 max_attempts 重试，无排空需求），
+    //    直接 abort；与日志 writer 的排空等待刻意区分。
+    worker_handle.abort();
+    // 3. `_worker`（tracing_appender 的 WorkerGuard）在此之后随 main 返回 drop，
+    //    flush 文件日志缓冲区。
 
     Ok(())
 }

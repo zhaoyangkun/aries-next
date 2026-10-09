@@ -9,7 +9,7 @@ use std::time::Duration;
 use serde_json::{Map, Value};
 use sqlx::PgPool;
 use time::OffsetDateTime;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc, watch};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
 use tracing_subscriber::layer::{Context, Layer};
@@ -21,9 +21,25 @@ const BATCH_SIZE: usize = 100;
 const FLUSH_INTERVAL: Duration = Duration::from_millis(500);
 /// 过期清理间隔（含启动时一次）。
 const RETENTION_INTERVAL: Duration = Duration::from_secs(3600);
+/// 优雅退出时排空阶段的总时长上限：DB 挂死时放弃剩余记录，保证进程能退出。
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 /// 单值截断上限（字符数）：防止超长 SQL / 消息撑大 jsonb 行。
 const MAX_VALUE_CHARS: usize = 8192;
 const TRUNCATED_MARKER: &str = "…[truncated]";
+
+/// SSE tail 唤醒 channel 容量：语义是「有新日志落库了」，不带 payload、幂等，
+/// 溢出（Lagged）只等价于合并多次唤醒，接收端据此再 poll 一次即可。
+const WAKE_CHANNEL_CAPACITY: usize = 16;
+
+/// 日志落库唤醒信号的发送端：writer 每次批量 INSERT 成功后 send 一次；
+/// SSE tail 连接经 `AppState` 持有它并 `subscribe()`，把轮询改为唤醒驱动。
+pub type LogWakeSender = broadcast::Sender<()>;
+
+/// 创建 tail 唤醒 channel，返回发送端（接收端由订阅方按需 `subscribe()`）。
+/// 无订阅者时 `send` 返回 Err，属正常（无人监听），调用方直接忽略。
+pub fn log_wake_channel() -> LogWakeSender {
+    broadcast::channel(WAKE_CHANNEL_CAPACITY).0
+}
 
 /// 键名（不区分大小写）包含以下子串即视为敏感，值一律替换为 "***"。
 /// 与请求参数脱敏（`crate::lib`）共用同一份清单，落库层再兜底一道。
@@ -408,8 +424,9 @@ where
     }
 }
 
-/// 输出层过滤器：事件处于静默 Span 作用域内时禁用——
-/// 内部例行操作（日志落库、Worker 空轮询）的查询日志在控制台、文件、数据库三路都不再出现。
+/// 输出层过滤器：静默 Span 作用域内只消音 INFO/DEBUG/TRACE 例行噪音——
+/// 内部例行操作（日志落库、Worker 空轮询）的查询日志在控制台、文件、数据库三路都不再出现；
+/// WARN/ERROR 是故障告警（批量 INSERT 失败、过期清理失败、轮询查询失败等），一律放行。
 /// 只过滤事件；Span 本身放行（Span 被过滤会破坏作用域链条）。
 pub fn not_in_quiet_internal_scope<S>() -> impl tracing_subscriber::layer::Filter<S>
 where
@@ -417,6 +434,9 @@ where
 {
     tracing_subscriber::filter::DynFilterFn::new(|metadata, ctx| {
         if !metadata.is_event() {
+            return true;
+        }
+        if *metadata.level() <= tracing::Level::WARN {
             return true;
         }
         if let Some(current) = ctx.lookup_current() {
@@ -431,7 +451,9 @@ where
 }
 
 /// 批量 INSERT：UNNEST 数组一次多行，减少 round trip。
-async fn insert_batch(pool: &PgPool, batch: &[LogRecord]) {
+/// 返回是否写入成功：成功后调用方据此广播 tail 唤醒信号（失败不唤醒，
+/// 订阅端等下一次唤醒或兜底 tick 再拉取，不会丢日志）。
+async fn insert_batch(pool: &PgPool, batch: &[LogRecord]) -> bool {
     let (ts, levels, targets, messages, span_names, request_ids, fields): (
         Vec<_>,
         Vec<_>,
@@ -470,7 +492,9 @@ async fn insert_batch(pool: &PgPool, batch: &[LogRecord]) {
     .await;
     if let Err(error) = result {
         tracing::error!(error = %error, "failed to flush server logs");
+        return false;
     }
+    true
 }
 
 /// 过期清理：物理 DELETE 超过保留期的运行日志。
@@ -486,16 +510,39 @@ async fn cleanup_expired(pool: &PgPool, retention_days: usize) {
     }
 }
 
+/// 统一的落库路径：INSERT 成功后广播 tail 唤醒（无订阅者时 send 返回 Err，
+/// 属正常，直接忽略），随后清空批次。
+async fn flush_batch(pool: &PgPool, wake: &LogWakeSender, batch: &mut Vec<LogRecord>) {
+    use tracing::Instrument;
+    if insert_batch(pool, batch)
+        .instrument(tracing::info_span!(QUIET_INTERNAL_SPAN))
+        .await
+    {
+        let _ = wake.send(());
+    }
+    batch.clear();
+}
+
 /// 启动日志写入后台任务：每 500ms 或攒满 100 条批量写入；
 /// 启动时与每小时执行过期清理。应在 Migration 完成后调用。
+///
+/// 每次批量 INSERT 成功（含排空阶段）后向 `wake` 广播一次唤醒信号，
+/// SSE tail 连接据此按需拉取，空闲时零 DB 轮询；无订阅者时 send 返回 Err，忽略。
+///
+/// `shutdown` 是优雅退出信号（`true` 或发送端 drop 均触发）：收到后任务不再
+/// 接收新 select 轮次，先把当前批次落库，再把 channel 中残留记录分批写完后退出，
+/// 由调用方 `await` 返回的 JoinHandle 等待排空完成（见 main 的退出路径）。
 pub fn spawn_writer(
     pool: PgPool,
     mut receiver: mpsc::Receiver<LogRecord>,
     retention_days: usize,
+    mut shutdown: watch::Receiver<bool>,
+    wake: LogWakeSender,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        // writer 自身的 DB 操作包在标记 Span 内：输出层 Filter 据此消音，
-        // 控制台/文件/数据库三路都不会出现 writer 自己的 INSERT 日志。
+        // writer 自身的 DB 操作包在标记 Span 内：输出层 Filter 据此消音例行噪音，
+        // 控制台/文件/数据库三路都不会出现 writer 自己的 INSERT/DELETE 查询日志；
+        // 批量写入或清理失败时的 WARN/ERROR 告警不受静默影响，照常可见。
         // 每次操作新建 Span 而非常驻持有：Span 会让 Subscriber（含 channel
         // sender）保持存活，常驻持有会导致发送端永不释放、任务无法退出。
         use tracing::Instrument;
@@ -513,10 +560,7 @@ pub fn spawn_writer(
             tokio::select! {
                 _ = flush_tick.tick() => {
                     if !batch.is_empty() {
-                        insert_batch(&pool, &batch)
-                            .instrument(tracing::info_span!(QUIET_INTERNAL_SPAN))
-                            .await;
-                        batch.clear();
+                        flush_batch(&pool, &wake, &mut batch).await;
                     }
                 }
                 maybe = receiver.recv() => {
@@ -524,21 +568,11 @@ pub fn spawn_writer(
                         Some(record) => {
                             batch.push(record);
                             if batch.len() >= BATCH_SIZE {
-                                insert_batch(&pool, &batch)
-                                    .instrument(tracing::info_span!(QUIET_INTERNAL_SPAN))
-                                    .await;
-                                batch.clear();
+                                flush_batch(&pool, &wake, &mut batch).await;
                             }
                         }
-                        // 发送端全部释放（进程退出）：写完剩余批次后退出。
-                        None => {
-                            if !batch.is_empty() {
-                                insert_batch(&pool, &batch)
-                                    .instrument(tracing::info_span!(QUIET_INTERNAL_SPAN))
-                                    .await;
-                            }
-                            break;
-                        }
+                        // 发送端全部释放：与 shutdown 信号走同一排空路径。
+                        None => break,
                     }
                 }
                 _ = retention_tick.tick() => {
@@ -546,7 +580,35 @@ pub fn spawn_writer(
                         .instrument(tracing::info_span!(QUIET_INTERNAL_SPAN))
                         .await;
                 }
+                // 优雅退出信号：发送端被 drop（未显式 send）同样触发。
+                _ = shutdown.changed() => break,
             }
+        }
+
+        // 排空：先写当前批次，再循环 try_recv 把 channel 残留记录分批写完。
+        // 语义是「尽力排空，不阻塞进程退出」：只处理已进入 channel 的记录，
+        // 排空期间其他任务（如后台轮询）新产生的日志不保证落库；
+        // 整体受 DRAIN_TIMEOUT 保护，DB 挂死时放弃剩余记录让进程退出。
+        // 单批 INSERT 失败与常规路径一致：记 error 后丢弃该批，继续后续批次。
+        let drain = async {
+            if !batch.is_empty() {
+                flush_batch(&pool, &wake, &mut batch).await;
+            }
+            while let Ok(record) = receiver.try_recv() {
+                batch.push(record);
+                if batch.len() >= BATCH_SIZE {
+                    flush_batch(&pool, &wake, &mut batch).await;
+                }
+            }
+            if !batch.is_empty() {
+                flush_batch(&pool, &wake, &mut batch).await;
+            }
+        };
+        if tokio::time::timeout(DRAIN_TIMEOUT, drain).await.is_err() {
+            tracing::error!(
+                timeout_ms = DRAIN_TIMEOUT.as_millis() as u64,
+                "log writer drain timed out on shutdown; dropping remaining records"
+            );
         }
     })
 }
@@ -623,7 +685,8 @@ mod tests {
         assert!(rx.try_recv().is_err(), "self-insert event must be dropped");
     }
 
-    /// 静默作用域过滤：quiet_internal Span 内的事件被禁用，外部照常通过。
+    /// 静默作用域过滤：quiet_internal Span 内的 INFO/DEBUG 噪音被禁用，
+    /// 但 WARN/ERROR 故障告警照常通过，Span 外部事件不受影响。
     #[test]
     fn writer_scope_filter_suppresses_events_inside_writer_span() {
         use std::sync::{Arc, Mutex};
@@ -658,11 +721,20 @@ mod tests {
             let _guard = span.enter();
             tracing::info!("inside writer");
             tracing::debug!(target: "sqlx::query", summary = "INSERT INTO server_logs ...");
+            tracing::warn!("writer flush failed");
+            tracing::error!("writer cleanup failed");
         });
         drop(dispatch);
 
         let messages = captured.lock().unwrap();
-        assert_eq!(messages.as_slice(), ["outside writer"]);
+        assert_eq!(
+            messages.as_slice(),
+            [
+                "outside writer",
+                "writer flush failed",
+                "writer cleanup failed"
+            ]
+        );
     }
 
     /// 落库脱敏：敏感键名整体替换、query string 逐参数脱敏、密码哈希形态的值整串替换；

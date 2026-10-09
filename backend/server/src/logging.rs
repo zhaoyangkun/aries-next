@@ -52,11 +52,13 @@ impl LogConfig {
     }
 }
 
-/// 组装 EnvFilter：LOG_SQL 环境变量只作初始值，运行期由 Admin API 切换；
+/// 组装 EnvFilter：基础指令放行 `sqlx::query` 的 WARN（慢查询告警，生产默认也要可见），
+/// DEBUG 级语句日志由 SQL 开关（LOG_SQL 环境变量只作初始值，运行期由 Admin API 切换）追加的
+/// `sqlx::query=debug` 控制——后追加的 directive 覆盖基础指令中的 warn。
 /// custom 为运行时级别覆盖（如 `aries_server=debug`），优先级高于基础指令。
 fn build_filter(sql_enabled: bool, custom: &[Directive]) -> anyhow::Result<EnvFilter> {
     let mut filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx::query=off"));
+        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx::query=warn"));
     if sql_enabled {
         filter = filter.add_directive(
             "sqlx::query=debug"
@@ -333,6 +335,8 @@ mod tests {
         let off = build_filter(false, &[]).unwrap().to_string();
         assert!(on.contains("sqlx::query=debug"));
         assert!(!off.contains("sqlx::query=debug"));
+        // SQL 日志关闭时基础指令仍放行慢查询 WARN（sqlx 慢查询事件 target 为 sqlx::query）。
+        assert!(off.contains("sqlx::query=warn"));
     }
 
     #[test]

@@ -30,7 +30,8 @@ sha2.workspace = true
 sqlx.workspace = true
 subtle.workspace = true
 time.workspace = true
-tokio.workspace = true
+# sync：log channel 的 mpsc 与优雅退出信号的 watch（此前靠 aries-core 的 feature 统一隐式获得）。
+tokio = { workspace = true, features = ["sync"] }
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

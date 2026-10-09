@@ -163,6 +163,7 @@ impl LogRepository for PostgresLogRepository {
         page: u32,
         page_size: u32,
         order_asc: bool,
+        cursor: Option<(OffsetDateTime, i64)>,
     ) -> Result<LogList, LogError> {
         let filters = FilterSql { filter };
         let (where_clause, bind_index) = filters.where_clause();
@@ -175,15 +176,38 @@ impl LogRepository for PostgresLogRepository {
             .await
             .map_err(map_sqlx)?;
 
+        // keyset 模式：游标条件只作用于数据查询（total 仍是筛选全集的计数），
+        // 元组比较 (ts, id) < (...) 走 server_logs_ts_id_idx 复合索引，忽略 page。
+        let (data_where, limit_idx) = if cursor.is_some() {
+            (
+                format!(
+                    "{where_clause} AND (ts, id) < (${bind_index}, ${})",
+                    bind_index + 1
+                ),
+                bind_index + 2,
+            )
+        } else {
+            (where_clause, bind_index)
+        };
         let data_sql = format!(
-            "SELECT {LOG_ENTRY_COLUMNS} FROM server_logs WHERE {where_clause} \
-             ORDER BY ts {order_dir}, id {order_dir} LIMIT ${bind_index} OFFSET ${}",
-            bind_index + 1
+            "SELECT {LOG_ENTRY_COLUMNS} FROM server_logs WHERE {data_where} \
+             ORDER BY ts {order_dir}, id {order_dir} LIMIT ${limit_idx} OFFSET ${}",
+            limit_idx + 1
         );
-        let rows = filters
-            .bind_rows(sqlx::query_as::<sqlx::Postgres, LogRow>(&data_sql))
+        let offset = if cursor.is_some() {
+            0
+        } else {
+            i64::from(page.saturating_sub(1) * page_size)
+        };
+        let query = filters.bind_rows(sqlx::query_as::<sqlx::Postgres, LogRow>(&data_sql));
+        let query = if let Some((cursor_ts, cursor_id)) = cursor {
+            query.bind(cursor_ts).bind(cursor_id)
+        } else {
+            query
+        };
+        let rows = query
             .bind(i64::from(page_size))
-            .bind(i64::from(page.saturating_sub(1) * page_size))
+            .bind(offset)
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx)?;

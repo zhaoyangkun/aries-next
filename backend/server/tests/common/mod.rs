@@ -150,6 +150,7 @@ pub async fn maybe_app_with_ai(
             config: std::sync::Arc::new(config),
             rate_limiter: Default::default(),
             log_handle: std::sync::Arc::new(aries_server::logging::LogHandle::noop()),
+            log_wake: aries_server::log_store::log_wake_channel(),
         };
         let app = aries_server::build_app(state.clone())?;
         Ok::<_, anyhow::Error>((app, state))
@@ -404,16 +405,29 @@ impl TestApp {
         path: &str,
         cookie: &str,
     ) -> anyhow::Result<(StatusCode, HeaderMap, Body)> {
+        self.admin_get_streaming_with_headers(path, cookie, &[])
+            .await
+    }
+
+    /// 带自定义 Header 的 Admin GET 流式响应（如 SSE 续传的 `Last-Event-ID`）。
+    #[allow(dead_code)] // 共享 Harness：仅 logs 测试 Target 使用
+    pub async fn admin_get_streaming_with_headers(
+        &self,
+        path: &str,
+        cookie: &str,
+        headers: &[(&str, &str)],
+    ) -> anyhow::Result<(StatusCode, HeaderMap, Body)> {
+        let mut builder = Request::builder()
+            .method("GET")
+            .uri(path)
+            .header(header::COOKIE, cookie);
+        for (name, value) in headers {
+            builder = builder.header(*name, *value);
+        }
         let response = self
             .app
             .clone()
-            .oneshot(
-                Request::builder()
-                    .method("GET")
-                    .uri(path)
-                    .header(header::COOKIE, cookie)
-                    .body(Body::empty())?,
-            )
+            .oneshot(builder.body(Body::empty())?)
             .await
             .context("router oneshot failed")?;
         Ok((
@@ -558,5 +572,6 @@ pub fn lazy_state(config: aries_server::config::ServerConfig) -> aries_server::s
         config: Arc::new(config),
         rate_limiter: Default::default(),
         log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
+        log_wake: aries_server::log_store::log_wake_channel(),
     }
 }

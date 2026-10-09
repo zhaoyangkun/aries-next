@@ -265,7 +265,7 @@ mod tests {
             let directive = if sql_on {
                 "info,tower_http=info,sqlx::query=debug"
             } else {
-                "info,tower_http=info,sqlx::query=off"
+                "info,tower_http=info,sqlx::query=warn"
             };
             tracing::Dispatch::new(tracing_subscriber::registry().with(EnvFilter::new(directive)))
         };

@@ -242,7 +242,7 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 | `BOOTSTRAP_SECRET` | 无（**必填**） | 少于 24 字符时启动失败；只通过 Secret Manager 或部署环境注入，不写入 Image、Repository 或部署日志 |
 | `SESSION_TTL_HOURS` | `12` | 整数，允许 1–720 |
 | `SESSION_COOKIE_SECURE` | `production` 为 `true`，否则 `false` | 只接受 `true` / `false` / `1` / `0`；`true` 要求 Admin 只通过 HTTPS 访问 |
-| `RUST_LOG` | `info,tower_http=info,sqlx::query=off` | 标准 `tracing` Filter，最终覆盖入口 |
+| `RUST_LOG` | `info,tower_http=info,sqlx::query=warn` | 标准 `tracing` Filter，最终覆盖入口 |
 | `OPENAPI_DOCS` | 非 `production` 为 `true`，`production` 为 `false` | 只接受 `true` / `false` / `1` / `0`；为 `true` 时挂载 Scalar UI 形式的 OpenAPI 文档到 `/api/docs`（spec 内嵌页面）。文档会暴露全部端点结构，生产按需显式开启；本地开发默认即开 |
 
 > **警告**：`SESSION_COOKIE_SECURE=true` 要求 Admin 只通过 HTTPS 访问。若站点尚未全站 HTTPS，浏览器会拒绝携带该 Cookie 导致无法登录；但生产环境绝不应为了「能登录」而将其设为 `false`——正确做法是先配好 HTTPS，再开启此项（见 [HTTPS 与域名](#https-与域名)）。

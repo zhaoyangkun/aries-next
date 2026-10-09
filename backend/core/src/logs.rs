@@ -84,12 +84,15 @@ pub enum LogError {
 #[async_trait]
 pub trait LogRepository: Send + Sync {
     /// 分页列表：按 filter 过滤，`order_asc` 决定 ts/id 排序方向。
+    /// `cursor` 为 keyset 游标 `(ts, id)`（上一页末行）：存在时忽略 `page`，
+    /// 取严格早于该行的下一页（仅 desc 语义，由调用方保证不与 asc 同用）。
     async fn list(
         &self,
         filter: &LogFilter,
         page: u32,
         page_size: u32,
         order_asc: bool,
+        cursor: Option<(OffsetDateTime, i64)>,
     ) -> Result<LogList, LogError>;
 
     /// 上下文模式：以 `around_id` 行的 ts 为中心取前后各 `context` 条，按 ts asc 返回。

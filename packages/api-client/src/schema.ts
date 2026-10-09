@@ -993,7 +993,7 @@ export interface paths {
         };
         /**
          * 运行日志查询
-         * @description 数据来自 `server_logs` 表（tracing 事件批量落库）。`start`/`end` 按 `ts` 左闭右开过滤，格式 RFC 3339，非法值返回 400 `INVALID_DATE_RANGE`；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`。提供 `around_id` 时进入上下文模式：以锚点行的 `ts` 为中心前后各取 `context` 条，忽略分页/时间范围/排序参数，锚点不存在返回 404 `LOG_ENTRY_NOT_FOUND`。仅 Owner（`ManageSettings`）可访问。
+         * @description 数据来自 `server_logs` 表（tracing 事件批量落库）。`start`/`end` 按 `ts` 左闭右开过滤，格式 RFC 3339，非法值返回 400 `INVALID_DATE_RANGE`；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`。默认 OFFSET 分页（`page`/`page_size`）；携带 `cursor`（上一页响应的 `next_cursor`，格式 `<ts unix 纳秒>_<id>`）进入 keyset 分页：仅支持 desc 排序，忽略 `page`，避免深翻页 OFFSET 扫描，`total` 与 `level_counts` 照常返回；游标非法或与 `order=asc` 同用返回 400 `INVALID_CURSOR`。提供 `around_id` 时进入上下文模式：以锚点行的 `ts` 为中心前后各取 `context` 条，忽略分页/时间范围/排序参数，锚点不存在返回 404 `LOG_ENTRY_NOT_FOUND`。仅 Owner（`ManageSettings`）可访问。
          */
         get: operations["listLogs"];
         put?: never;
@@ -1081,7 +1081,7 @@ export interface paths {
         };
         /**
          * 实时推送运行日志（SSE）
-         * @description 以连接时刻的最大日志 id 为锚点，每 500ms 轮询推送之后写入且匹配筛选的新日志。事件为 `event: log`、`data` 为单个日志条目（形状同 `LogItem`）；锚点查询失败时推送 `event: error` 后结束。筛选参数语义与列表接口一致（`level` 为最低级别；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`）。仅 Owner（`ManageSettings`）可访问。
+         * @description 新连接以连接时刻的最大日志 id 为锚点，推送之后写入且匹配筛选的新日志；EventSource 断线自动重连时携带 `Last-Event-ID` 请求头，服务端从该 id 之后继续推送，断开窗口的日志全部补齐（头部解析失败按新连接处理）。推送由日志落库的唤醒信号驱动，空闲时不查询数据库（30 秒兜底拉取一次）。事件为 `event: log`、`data` 为单个日志条目（形状同 `LogItem`），SSE `id:` 字段为日志行 id；锚点查询失败时推送 `event: error` 后结束。筛选参数语义与列表接口一致（`level` 为最低级别；`target` 与 `exclude_target` 互斥，同用返回 400 `INVALID_FILTER`）。仅 Owner（`ManageSettings`）可访问。
          */
         get: operations["tailLogs"];
         put?: never;
@@ -2815,6 +2815,11 @@ export interface components {
             items: components["schemas"]["LogItem"][];
             /** @description 最近 24h 各级别条数（GROUP BY 聚合）。 */
             level_counts: components["schemas"]["LogLevelCountsResponse"];
+            /**
+             * @description keyset 下一页游标（`<ts unix 纳秒>_<id>`）：本页满页时取末行生成，否则为 null；
+             *     仅 desc 列表路径产生，asc（链路视图）与上下文模式恒为 null。
+             */
+            next_cursor?: string | null;
             /** Format: int32 */
             page: number;
             /** Format: int32 */
@@ -7481,6 +7486,11 @@ export interface operations {
                 context: number | null;
                 /** @description 排序方向：asc/desc，默认 desc；链路场景用 asc 按时间正序看流转。 */
                 order: string | null;
+                /**
+                 * @description keyset 游标：上一页响应的 `next_cursor`（`<ts unix 纳秒>_<id>`），仅 desc 有效；
+                 *     存在时忽略 `page`，与 `order=asc` 互斥（同用返回 400 `INVALID_CURSOR`）。
+                 */
+                cursor: string | null;
                 /** @description 时间范围左闭右开，RFC 3339。 */
                 start: string | null;
                 end: string | null;
@@ -7498,7 +7508,7 @@ export interface operations {
                     "application/json": components["schemas"]["LogPageResponse"];
                 };
             };
-            /** @description 时间格式非法或 target/exclude_target 同用 */
+            /** @description 时间格式非法、target/exclude_target 同用或游标非法/与 asc 同用 */
             400: {
                 headers: {
                     [name: string]: unknown;

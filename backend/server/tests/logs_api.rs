@@ -239,6 +239,177 @@ async fn logs_api_filters_pagination_and_level_counts() -> anyhow::Result<()> {
     cleanup_result
 }
 
+/// keyset（游标）分页：连翻不重不漏、ts DESC/id DESC（含同 ts 的 id 决胜）、
+/// 末页 next_cursor 为 null、筛选组合正确、非法游标与 asc 互斥返回 400。
+#[tokio::test]
+async fn logs_api_keyset_cursor_pagination() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        // 7 条日志，msg-3/msg-4 同 ts，验证 (ts, id) 元组决胜不丢不重。
+        let mut ids = Vec::new();
+        for (ts, level, message) in [
+            ("2026-09-05T10:00:00Z", "INFO", "alpha-1"),
+            ("2026-09-05T10:01:00Z", "INFO", "beta-2"),
+            ("2026-09-05T10:02:00Z", "WARN", "alpha-3"),
+            ("2026-09-05T10:02:00Z", "WARN", "beta-4"),
+            ("2026-09-05T10:03:00Z", "INFO", "alpha-5"),
+            ("2026-09-05T10:04:00Z", "ERROR", "beta-6"),
+            ("2026-09-05T10:05:00Z", "INFO", "alpha-7"),
+        ] {
+            ids.push(insert_log(&app, ts, level, "aries_server::http", message, None).await?);
+        }
+
+        let item_ids = |body: &serde_json::Value| -> Vec<i64> {
+            body["items"]
+                .as_array()
+                .expect("missing items")
+                .iter()
+                .map(|item| item["id"].as_i64().expect("missing id"))
+                .collect()
+        };
+
+        // 第 1 页（无 cursor）：desc 最新在前；total 仍是全集计数；满页给出 next_cursor。
+        let page1 = app
+            .admin_get("/api/admin/logs?page_size=3", &owner_cookie)
+            .await?;
+        ensure!(page1.status == StatusCode::OK, "{}", page1.body);
+        ensure!(page1.body["total"].as_i64() == Some(7));
+        ensure!(item_ids(&page1.body) == vec![ids[6], ids[5], ids[4]]);
+        let cursor1 = page1.body["next_cursor"]
+            .as_str()
+            .context("page 1 should have next_cursor")?
+            .to_owned();
+
+        // 第 2 页：游标推进，与第 1 页不重叠。
+        let page2 = app
+            .admin_get(
+                &format!("/api/admin/logs?page_size=3&cursor={cursor1}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(page2.status == StatusCode::OK, "{}", page2.body);
+        ensure!(item_ids(&page2.body) == vec![ids[3], ids[2], ids[1]]);
+        let cursor2 = page2.body["next_cursor"]
+            .as_str()
+            .context("page 2 should have next_cursor")?
+            .to_owned();
+
+        // 第 3 页（末页）：不足一页，next_cursor 为 null。
+        let page3 = app
+            .admin_get(
+                &format!("/api/admin/logs?page_size=3&cursor={cursor2}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(page3.status == StatusCode::OK, "{}", page3.body);
+        ensure!(item_ids(&page3.body) == vec![ids[0]]);
+        ensure!(page3.body["next_cursor"].is_null(), "{}", page3.body);
+        // 三页合起来不重不漏。
+        let mut seen: Vec<i64> = [ids[6], ids[5], ids[4], ids[3], ids[2], ids[1], ids[0]].into();
+        seen.sort_unstable();
+        let mut expected = ids.clone();
+        expected.sort_unstable();
+        ensure!(seen == expected);
+
+        // keyset 模式忽略 page：同一游标带 page=5 结果一致。
+        let ignored_page = app
+            .admin_get(
+                &format!("/api/admin/logs?page_size=3&page=5&cursor={cursor1}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(item_ids(&ignored_page.body) == item_ids(&page2.body));
+
+        // 游标 + level（最低级别）组合：WARN 含 WARN+ERROR，翻页跨过同 ts 决胜行。
+        let warn1 = app
+            .admin_get("/api/admin/logs?level=WARN&page_size=2", &owner_cookie)
+            .await?;
+        ensure!(warn1.body["total"].as_i64() == Some(3), "{}", warn1.body);
+        ensure!(item_ids(&warn1.body) == vec![ids[5], ids[3]]);
+        let warn_cursor = warn1.body["next_cursor"]
+            .as_str()
+            .context("WARN page 1 should have next_cursor")?;
+        let warn2 = app
+            .admin_get(
+                &format!("/api/admin/logs?level=WARN&page_size=2&cursor={warn_cursor}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(item_ids(&warn2.body) == vec![ids[2]], "{}", warn2.body);
+        ensure!(warn2.body["next_cursor"].is_null());
+
+        // 游标 + keyword 组合：4 条命中，两页翻完。
+        let kw1 = app
+            .admin_get("/api/admin/logs?keyword=alpha&page_size=3", &owner_cookie)
+            .await?;
+        ensure!(kw1.body["total"].as_i64() == Some(4), "{}", kw1.body);
+        ensure!(item_ids(&kw1.body) == vec![ids[6], ids[4], ids[2]]);
+        let kw_cursor = kw1.body["next_cursor"]
+            .as_str()
+            .context("keyword page 1 should have next_cursor")?;
+        let kw2 = app
+            .admin_get(
+                &format!("/api/admin/logs?keyword=alpha&page_size=3&cursor={kw_cursor}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(item_ids(&kw2.body) == vec![ids[0]], "{}", kw2.body);
+        ensure!(kw2.body["next_cursor"].is_null());
+
+        // 非法游标 → 400 INVALID_CURSOR。
+        for bad in ["garbage", "123", "abc_1", "1_abc", "1_"] {
+            let response = app
+                .admin_get(&format!("/api/admin/logs?cursor={bad}"), &owner_cookie)
+                .await?;
+            ensure!(
+                response.status == StatusCode::BAD_REQUEST,
+                "cursor={bad}: {}",
+                response.body
+            );
+            ensure!(
+                response.body["error"]["code"] == "INVALID_CURSOR",
+                "cursor={bad}: {}",
+                response.body
+            );
+        }
+
+        // cursor 与 order=asc 互斥 → 400 INVALID_CURSOR（asc 链路视图保持 OFFSET 路径）。
+        let asc_conflict = app
+            .admin_get(
+                &format!("/api/admin/logs?order=asc&cursor={cursor1}"),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(
+            asc_conflict.status == StatusCode::BAD_REQUEST,
+            "{}",
+            asc_conflict.body
+        );
+        ensure!(asc_conflict.body["error"]["code"] == "INVALID_CURSOR");
+
+        // 空串游标忽略，等价于不带 cursor 的 OFFSET 第一页。
+        let empty_cursor = app
+            .admin_get("/api/admin/logs?page_size=3&cursor=", &owner_cookie)
+            .await?;
+        ensure!(
+            empty_cursor.status == StatusCode::OK,
+            "{}",
+            empty_cursor.body
+        );
+        ensure!(item_ids(&empty_cursor.body) == vec![ids[6], ids[5], ids[4]]);
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
 #[tokio::test]
 async fn keyword_search_matches_fields_json_text() -> anyhow::Result<()> {
     let Some(app) = common::maybe_app().await? else {
@@ -360,7 +531,15 @@ async fn db_log_writer_persists_events_end_to_end() -> anyhow::Result<()> {
         // 释放发送端：writer 收到剩余记录后 flush 并退出。
         drop(dispatch);
 
-        let handle = aries_server::log_store::spawn_writer(app.state.database.clone(), rx, 14);
+        // 这些用例仍走「发送端全部释放」收尾路径：shutdown 发送端存活但不发信号。
+        let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            aries_server::log_store::log_wake_channel(),
+        );
         handle.await.context("writer task failed")?;
 
         // 事件已落库：内容、Span 名与 request_id 齐全。
@@ -374,6 +553,61 @@ async fn db_log_writer_persists_events_end_to_end() -> anyhow::Result<()> {
         ensure!(row.2 == "writer roundtrip");
         ensure!(row.3.as_deref() == Some("http_request"));
         ensure!(row.4.as_deref() == Some("req-e2e"));
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+/// 优雅退出排空：发送端（Subscriber）仍存活时发 shutdown 信号，writer 必须
+/// 把 channel 残留记录全部落库后退出——覆盖超过一个批次（250 > 2×100）的残留量。
+#[tokio::test]
+async fn db_log_writer_drains_channel_on_shutdown_signal() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let dispatch = tracing::Dispatch::new(
+            tracing_subscriber::registry().with(aries_server::log_store::DbLogLayer::new(tx)),
+        );
+        let guard = tracing::dispatcher::set_default(&dispatch);
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            aries_server::log_store::log_wake_channel(),
+        );
+
+        // 发送端保持存活的状态下写入 250 条（模拟进程退出瞬间 channel 中的残留）。
+        for index in 0..250 {
+            tracing::info!(index, "drain on shutdown");
+        }
+
+        // 发 shutdown 信号：writer 停止 select 轮次，flush 当前批次并排空 channel 后退出。
+        shutdown_tx.send(true)?;
+        tokio::time::timeout(std::time::Duration::from_secs(30), handle)
+            .await
+            .context("writer did not finish drain in time")?
+            .context("writer task failed")?;
+
+        // 发送端此刻仍然存活：能退出并写全，证明走的是 shutdown 排空而非 channel 关闭。
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM server_logs WHERE message = 'drain on shutdown'")
+                .fetch_one(&app.state.database)
+                .await?;
+        ensure!(count == 250, "expected 250 drained logs, got {count}");
+
+        drop(guard);
+        drop(dispatch);
         Ok(())
     }
     .await;
@@ -573,7 +807,15 @@ async fn request_params_are_logged_redacted_and_linked_to_request() -> anyhow::R
         // 释放发送端：writer 收尾 flush 后退出。
         drop(guard);
         drop(dispatch);
-        let handle = aries_server::log_store::spawn_writer(app.state.database.clone(), rx, 14);
+        // 这些用例仍走「发送端全部释放」收尾路径：shutdown 发送端存活但不发信号。
+        let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            aries_server::log_store::log_wake_channel(),
+        );
         handle.await.context("writer task failed")?;
 
         // 拉取参数日志：request_id 关联、http.path 注入、敏感值脱敏。
@@ -628,7 +870,15 @@ async fn sql_logging_never_persists_writer_own_inserts() -> anyhow::Result<()> {
         let guard = tracing::dispatcher::set_default(&dispatch);
 
         // 先起 writer：其批量 INSERT 产生的 sqlx 事件会回流到 DbLogLayer（同线程 runtime）。
-        let handle = aries_server::log_store::spawn_writer(app.state.database.clone(), rx, 14);
+        // 这些用例仍走「发送端全部释放」收尾路径：shutdown 发送端存活但不发信号。
+        let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            aries_server::log_store::log_wake_channel(),
+        );
 
         // 业务日志 + 业务 SQL（应正常入库）。
         tracing::info!("business event");
@@ -1057,12 +1307,18 @@ async fn tail_streams_logs_inserted_after_connect_over_sse() -> anyhow::Result<(
             None,
         )
         .await?;
+        // writer 落库成功后的 broadcast 唤醒（Harness 不跑 writer，由测试代发）。
+        let woke_at = Instant::now();
+        app.state
+            .log_wake
+            .send(())
+            .context("tail connection should have subscribed the wake channel")?;
 
         // 逐帧读取，直到收到包含探针消息的 SSE 数据。
         let deadline = Instant::now() + Duration::from_secs(15);
         let mut buffered = String::new();
-        let mut found = false;
-        while Instant::now() < deadline && !found {
+        let mut delivered_at = None;
+        while Instant::now() < deadline && delivered_at.is_none() {
             let frame = tokio::time::timeout(Duration::from_secs(5), body.frame()).await;
             let Ok(Some(Ok(frame))) = frame else {
                 break;
@@ -1070,16 +1326,211 @@ async fn tail_streams_logs_inserted_after_connect_over_sse() -> anyhow::Result<(
             if let Some(data) = frame.data_ref() {
                 buffered.push_str(&String::from_utf8_lossy(data));
                 if buffered.contains("tail-probe-1") {
-                    found = true;
+                    delivered_at = Some(Instant::now());
                 }
             }
         }
-        ensure!(
-            found,
+        let delivered_at = delivered_at.context(format!(
             "tail did not deliver the inserted log; buffered so far: {buffered}"
-        );
-        // 探针日志以 event: log 的数据帧推送。
+        ))?;
+        // 探针日志以 event: log 的数据帧推送，且携带 SSE id（日志行 id，供 Last-Event-ID 续传）。
         ensure!(buffered.contains("event: log"), "{buffered}");
+        ensure!(buffered.contains("id: "), "{buffered}");
+        // 唤醒驱动：远小于旧轮询节奏 500ms 与 30s 兜底间隔，证明不走轮询。
+        let latency = delivered_at - woke_at;
+        ensure!(
+            latency < Duration::from_millis(500),
+            "wake-driven delivery took {latency:?}, expected well below 500ms"
+        );
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+/// 断线续传：带 `Last-Event-ID` 重连时从该 id 之后继续推送，
+/// 断开窗口写入的日志全部补齐，锚点及之前的日志不重发。
+#[tokio::test]
+async fn tail_resumes_from_last_event_id_and_backfills_disconnect_window() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        // 客户端已收到的最后一条（重连时浏览器经 Last-Event-ID 回传其 id）。
+        let anchor_id = insert_log(
+            &app,
+            "now",
+            "INFO",
+            "tail_resume_target",
+            "resume-anchor",
+            None,
+        )
+        .await?;
+        // 断开窗口写入的日志：重连后必须补齐。
+        let gap_1 = insert_log(
+            &app,
+            "now",
+            "WARN",
+            "tail_resume_target",
+            "resume-gap-1",
+            None,
+        )
+        .await?;
+        let gap_2 = insert_log(
+            &app,
+            "now",
+            "ERROR",
+            "tail_resume_target",
+            "resume-gap-2",
+            None,
+        )
+        .await?;
+
+        // 带 Last-Event-ID 重连：无需唤醒，首次拉取即从该 id 之后开始。
+        let (status, _, mut body) = app
+            .admin_get_streaming_with_headers(
+                "/api/admin/logs/tail",
+                &owner_cookie,
+                &[("last-event-id", &anchor_id.to_string())],
+            )
+            .await?;
+        ensure!(status == StatusCode::OK, "{status}");
+
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut buffered = String::new();
+        while Instant::now() < deadline
+            && !(buffered.contains("resume-gap-1") && buffered.contains("resume-gap-2"))
+        {
+            let frame = tokio::time::timeout(Duration::from_secs(5), body.frame()).await;
+            let Ok(Some(Ok(frame))) = frame else {
+                break;
+            };
+            if let Some(data) = frame.data_ref() {
+                buffered.push_str(&String::from_utf8_lossy(data));
+            }
+        }
+        ensure!(
+            buffered.contains("resume-gap-1") && buffered.contains("resume-gap-2"),
+            "disconnect window logs were not backfilled; buffered so far: {buffered}"
+        );
+        // 锚点及之前的日志不重发。
+        ensure!(!buffered.contains("resume-anchor"), "{buffered}");
+        // SSE id 与日志行 id 一致（续传锚点的来源）。
+        ensure!(buffered.contains(&format!("id: {gap_1}")), "{buffered}");
+        ensure!(buffered.contains(&format!("id: {gap_2}")), "{buffered}");
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+/// 空闲零推送：无唤醒（无新日志）时不应有任何 data 事件，
+/// 间接验证不再有周期性轮询推送（兜底间隔 30s，观测窗口内不会触发）。
+#[tokio::test]
+async fn tail_stays_silent_when_idle_without_wake() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        // 历史日志存在但锚点之后无新日志：空闲期间不得推送 data 事件。
+        insert_log(
+            &app,
+            "now",
+            "INFO",
+            "tail_idle_target",
+            "idle-existing",
+            None,
+        )
+        .await?;
+        let (status, _, mut body) = app
+            .admin_get_streaming("/api/admin/logs/tail", &owner_cookie)
+            .await?;
+        ensure!(status == StatusCode::OK, "{status}");
+
+        // 观测 1.2s（远超旧 500ms 轮询节奏）：只允许 keep-alive 注释帧，不得有 event: log。
+        let deadline = Instant::now() + Duration::from_millis(1200);
+        let mut buffered = String::new();
+        while Instant::now() < deadline {
+            let remaining = deadline - Instant::now();
+            let Ok(Some(Ok(frame))) = tokio::time::timeout(remaining, body.frame()).await else {
+                break;
+            };
+            if let Some(data) = frame.data_ref() {
+                buffered.push_str(&String::from_utf8_lossy(data));
+            }
+        }
+        ensure!(!buffered.contains("event: log"), "{buffered}");
+        ensure!(!buffered.contains("data:"), "{buffered}");
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+/// writer 每次批量 INSERT 成功后广播唤醒：订阅者收到信号且记录已落库。
+#[tokio::test]
+async fn db_log_writer_broadcasts_wake_after_successful_flush() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let wake = aries_server::log_store::log_wake_channel();
+        // 先订阅再启动 writer：flush 成功后的唤醒不会错过。
+        let mut wake_rx = wake.subscribe();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            wake,
+        );
+
+        tx.send(aries_server::log_store::LogRecord {
+            ts: time::OffsetDateTime::now_utc(),
+            level: "INFO".to_owned(),
+            target: "wake_test".to_owned(),
+            message: "wake-probe".to_owned(),
+            span_name: None,
+            request_id: None,
+            fields: serde_json::json!({}),
+        })
+        .await
+        .context("log record channel closed")?;
+
+        // 批次未满 100 条，等 flush tick（500ms）落库后应收到唤醒。
+        tokio::time::timeout(Duration::from_secs(15), wake_rx.recv())
+            .await
+            .context("no wake broadcast within 15s of flush")?
+            .context("wake channel closed unexpectedly")?;
+
+        // 唤醒在 INSERT 成功后发出：此刻记录必然已落库。
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM server_logs WHERE message = 'wake-probe'")
+                .fetch_one(&app.state.database)
+                .await?;
+        ensure!(count == 1, "wake fired but log not persisted");
+
+        drop(tx);
+        shutdown_tx.send(true)?;
+        tokio::time::timeout(Duration::from_secs(30), handle)
+            .await
+            .context("writer did not finish drain in time")?
+            .context("writer task failed")?;
         Ok(())
     }
     .await;
@@ -1114,7 +1565,15 @@ async fn db_log_writer_redacts_sensitive_fields_before_persist() -> anyhow::Resu
         });
         drop(dispatch);
 
-        let handle = aries_server::log_store::spawn_writer(app.state.database.clone(), rx, 14);
+        // 这些用例仍走「发送端全部释放」收尾路径：shutdown 发送端存活但不发信号。
+        let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = aries_server::log_store::spawn_writer(
+            app.state.database.clone(),
+            rx,
+            14,
+            shutdown_rx,
+            aries_server::log_store::log_wake_channel(),
+        );
         handle.await.context("writer task failed")?;
 
         let (fields,): (serde_json::Value,) =
