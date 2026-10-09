@@ -721,6 +721,29 @@
   @apply bg-transparent p-0 text-inherit;
 }
 
+/* KaTeX 展示公式：居中、横向溢出可滚动、字号略大于正文 */
+.article-content .katex-display {
+  @apply my-6 overflow-x-auto overflow-y-hidden py-1;
+}
+
+.article-content .katex {
+  font-size: 1.05em;
+}
+
+/* KaTeX 默认字色为黑色，暗色主题下需跟随正文前景色 */
+.dark .article-content .katex {
+  @apply text-foreground;
+}
+
+/* Mermaid 图表（客户端由 HighlightedContent 把 ```mermaid 代码块替换为 SVG） */
+.article-content .mermaid {
+  @apply my-6 flex justify-center overflow-x-auto;
+}
+
+.article-content .mermaid svg {
+  @apply h-auto max-w-full;
+}
+
 /* Mac 风格代码窗口：结构由 HighlightedContent 在客户端生成（div.code-window > header + pre） */
 .article-content .code-window {
   @apply my-6 overflow-hidden rounded-lg bg-neutral-900 text-sm;

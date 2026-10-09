@@ -1,11 +1,12 @@
 //! aries-migrator：MySQL → PostgreSQL 全量 ETL。
-//! 子命令：preflight（只读检查）/ migrate（迁移）/ validate（校验）。
+//! 子命令：preflight（只读检查）/ migrate（迁移）/ validate（校验）/ re-render（重渲染派生 HTML）。
 //! 数据完整性三去向：迁入目标表 / Archive JSONL / Report 计数；禁止静默丢弃。
 
 mod archive;
 mod context;
 mod preflight;
 mod report;
+mod rerender;
 mod tables;
 mod timeconv;
 mod validate;
@@ -42,6 +43,9 @@ enum Command {
     Migrate(MigrateArgs),
     /// 校验：行数、主键范围、内容 Hash 抽查、关联计数、Archive 对账、Sequence。
     Validate(ValidateArgs),
+    /// 重渲染：渲染器升级后，用当前 ComrakMarkdownRenderer 重算各表派生 HTML 列。
+    /// 幂等、只写派生列；渲染结果与存量一致时不产生 UPDATE。
+    ReRender(ReRenderArgs),
 }
 
 #[derive(Debug, Args)]
@@ -122,6 +126,21 @@ struct ValidateArgs {
     sample_size: i64,
 }
 
+#[derive(Debug, Args)]
+struct ReRenderArgs {
+    #[arg(long, env = "MIGRATION_POSTGRES_URL")]
+    postgres_url: String,
+    /// 目标 Schema（与 server 的 DATABASE_SCHEMA 一致），用于设置 search_path。
+    #[arg(long, env = "DATABASE_SCHEMA", default_value = "public")]
+    pg_schema: String,
+    /// 只重渲染指定表（逗号分隔）：articles,pages,journals,comments
+    #[arg(long, value_delimiter = ',')]
+    only: Vec<String>,
+    /// 只统计差异行数，不写库。
+    #[arg(long)]
+    dry_run: bool,
+}
+
 /// 按 FK 依赖序排列的全部迁移步骤。
 const ALL_STEPS: [&str; 13] = [
     "users",
@@ -155,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Preflight(args) => run_preflight(args).await?,
         Command::Migrate(args) => run_migrate(args).await?,
         Command::Validate(args) => run_validate(args).await?,
+        Command::ReRender(args) => run_re_render(args).await?,
     };
     if exit_code != 0 {
         std::process::exit(exit_code);
@@ -436,6 +456,12 @@ async fn run_validate(args: ValidateArgs) -> anyhow::Result<i32> {
     run_report.finish(started);
     save_and_print(&run_report, args.common.report.as_deref())?;
     Ok(if has_failures { 1 } else { 0 })
+}
+
+async fn run_re_render(args: ReRenderArgs) -> anyhow::Result<i32> {
+    let pg = connect_postgres(&args.postgres_url, &args.pg_schema).await?;
+    rerender::run(&pg, &args.only, args.dry_run).await?;
+    Ok(0)
 }
 
 fn save_and_print(report: &RunReport, path: Option<&std::path::Path>) -> anyhow::Result<()> {

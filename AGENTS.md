@@ -23,7 +23,7 @@ Aries Next 是博客系统 Aries 的新一代重写实现，采用 Modular Monol
 backend/server     # aries-server：Axum HTTP Server、Router、Middleware、Config
 backend/core       # aries-core：Domain Model、Repository/Service Contract（trait）
 backend/infra      # aries-infra：PostgreSQL Repository、Storage（local/S3）、Password Hash、Markdown 渲染、AI Adapter
-backend/migrator   # aries-migrator：MySQL → PostgreSQL ETL 工具（preflight / migrate / validate 子命令）
+backend/migrator   # aries-migrator：MySQL → PostgreSQL ETL 工具（preflight / migrate / validate / re-render 子命令；re-render 用当前渲染器重算存量 rendered_html / content_html 派生列）
 apps/admin         # @aries/admin：Vue 3 管理端 SPA（页面在 src/pages/ 下按文件路由生成；本包特有约定见 apps/admin/AGENTS.md）
 apps/web           # @aries/web：Nuxt 4 SSR 公开站
 packages/design-tokens  # @aries/design-tokens：两端共享的 Brand Token（仅导出 theme.css）

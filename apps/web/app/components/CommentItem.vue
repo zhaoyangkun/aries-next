@@ -65,8 +65,8 @@ const isReplyTarget = computed(() => props.replyTargetId === props.comment.id)
           </time>
         </div>
 
-        <!-- 后端已渲染并消毒的 Markdown HTML -->
-        <div class="article-content comment-content" v-html="comment.content_html" />
+        <!-- 后端已渲染并消毒的 Markdown HTML；复用 HighlightedContent 获得公式/图表/代码高亮增强 -->
+        <HighlightedContent class="comment-content" :html="comment.content_html" />
 
         <button
           type="button"
