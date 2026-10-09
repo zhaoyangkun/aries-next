@@ -156,7 +156,11 @@ useHead(
         </header>
 
         <!-- 详情封面：原来直出原图，改为 ?w= 缩略图 + srcset（正文栏最大 768px）；
-             view-transition-name 与列表卡片封面配对，实现共享元素过渡 -->
+             view-transition-name 与列表卡片封面配对，实现共享元素过渡。
+             公开 API 无封面尺寸元数据，用 aspect-ratio: auto 21/9 折衷防 CLS：
+             加载前按 21/9 预留高度，加载后 auto 让位给图片固有比例，
+             CLS 从「0 → 全高」缩减为「21/9 → 实际比例」的小幅校正；
+             此处高度始终由 aspect-ratio 决定，object-cover 不产生裁切，仅为过渡配对保留 -->
         <img
           v-if="article.cover_url"
           :src="thumbUrl(article.cover_url, 768)"
@@ -164,7 +168,7 @@ useHead(
           sizes="(max-width: 800px) calc(100vw - 2rem), 768px"
           :alt="article.title"
           :style="{ viewTransitionName: `cover-${article.id}` }"
-          class="mt-8 w-full rounded-lg object-cover"
+          class="mt-8 aspect-[auto_21/9] w-full rounded-lg object-cover"
         />
 
         <!-- AI 导读：后端生成摘要式导读，非空时展示在正文之前 -->

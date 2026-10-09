@@ -202,7 +202,7 @@
 }
 
 .site-header nav {
-  /* 导航项较多时允许横向滚动，避免移动端撑破布局 */
+  /* 桌面端导航项较多时允许横向滚动；sm 以下整条 nav 隐藏，导航走 AppNavDrawer 抽屉 */
   @apply flex items-center gap-1 overflow-x-auto;
 }
 
@@ -213,6 +213,20 @@
 
 .site-header nav a.router-link-active {
   @apply font-semibold text-primary;
+}
+
+/* sm 以下隐藏 header 平铺导航（改用全屏抽屉）；选择器优先级需高于上方 .site-header nav 的 flex */
+@media (max-width: 639.98px) {
+  .site-header .site-header-inner nav {
+    display: none;
+  }
+}
+
+/* 汉堡按钮复用 .theme-toggle 外观，仅 sm 以下显示（优先级需高于 .theme-toggle 的 grid） */
+@media (min-width: 640px) {
+  .site-header .nav-toggle {
+    display: none;
+  }
 }
 
 /* 昼夜切换：两个图标同时渲染，显隐由 html.dark 的 CSS 控制，不经过 Vue 状态，
@@ -557,6 +571,87 @@
 .nav-group:hover .nav-dropdown,
 .nav-group:focus-within .nav-dropdown {
   @apply flex;
+}
+
+/* 移动端全屏导航抽屉：z-50 压过 sticky header(20) 与浮动工具栏(40)，
+   低于搜索弹层(60) 与灯箱(60)，Teleport 到 body 末尾，同级的阅读进度条(50) 自然被覆盖 */
+.nav-drawer {
+  @apply fixed inset-0 z-50 flex flex-col bg-background;
+}
+
+/* 头部对齐 site-header-inner 的宽度与高度，关闭按钮与汉堡位置一致 */
+.nav-drawer-head {
+  @apply mx-auto flex min-h-14 w-[min(1040px,calc(100%-2rem))] shrink-0 items-center justify-between;
+}
+
+.nav-drawer-title {
+  @apply text-xl font-bold text-title;
+}
+
+.nav-drawer-nav {
+  @apply mx-auto flex w-[min(1040px,calc(100%-2rem))] flex-1 flex-col gap-1 overflow-y-auto pt-4 pb-10;
+}
+
+.nav-drawer-link,
+.nav-drawer-sublink {
+  @apply block rounded-md px-3 no-underline transition-colors hover:text-primary;
+}
+
+.nav-drawer-link {
+  @apply py-3 text-lg text-title;
+}
+
+.nav-drawer-sublink {
+  @apply py-2 text-base text-muted-foreground;
+}
+
+.nav-drawer-link.router-link-active,
+.nav-drawer-sublink.router-link-active {
+  @apply font-semibold text-primary;
+}
+
+/* 抽屉内搜索入口：与导航项同宽的整行按钮 */
+.nav-drawer-search {
+  @apply flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent text-left;
+}
+
+.nav-drawer-group {
+  @apply flex flex-col;
+}
+
+.nav-drawer-children {
+  @apply ml-3 flex flex-col border-l border-border pl-3;
+}
+
+.nav-drawer-enter-active,
+.nav-drawer-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.nav-drawer-enter-active .nav-drawer-nav,
+.nav-drawer-leave-active .nav-drawer-nav {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.nav-drawer-enter-from,
+.nav-drawer-leave-to {
+  opacity: 0;
+}
+
+.nav-drawer-enter-from .nav-drawer-nav,
+.nav-drawer-leave-to .nav-drawer-nav {
+  transform: translateY(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-drawer-enter-active,
+  .nav-drawer-leave-active,
+  .nav-drawer-enter-active .nav-drawer-nav,
+  .nav-drawer-leave-active .nav-drawer-nav {
+    transition: none;
+  }
 }
 
 /* 文章正文（后端渲染并消毒后的 HTML）排版样式 */

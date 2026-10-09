@@ -9,7 +9,17 @@ const coverUrl = computed(() => site.value.default_cover_url || '')
 <template>
   <header class="home-hero">
     <div class="home-hero-bg">
-      <img v-if="coverUrl" :src="coverUrl" :alt="site.site_name" />
+      <!-- 首屏 LCP：按需缩放 + srcset，fetchpriority 拉高抢占带宽；
+           档位止于 1200 是因为后端缩放上限 1200（超界静默回退原图，反而更慢） -->
+      <img
+        v-if="coverUrl"
+        :src="thumbUrl(coverUrl, 1200)"
+        :srcset="thumbSrcset(coverUrl, [640, 960, 1200])"
+        sizes="100vw"
+        :alt="site.site_name"
+        fetchpriority="high"
+        decoding="async"
+      />
       <div v-else class="home-hero-fallback" aria-hidden="true" />
       <div class="home-hero-overlay" aria-hidden="true" />
     </div>

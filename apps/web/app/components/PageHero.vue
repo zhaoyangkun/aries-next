@@ -17,7 +17,18 @@ const cover = computed(() => props.coverUrl || site.value.default_cover_url || '
 <template>
   <section class="page-hero">
     <div class="home-hero-bg">
-      <img v-if="cover" :src="cover" alt="" aria-hidden="true" />
+      <!-- 子页首屏封面同样是 LCP 候选：full-bleed 故 sizes 取 100vw，
+           档位止于后端缩放上限 1200，理由同 HomeHero -->
+      <img
+        v-if="cover"
+        :src="thumbUrl(cover, 1200)"
+        :srcset="thumbSrcset(cover, [640, 960, 1200])"
+        sizes="100vw"
+        alt=""
+        aria-hidden="true"
+        fetchpriority="high"
+        decoding="async"
+      />
       <div v-else class="home-hero-fallback" aria-hidden="true" />
       <div class="home-hero-overlay" aria-hidden="true" />
     </div>

@@ -7,6 +7,9 @@ const navigation = await useNavigation()
 const { toggleTheme } = useTheme()
 const { show: showSearchPalette } = useSearchPalette()
 
+// 移动端全屏导航抽屉的开关（AppNavDrawer 自管焦点/滚动锁/路由关闭）
+const navOpen = ref(false)
+
 // Ctrl/⌘+K：全局唤起搜索弹层（SearchPalette 自身管理关闭与焦点）
 onMounted(() => {
   const onGlobalKey = (event: KeyboardEvent) => {
@@ -76,7 +79,8 @@ useHead(
         <div class="flex min-w-0 items-center gap-1">
           <nav aria-label="主导航">
             <template v-for="(item, index) in navItems" :key="index">
-              <!-- 桌面端：含子菜单的节点用 group hover/focus-within 纯 CSS 下拉，不引依赖 -->
+              <!-- 桌面端：含子菜单的节点用 group hover/focus-within 纯 CSS 下拉，不引依赖；
+                   sm 以下整条 nav 被 CSS 隐藏，导航走 AppNavDrawer 抽屉 -->
               <div v-if="item.children.length > 0" class="nav-group hidden sm:block">
                 <AppNavLink :node="item" />
                 <div class="nav-dropdown">
@@ -87,22 +91,11 @@ useHead(
                   />
                 </div>
               </div>
-              <!-- 移动端没有悬停态，平铺父项与子项（下拉容器在 sm 以下隐藏） -->
-              <template v-if="item.children.length > 0">
-                <AppNavLink :node="item" class="sm:hidden" />
-                <AppNavLink
-                  v-for="(child, childIndex) in item.children"
-                  :key="`m-${childIndex}`"
-                  :node="child"
-                  class="sm:hidden"
-                />
-              </template>
               <AppNavLink v-else :node="item" />
             </template>
           </nav>
-          <!-- 桌面端顶栏搜索框（移动端无悬停/空间，保留搜索页链接） -->
+          <!-- 桌面端顶栏搜索框（移动端经抽屉里的搜索项进 SearchPalette） -->
           <AppSearchBox />
-          <NuxtLink to="/search" class="sm:hidden">搜索</NuxtLink>
           <!-- 昼夜切换：内联 SVG 太阳/月亮，显隐由 html.dark 的 CSS 控制 -->
           <button
             type="button"
@@ -149,13 +142,41 @@ useHead(
               <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
             </svg>
           </button>
+          <!-- 汉堡按钮：仅 sm 以下显示（.nav-toggle 控制），打开全屏导航抽屉 -->
+          <button
+            id="site-nav-toggle"
+            type="button"
+            class="theme-toggle nav-toggle"
+            aria-label="打开导航菜单"
+            :aria-expanded="navOpen"
+            aria-controls="site-nav-drawer"
+            @click="navOpen = true"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h16" />
+            </svg>
+          </button>
         </div>
       </div>
     </header>
     <main class="site-main"><slot /></main>
-    <!-- 右下角浮动工具栏 + 全局搜索弹层（状态经 useSearchPalette/useTocDrawer 共享） -->
+    <!-- 右下角浮动工具栏 + 全局搜索弹层 + 移动端导航抽屉（状态经 useSearchPalette/useTocDrawer 共享） -->
     <AppToolbar />
     <SearchPalette />
+    <AppNavDrawer v-model:open="navOpen" :items="navItems" :site-name="site.site_name" />
     <footer class="site-footer">
       <!-- 页脚复用同一导航数据，只展示一级节点，避免页脚过重 -->
       <nav v-if="navItems.length > 0" class="site-footer-nav" aria-label="页脚导航">
