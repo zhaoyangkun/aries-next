@@ -108,6 +108,26 @@ describe('logsApi', () => {
     })
   })
 
+  it('passes a keyset cursor and exposes next_cursor from the response', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        items: [entry],
+        total: 42,
+        page: 1,
+        page_size: 20,
+        next_cursor: '1788602580000000000_5',
+        level_counts: { ERROR: 1, WARN: 0, INFO: 0, DEBUG: 0, TRACE: 0 },
+      },
+    })
+
+    const result = await logsApi.list({ page: 1, page_size: 20, cursor: '1788602520000000000_8' })
+
+    expect(result.next_cursor).toBe('1788602580000000000_5')
+    expect(get).toHaveBeenCalledWith('/api/admin/logs', {
+      params: { page: 1, page_size: 20, cursor: '1788602520000000000_8' },
+    })
+  })
+
   it('loads level stats buckets with an hours window', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({
       data: {

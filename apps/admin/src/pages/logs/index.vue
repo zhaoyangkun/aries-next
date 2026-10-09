@@ -5,6 +5,8 @@ import {
   AlignHorizontalDistributeCenterIcon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CopyIcon,
   DatabaseIcon,
   EyeOffIcon,
@@ -27,17 +29,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { AppDataTablePagination } from '@/shared/components/data-table'
 import AppEmptyState from '@/shared/components/AppEmptyState.vue'
 import { BasicPage } from '@/components/global-layout'
 import { logsApi, type LogEntry, type LogFilterOverride, type LogLevel, type LogLevelCounts, type LogStatsBucket } from '@/modules/logs/api/logs'
+import { currentPage, cursorForPage, goToNextPage, goToPreviousPage } from '@/modules/logs/utils/cursor-pagination'
 import { highlightJson, highlightSql } from '@/modules/logs/utils/highlight'
+import { pushTailEntry } from '@/modules/logs/utils/tail'
 import { getApiError } from '@/shared/api/client'
 import { toast } from 'vue-sonner'
 import { toRfc3339 } from '@/utils/to-rfc3339'
 
 const page = ref(1)
 const pageSize = ref(20)
+// 主列表（desc）keyset 游标栈：栈顶为当前页请求携带的 cursor，页码 = 栈长 + 1；
+// 链路视图（asc）不用游标，仍走 page 的 OFFSET 路径（单请求日志量级小，无深翻页问题）。
+const cursors = ref<string[]>([])
+const nextCursor = ref<string | null>(null)
 const level = ref<'' | LogLevel>('')
 const target = ref('')
 const keyword = ref('')
@@ -145,10 +152,13 @@ async function loadLogs(silent = false) {
           // 与 target 下拉选择 sqlx::query 互斥。
           exclude_target:
             hideSql.value && target.value !== 'sqlx::query' ? 'sqlx::query' : undefined,
+          // keyset 游标：仅 desc 主列表携带（与 asc 互斥，服务端校验）；栈空即第 1 页。
+          cursor: traceRequestId.value ? undefined : cursorForPage(cursors.value),
         }
     const result = await logsApi.list(params)
     logs.value = result.items
     total.value = result.total
+    nextCursor.value = result.next_cursor
     levelCounts.value = result.level_counts
   }
   catch (e) {
@@ -162,8 +172,15 @@ async function loadLogs(silent = false) {
   }
 }
 
-function applyFilter() {
+// 回到第 1 页：筛选/视图/每页数量变化时，游标栈与 OFFSET 页码一起复位。
+function resetToFirstPage() {
+  cursors.value = []
+  nextCursor.value = null
   page.value = 1
+}
+
+function applyFilter() {
+  resetToFirstPage()
   expandedId.value = null
   loadLogs()
   rebuildTail()
@@ -175,7 +192,7 @@ function resetFilter() {
   keyword.value = ''
   start.value = ''
   end.value = ''
-  page.value = 1
+  resetToFirstPage()
   expandedId.value = null
   hideSql.value = false
   // 重置同时退出链路视图与上下文视图。
@@ -205,7 +222,7 @@ function enterTrace(requestId: string) {
   traceRequestId.value = requestId
   // 链路视图与上下文视图互斥。
   contextAnchor.value = null
-  page.value = 1
+  resetToFirstPage()
   expandedId.value = null
   loadLogs()
   rebuildTail()
@@ -213,7 +230,7 @@ function enterTrace(requestId: string) {
 
 function exitTrace() {
   traceRequestId.value = ''
-  page.value = 1
+  resetToFirstPage()
   loadLogs()
   rebuildTail()
 }
@@ -222,7 +239,7 @@ function exitTrace() {
 function enterContext(entry: LogEntry) {
   contextAnchor.value = entry
   traceRequestId.value = ''
-  page.value = 1
+  resetToFirstPage()
   expandedId.value = null
   loadLogs()
   rebuildTail()
@@ -230,17 +247,54 @@ function enterContext(entry: LogEntry) {
 
 function exitContext() {
   contextAnchor.value = null
-  page.value = 1
+  resetToFirstPage()
   loadLogs()
   rebuildTail()
 }
 
-// 翻页与每页数量变化时重新请求；pageSize 变化且不在第一页时先回到第一页（由 page 变化触发加载）。
-watch([page, pageSize], ([currentPage, currentSize], [_previousPage, previousSize]) => {
-  if (currentSize !== previousSize && currentPage !== 1) {
-    page.value = 1
+// 分页导航：主列表（desc）走 keyset 游标栈，链路视图（asc）走 OFFSET 页码。
+const isFirstPage = computed(() =>
+  traceRequestId.value ? page.value <= 1 : cursors.value.length === 0,
+)
+const displayPage = computed(() =>
+  traceRequestId.value ? page.value : currentPage(cursors.value),
+)
+const canGoPrevious = computed(() =>
+  traceRequestId.value ? page.value > 1 : cursors.value.length > 0,
+)
+const canGoNext = computed(() =>
+  traceRequestId.value
+    ? page.value * pageSize.value < total.value
+    : nextCursor.value != null,
+)
+
+function previousPage() {
+  if (loading.value || !canGoPrevious.value)
     return
-  }
+  if (traceRequestId.value)
+    page.value -= 1
+  else
+    goToPreviousPage(cursors.value)
+  expandedId.value = null
+  loadLogs()
+  rebuildTail()
+}
+
+function nextPage() {
+  if (loading.value || !canGoNext.value)
+    return
+  if (traceRequestId.value)
+    page.value += 1
+  else
+    goToNextPage(cursors.value, nextCursor.value)
+  expandedId.value = null
+  loadLogs()
+  rebuildTail()
+}
+
+// 每页数量变化：keyset 游标与旧 page_size 挂钩不可复用，回到第 1 页重新查询。
+watch(pageSize, () => {
+  resetToFirstPage()
   loadLogs()
   rebuildTail()
 })
@@ -329,7 +383,8 @@ function closeTail() {
   tailSource = undefined
 }
 
-// 建立 SSE 连接：查询串跟随当前筛选（含链路视图的 request_id），只推送连接后的新日志。
+// 建立 SSE 连接：查询串跟随当前筛选（含链路视图的 request_id），新连接只推送连接后的新日志；
+// 浏览器自动重连携带 Last-Event-ID，服务端补齐断开窗口的日志。
 function openTail() {
   closeTail()
   tailError.value = ''
@@ -345,11 +400,10 @@ function openTail() {
   source.addEventListener('log', (event) => {
     try {
       const entry = JSON.parse((event as MessageEvent).data) as LogEntry
-      logs.value.unshift(entry)
+      // 重连补齐重发的边缘（服务端已发但客户端未处理就断）按 id 去重，不计入总数。
+      if (!pushTailEntry(logs.value, entry, TAIL_MAX_ENTRIES))
+        return
       total.value += 1
-      // 列表最多保留 TAIL_MAX_ENTRIES 条，超出从尾部截掉。
-      if (logs.value.length > TAIL_MAX_ENTRIES)
-        logs.value.splice(TAIL_MAX_ENTRIES)
     }
     catch {
       // 单条推送解析失败直接忽略，不影响后续推送。
@@ -367,7 +421,8 @@ function openTail() {
       liveTail.value = false
     }
     else {
-      tailError.value = '实时跟踪连接中断，正在自动重连…'
+      // 浏览器自动重连会携带 Last-Event-ID，服务端据此补齐断开窗口的日志。
+      tailError.value = '实时跟踪连接中断，正在自动重连，重连后将自动补齐断开期间的日志…'
     }
   })
 }
@@ -397,7 +452,12 @@ watch(autoRefresh, (enabled) => {
     // 自动刷新与实时跟踪互斥：开启轮询时停掉 SSE。
     if (liveTail.value)
       liveTail.value = false
-    refreshTimer = setInterval(() => loadLogs(true), 5000)
+    refreshTimer = setInterval(() => {
+      // 深层页暂停自动刷新：深层数据随新日志漂移，刷新意义小且会打断阅读；
+      // 回到第 1 页（游标栈空 / 链路视图页码 1）自动恢复。
+      if (isFirstPage.value)
+        loadLogs(true)
+    }, 5000)
   }
 })
 
@@ -689,7 +749,7 @@ async function clearFilterOverride() {
             <input v-model="liveTail" type="checkbox" class="peer sr-only" />
             <span class="relative h-4.5 w-8 shrink-0 rounded-full bg-input transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-3.5 after:rounded-full after:bg-background after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-3.5" />
           </label>
-          <span v-if="liveTail && page !== 1" class="text-xs text-amber-600 dark:text-amber-500">
+          <span v-if="liveTail && !isFirstPage" class="text-xs text-amber-600 dark:text-amber-500">
             实时跟踪从列表顶部推送最新日志，当前不在第 1 页，可切回跟踪最新。
           </span>
           <span v-if="tailError" role="alert" class="text-xs font-medium text-amber-600 dark:text-amber-500">{{ tailError }}</span>
@@ -946,15 +1006,44 @@ async function clearFilterOverride() {
           </Table>
         </div>
       </CardContent>
-      <!-- 上下文模式下分页被服务端忽略，隐藏分页控件。 -->
-      <div v-if="!contextAnchor" class="border-t p-4">
-        <AppDataTablePagination
-          v-model:page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          :loading="loading"
-          unit="条日志"
-        />
+      <!-- 上下文模式下分页被服务端忽略，隐藏分页控件。
+           主列表（desc）为 keyset 游标分页：只有上一页/下一页，无页码跳转（深翻页走索引）；
+           链路视图（asc）同控件复用，内部走 OFFSET 页码。 -->
+      <div v-if="!contextAnchor" class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t p-4">
+        <p class="text-xs text-muted-foreground">共 {{ total }} 条日志</p>
+        <select
+          v-model.number="pageSize"
+          aria-label="每页数量"
+          class="flex h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+          :disabled="loading"
+        >
+          <option v-for="option in [10, 20, 50]" :key="option" :value="option">{{ option }} / 页</option>
+        </select>
+        <div class="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8"
+            aria-label="上一页"
+            :disabled="!canGoPrevious || loading"
+            @click="previousPage"
+          >
+            <ChevronLeftIcon />
+            上一页
+          </Button>
+          <span class="px-1 text-xs tabular-nums text-muted-foreground">第 {{ displayPage }} 页</span>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8"
+            aria-label="下一页"
+            :disabled="!canGoNext || loading"
+            @click="nextPage"
+          >
+            下一页
+            <ChevronRightIcon />
+          </Button>
+        </div>
       </div>
     </Card>
   </BasicPage>

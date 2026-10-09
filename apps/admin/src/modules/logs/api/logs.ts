@@ -27,6 +27,8 @@ export interface LogPage {
   total: number
   page: number
   page_size: number
+  // keyset 下一页游标：满页时非空，末页为 null；asc（链路视图）与上下文模式恒为 null。
+  next_cursor: string | null
   // 最近 24h 各级别条数，与当前筛选无关。
   level_counts: LogLevelCounts
 }
@@ -60,6 +62,8 @@ export const logsApi = {
     // 请求链路追踪：精确匹配单个请求的日志；配合 order=asc 按链路流转正序展示。
     request_id?: string
     order?: 'asc' | 'desc'
+    // keyset 游标：上一页响应的 next_cursor，仅 desc 有效，存在时忽略 page，与 asc 互斥。
+    cursor?: string
     // 精确排除某 target（与 target 互斥），如隐藏 sqlx::query。
     exclude_target?: string
     // 上下文模式：以该行为锚点前后各 context 条，忽略分页与时间筛选，asc 返回；锚点不存在 404。
