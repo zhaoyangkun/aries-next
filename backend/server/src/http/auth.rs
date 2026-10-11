@@ -486,7 +486,7 @@ async fn session(current: CurrentUser) -> Json<SessionResponse> {
     tag = "Admin Auth",
     operation_id = "forgotPassword",
     summary = "请求密码重置",
-    description = "无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。Phase 05 接入 Email Adapter 前不会发送 Email，Reset Token 不落库明文。",
+    description = "无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。邮件功能启用且配置完整时发送含重置链接的 Email（链接 30 分钟有效），发送结果记录在审计日志；Reset Token 不落库明文。",
     request_body = ForgotPasswordRequest,
     responses(
         (status = 202, description = "无论账号是否存在都返回相同响应", body = MessageResponse),
@@ -518,6 +518,9 @@ async fn forgot_password(
                 expires_at: OffsetDateTime::now_utc() + time::Duration::minutes(30),
             })
             .await?;
+        // 内联发送重置邮件（不走 Background Job：raw Token 不落库）；
+        // 失败只体现在审计 metadata，响应恒为 202 防账号枚举。
+        let delivery = crate::notify::send_password_reset_email(&state, &user.email, &token).await;
         state
             .auth
             .write_audit(AuditEvent {
@@ -525,8 +528,7 @@ async fn forgot_password(
                 action: "auth.password_reset_requested".to_owned(),
                 target_type: "user".to_owned(),
                 target_id: Some(user.id.to_string()),
-                // Phase 05 接入 Email Adapter 前，不记录或返回原始 Reset Token。
-                metadata: serde_json::json!({ "delivery": "not_configured" }),
+                metadata: serde_json::json!({ "delivery": delivery.as_str() }),
             })
             .await?;
     }

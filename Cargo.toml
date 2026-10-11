@@ -31,6 +31,7 @@ hmac = "0.12"
 http-body-util = "0.1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "webp"] }
 include_dir = "0.7"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls", "hostname", "pool"] }
 utoipa = "5"
 log = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }

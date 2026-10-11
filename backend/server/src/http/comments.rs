@@ -351,6 +351,14 @@ async fn reply_to_comment(
             metadata: serde_json::json!({ "parent_id": comment_id }),
         })
         .await?;
+    // 管理员回复后邮件通知被回复的访客（被回复者是管理员时无访客 Email，notify 层剔除空值）。
+    crate::notify::enqueue_comment_notifications(
+        &state,
+        &comment,
+        aries_core::email::CommentNoticeKind::Reply,
+        std::slice::from_ref(&target.author_email),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(comment.into())))
 }
 

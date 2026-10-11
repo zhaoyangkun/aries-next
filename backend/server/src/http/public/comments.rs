@@ -9,7 +9,6 @@ use aries_core::comments::{
     Comment, CommentError, CommentStatus, CommentTargetType, NewComment, validate_author_email,
     validate_author_name, validate_author_url, validate_content_length,
 };
-use aries_core::jobs::{JobKind, NewBackgroundJob};
 use aries_core::media::CommentPolicy;
 use axum::{
     Router,
@@ -313,32 +312,26 @@ fn initial_status(policy: CommentPolicy) -> Result<CommentStatus, CommentError> 
     }
 }
 
-/// 评论通知入队：Worker 当前只记录日志（Email Adapter 未接入），
-/// 入队失败只记日志，绝不影响评论创建响应（静默降级）。
-async fn enqueue_comment_notification(
-    state: &AppState,
-    comment: &Comment,
-    recipient: Option<&str>,
-) {
-    let mut payload = serde_json::json!({
-        "comment_id": comment.id,
-        "target_type": comment.target_type.as_str(),
-        "target_id": comment.target_id,
-    });
-    // 回复时通知被回复的作者；根评论的站点所有者通知待 Email Adapter 接入后补充。
-    if let Some(recipient) = recipient.filter(|value| !value.is_empty()) {
-        payload["recipient_email"] = serde_json::Value::String(recipient.to_owned());
-    }
-    if let Err(error) = state
-        .jobs
-        .enqueue(NewBackgroundJob::new(JobKind::CommentNotification, payload))
-        .await
-    {
-        tracing::error!(
-            error = %error,
-            comment_id = comment.id,
-            "failed to enqueue comment notification job"
-        );
+/// 根评论通知站点管理员：收件人为全部 Active 管理员 Email（剔除作者本人由 notify 层负责）。
+/// 查询失败只记日志并跳过通知，绝不影响评论创建响应（静默降级）。
+async fn notify_root_comment(state: &AppState, comment: &Comment) {
+    match state.auth.list_active_admin_emails().await {
+        Ok(recipients) => {
+            crate::notify::enqueue_comment_notifications(
+                state,
+                comment,
+                aries_core::email::CommentNoticeKind::New,
+                &recipients,
+            )
+            .await;
+        }
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                comment_id = comment.id,
+                "failed to resolve admin recipients for comment notification"
+            );
+        }
     }
 }
 
@@ -466,8 +459,8 @@ async fn create_comment(
     // AI 审核挂钩：高置信垃圾标记为 spam，其余保持原状态；失败静默回退。
     let comment = crate::http::ai::moderate_comment_with_ai(&state, comment).await;
 
-    // 评论落库成功即异步通知；入队失败只记日志，不影响响应。
-    enqueue_comment_notification(&state, &comment, None).await;
+    // 评论落库成功即异步通知站点管理员；失败只记日志，不影响响应。
+    notify_root_comment(&state, &comment).await;
 
     let logo = state.site_settings.get().await?.logo_url;
     let status = comment.status.as_str().to_owned();
@@ -549,8 +542,14 @@ async fn reply_comment(
     // AI 审核挂钩：同 create_comment，失败静默回退。
     let comment = crate::http::ai::moderate_comment_with_ai(&state, comment).await;
 
-    // 回复通知被回复评论的作者（管理员回复无访客 Email，recipient 缺省）。
-    enqueue_comment_notification(&state, &comment, Some(&parent.author_email)).await;
+    // 回复通知被回复评论的作者（管理员回复无访客 Email，由 notify 层剔除空值）。
+    crate::notify::enqueue_comment_notifications(
+        &state,
+        &comment,
+        aries_core::email::CommentNoticeKind::Reply,
+        std::slice::from_ref(&parent.author_email),
+    )
+    .await;
 
     let logo = state.site_settings.get().await?.logo_url;
     let status = comment.status.as_str().to_owned();

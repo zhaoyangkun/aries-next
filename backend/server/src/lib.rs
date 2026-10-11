@@ -26,6 +26,7 @@ pub mod config;
 pub mod http;
 pub mod log_store;
 pub mod logging;
+pub mod notify;
 pub mod openapi;
 pub mod rate_limit;
 pub mod security;

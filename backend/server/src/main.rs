@@ -4,12 +4,13 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use aries_infra::{
-    Argon2PasswordHasher, ComrakMarkdownRenderer, DispatchingAiProvider,
+    Argon2PasswordHasher, ComrakMarkdownRenderer, DispatchingAiProvider, LettreEmailSender,
     PostgresAiRequestRepository, PostgresAuthRepository, PostgresChunkRepository,
-    PostgresCommentRepository, PostgresContentRepository, PostgresGalleryRepository,
-    PostgresJobRepository, PostgresJournalRepository, PostgresLinkRepository,
-    PostgresLogRepository, PostgresMediaRepository, PostgresNavigationRepository,
-    PostgresPageRepository, PostgresSettingRepository, PostgresSiteSettingsRepository,
+    PostgresCommentRepository, PostgresContentRepository, PostgresEmailDeliveryRepository,
+    PostgresGalleryRepository, PostgresJobRepository, PostgresJournalRepository,
+    PostgresLinkRepository, PostgresLogRepository, PostgresMediaRepository,
+    PostgresNavigationRepository, PostgresPageRepository, PostgresSettingRepository,
+    PostgresSiteSettingsRepository,
 };
 use aries_server::{build_app, config::ServerConfig, log_store, logging, state::AppState, worker};
 use tracing::info;
@@ -71,6 +72,8 @@ async fn main() -> anyhow::Result<()> {
         // 从 setting_groups 实时读取，settings 更新后下一次请求即生效。
         ai: Arc::new(DispatchingAiProvider::new()),
         ai_requests: Arc::new(PostgresAiRequestRepository::new(database.clone())),
+        email: Arc::new(LettreEmailSender),
+        email_deliveries: Arc::new(PostgresEmailDeliveryRepository::new(database.clone())),
         config: Arc::new(config.clone()),
         rate_limiter: Default::default(),
         log_handle,

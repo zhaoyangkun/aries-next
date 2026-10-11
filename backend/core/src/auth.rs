@@ -265,6 +265,8 @@ pub trait AuthRepository: Send + Sync {
     async fn create_owner(&self, owner: NewOwner) -> Result<User, AuthError>;
     async fn find_credentials(&self, login: &str) -> Result<Option<CredentialUser>, AuthError>;
     async fn find_user_by_email(&self, email: &str) -> Result<Option<User>, AuthError>;
+    /// 全部 Active 管理员的 Email（评论新评论通知的收件人列表）；不含已禁用账号。
+    async fn list_active_admin_emails(&self) -> Result<Vec<String>, AuthError>;
     async fn create_session(&self, session: NewSession) -> Result<(), AuthError>;
     async fn find_session(
         &self,

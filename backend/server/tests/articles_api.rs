@@ -70,6 +70,10 @@ impl AuthRepository for MockAuthRepository {
         Err(AuthError::StoreUnavailable)
     }
 
+    async fn list_active_admin_emails(&self) -> Result<Vec<String>, AuthError> {
+        Err(AuthError::StoreUnavailable)
+    }
+
     async fn create_session(&self, _session: NewSession) -> Result<(), AuthError> {
         Err(AuthError::StoreUnavailable)
     }
@@ -1020,7 +1024,13 @@ fn test_app(role: Role) -> Router {
         chunks: Arc::new(aries_infra::PostgresChunkRepository::new(database.clone())),
         // AI 端点不在本测试覆盖范围内，复用真实 Repository（连接为 lazy，不会实际查询）。
         ai: Arc::new(aries_infra::DispatchingAiProvider::new()),
-        ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(database)),
+        ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(
+            database.clone(),
+        )),
+        email: Arc::new(aries_infra::LettreEmailSender),
+        email_deliveries: Arc::new(aries_infra::PostgresEmailDeliveryRepository::new(
+            database.clone(),
+        )),
         config: Arc::new(ServerConfig {
             address: "127.0.0.1:0".parse().unwrap(),
             admin_origins: vec![ORIGIN.to_owned()],

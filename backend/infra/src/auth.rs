@@ -183,6 +183,20 @@ impl AuthRepository for PostgresAuthRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    async fn list_active_admin_emails(&self) -> Result<Vec<String>, AuthError> {
+        // citext 列直接解码为 String；只取 Active 且未软删的账号。
+        let emails: Vec<String> = logged_query_as::<(String,)>(
+            "SELECT email FROM users WHERE status = 'active' AND deleted_at IS NULL ORDER BY id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?
+        .into_iter()
+        .map(|row| row.0)
+        .collect();
+        Ok(emails)
+    }
+
     async fn create_session(&self, session: NewSession) -> Result<(), AuthError> {
         logged_query(
             "INSERT INTO admin_sessions (id, token_hash, user_id, expires_at, user_agent) \

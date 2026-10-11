@@ -5,6 +5,7 @@ pub mod audit;
 pub mod auth;
 pub mod comments;
 pub mod dashboard;
+pub mod email;
 pub mod error;
 pub mod extract;
 pub mod galleries;
@@ -62,6 +63,7 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
         .merge(navigation::router())
         .merge(settings_groups::router())
         .merge(ai::router())
+        .merge(email::router())
         .merge(logs::router())
         .route_layer(middleware::from_fn_with_state(state, enforce_origin))
 }

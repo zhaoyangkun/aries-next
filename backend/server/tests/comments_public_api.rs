@@ -92,6 +92,20 @@ async fn public_comment_submit_moderation_and_tree_flow() -> anyhow::Result<()> 
     let scenario = async {
         let owner_cookie = app.bootstrap_owner().await?;
         let (_article_id, slug) = create_published_article(&app, &owner_cookie).await?;
+        // 通知入队需要邮件功能启用且 site_url 已配置（否则 notify 层静默跳过）。
+        sqlx::query("UPDATE setting_groups SET payload = $2 WHERE grp = $1")
+            .bind("email")
+            .bind(serde_json::json!({
+                "enabled": true,
+                "smtp_host": "smtp.example.com",
+                "smtp_port": 587,
+                "from_address": "noreply@example.com"
+            }))
+            .execute(&app.state.database)
+            .await?;
+        sqlx::query("UPDATE site_settings SET site_url = 'https://blog.example.com'")
+            .execute(&app.state.database)
+            .await?;
 
         // 发表：默认 moderated → pending；Markdown 服务端渲染并 Sanitize。
         let mut body = comment_body(&slug, "Nice post! <script>alert(1)</script>");
@@ -109,7 +123,7 @@ async fn public_comment_submit_moderation_and_tree_flow() -> anyhow::Result<()> 
         ensure!(!html.contains("<script>"), "html: {html}");
         let comment_id = created.body["id"].as_i64().context("missing comment id")?;
 
-        // 评论通知 job 已入队（Worker 当前只记录日志；入队失败不影响创建响应）。
+        // 评论通知 job 已入队（收件人为站点管理员；投递审计行随入队创建）。
         let latest_job: Option<(serde_json::Value,)> = sqlx::query_as(
             "SELECT payload FROM background_jobs \
              WHERE kind = 'comment_notification' ORDER BY id DESC LIMIT 1",
@@ -122,10 +136,17 @@ async fn public_comment_submit_moderation_and_tree_flow() -> anyhow::Result<()> 
             "job payload must reference the created comment: {payload}"
         );
         ensure!(
-            payload["target_type"] == "article"
-                && payload["target_id"].as_i64() == Some(_article_id),
-            "job payload must carry the comment target: {payload}"
+            payload["recipient_email"] == "owner@example.com",
+            "root comment should notify the site admin: {payload}"
         );
+        let (delivery_status,): (String,) = sqlx::query_as(
+            "SELECT status FROM email_deliveries \
+             WHERE id = ($1::jsonb->>'delivery_id')::bigint",
+        )
+        .bind(&payload)
+        .fetch_one(&app.state.database)
+        .await?;
+        ensure!(delivery_status == "pending");
 
         // 隐私边界：公开响应不含 email/ip/ua 字段。
         ensure!(created.body.get("email").is_none());

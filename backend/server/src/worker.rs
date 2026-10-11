@@ -1,4 +1,4 @@
-//! 后台任务 Worker：轮询 `background_jobs`，执行媒体清理与尺寸补探测。
+//! 后台任务 Worker：轮询 `background_jobs`，执行媒体清理、尺寸补探测、评论通知邮件与文章 Embedding。
 //! Markdown 导入由 HTTP 同步流程完成，Worker 遇到该类型直接标 Done，避免任务悬挂。
 //! 另承载周期性的过期 Session 物理清理，防止 `admin_sessions` 无限增长。
 
@@ -144,7 +144,7 @@ async fn execute(state: &AppState, job: &BackgroundJob) -> Result<(), String> {
         JobKind::MetadataProbe => metadata_probe(state).await,
         // 导入在 Commit 端点同步完成并直接置 Done；到这里说明是历史遗留任务。
         JobKind::ImportMarkdown => Ok(()),
-        // 评论通知由 Background Job 异步发送；Phase 05 首版先记录日志，后续接入 Email Adapter。
+        // 评论通知由 Background Job 异步发送：payload 携带渲染好的正文，这里负责发送与投递回写。
         JobKind::CommentNotification => comment_notification(state, job).await,
         // 文章 Embedding：发布/更新/取消发布后由 HTTP 层入队，这里完成切分、向量化与入库。
         JobKind::ArticleEmbed => article_embed(state, job).await,
@@ -271,24 +271,98 @@ async fn media_cleanup(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-/// 评论通知任务：首版仅记录日志，后续接入 Email Adapter 后发送实际通知邮件。
-async fn comment_notification(_state: &AppState, job: &BackgroundJob) -> Result<(), String> {
-    let comment_id = job
-        .payload
-        .get("comment_id")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
+/// 评论通知任务：payload 携带入队时渲染好的正文与 delivery_id，这里只负责发送与投递状态回写。
+/// 瞬时失败返回 Err 交给 Job 既有退避重试（30s、最多 max_attempts 次）；
+/// 永久失败/未配置标记投递终态后直接完成，不浪费重试。
+async fn comment_notification(state: &AppState, job: &BackgroundJob) -> Result<(), String> {
+    // 历史遗留任务（Email Adapter 接入前入队的）没有 delivery_id：记录后直接完成。
+    let Some(delivery_id) = job.payload.get("delivery_id").and_then(|v| v.as_i64()) else {
+        tracing::info!(
+            comment_id = job
+                .payload
+                .get("comment_id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            "legacy comment notification job without delivery_id; skipping"
+        );
+        return Ok(());
+    };
     let recipient = job
         .payload
         .get("recipient_email")
         .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-    tracing::info!(
-        comment_id,
-        recipient,
-        "comment notification job executed (email adapter not yet implemented)"
-    );
-    Ok(())
+        .unwrap_or_default()
+        .to_owned();
+    let subject = job
+        .payload
+        .get("subject")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let text = job
+        .payload
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let html = job
+        .payload
+        .get("html")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    if recipient.is_empty() || subject.is_empty() || text.is_empty() {
+        state
+            .email_deliveries
+            .mark_failed(delivery_id, "comment_notification payload incomplete")
+            .await
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let settings = crate::notify::load_email_settings(state).await?;
+    if !settings.enabled {
+        // 配置变更前重试无意义：标记终态失败，管理端可在投递列表中看到原因。
+        state
+            .email_deliveries
+            .mark_failed(delivery_id, "email not configured")
+            .await
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    let message = aries_core::email::EmailMessage {
+        to: recipient,
+        subject,
+        text,
+        html,
+    };
+    match state.email.send(&settings, &message).await {
+        Ok(()) => {
+            state
+                .email_deliveries
+                .mark_sent(delivery_id)
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        }
+        Err(error @ aries_core::email::EmailError::Transient(_)) => {
+            state
+                .email_deliveries
+                .record_attempt(delivery_id, &error.to_string())
+                .await
+                .map_err(|error| error.to_string())?;
+            Err(error.to_string())
+        }
+        Err(error) => {
+            // NotConfigured / Permanent：终态，不重试。
+            state
+                .email_deliveries
+                .mark_failed(delivery_id, &error.to_string())
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        }
+    }
 }
 async fn metadata_probe(state: &AppState) -> Result<(), String> {
     let missing = state

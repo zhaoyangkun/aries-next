@@ -1125,7 +1125,7 @@ paths:
       tags:
       - Admin Auth
       summary: 请求密码重置
-      description: 无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。Phase 05 接入 Email Adapter 前不会发送 Email，Reset Token 不落库明文。
+      description: 无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。邮件功能启用且配置完整时发送含重置链接的 Email（链接 30 分钟有效），发送结果记录在审计日志；Reset Token 不落库明文。
       operationId: forgotPassword
       requestBody:
         content:
@@ -1760,6 +1760,63 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: 无 dashboard:view 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
+  /api/admin/email-deliveries:
+    get:
+      tags:
+      - Admin Settings
+      summary: 邮件投递审计列表
+      description: 分页查询全部外发邮件的投递记录（评论通知、密码重置、测试邮件），按创建时间降序。需要 `settings:manage` 权限。
+      operationId: listEmailDeliveries
+      parameters:
+      - name: page
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - name: page_size
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - name: status
+        in: path
+        description: 状态过滤：`pending` / `sent` / `failed` / `bounced`；缺省返回全部。
+        required: true
+        schema:
+          type:
+          - string
+          - 'null'
+      responses:
+        '200':
+          description: 投递记录分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailDeliveryPageResponse'
+        '400':
+          description: 状态过滤值非法（INVALID_EMAIL_DELIVERY_STATUS）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无设置管理权限
           content:
             application/json:
               schema:
@@ -4577,6 +4634,58 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       security:
       - cookieAuth: []
+  /api/admin/settings/email/test:
+    post:
+      tags:
+      - Admin Settings
+      summary: 发送 SMTP 测试邮件
+      description: 用当前保存的 SMTP 配置向指定邮箱发送测试邮件，结果记入投递审计（`email_deliveries`，模板 `test`）。需要 `settings:manage` 权限；每用户 5 次/15 分钟限流。邮件功能未启用或配置不完整返回 400 `EMAIL_NOT_CONFIGURED`；SMTP 发送失败返回 502 `EMAIL_SEND_FAILED`（失败原因落投递审计的 `last_error`，不回传细节）。
+      operationId: sendTestEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendTestEmailRequest'
+        required: true
+      responses:
+        '200':
+          description: 测试邮件已发送
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendTestEmailResponse'
+        '400':
+          description: 收件邮箱格式非法或邮件功能未配置（EMAIL_NOT_CONFIGURED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无设置管理权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 触发限流（RATE_LIMITED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: SMTP 发送失败（EMAIL_SEND_FAILED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
   /api/admin/settings/{group}:
     get:
       tags:
@@ -6648,6 +6757,77 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommentResponse'
+    EmailDeliveryPageResponse:
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailDeliveryResponse'
+        page:
+          type: integer
+          format: int32
+          minimum: 0
+        page_size:
+          type: integer
+          format: int32
+          minimum: 0
+        total:
+          type: integer
+          format: int64
+    EmailDeliveryResponse:
+      type: object
+      description: 投递审计记录；不含任何凭据或邮件正文。
+      required:
+      - id
+      - recipient_email
+      - subject
+      - template
+      - status
+      - attempts
+      - max_attempts
+      - created_at
+      - updated_at
+      properties:
+        attempts:
+          type: integer
+          format: int32
+        comment_id:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: 关联评论 ID；密码重置、测试邮件等系统邮件为 null。
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: integer
+          format: int64
+        last_error:
+          type:
+          - string
+          - 'null'
+        max_attempts:
+          type: integer
+          format: int32
+        recipient_email:
+          type: string
+        status:
+          type: string
+        subject:
+          type: string
+        template:
+          type: string
+          description: 模板标识：`password_reset` / `comment_new` / `comment_reply` / `test`。
+        updated_at:
+          type: string
+          format: date-time
     ErrorBody:
       type: object
       required:
@@ -8466,6 +8646,23 @@ components:
           type: string
         title:
           type: string
+    SendTestEmailRequest:
+      type: object
+      description: 发送 SMTP 测试邮件；`recipient` 为接收邮箱。
+      required:
+      - recipient
+      properties:
+        recipient:
+          type: string
+          description: 接收测试邮件的邮箱地址。
+    SendTestEmailResponse:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          description: 发送结果：成功固定为 `sent`。
     SessionResponse:
       type: object
       required:

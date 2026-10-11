@@ -407,7 +407,7 @@ export interface paths {
         put?: never;
         /**
          * 请求密码重置
-         * @description 无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。Phase 05 接入 Email Adapter 前不会发送 Email，Reset Token 不落库明文。
+         * @description 无论账号是否存在都返回相同响应（202），避免账号枚举；每邮箱 3 次/15 分钟限流。邮件功能启用且配置完整时发送含重置链接的 Email（链接 30 分钟有效），发送结果记录在审计日志；Reset Token 不落库明文。
          */
         post: operations["forgotPassword"];
         delete?: never;
@@ -637,6 +637,26 @@ export interface paths {
          * @description Dashboard 聚合：文章/评论统计、最近待审核评论与最近失败的后台任务，一次请求完成。
          */
         get: operations["getDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/email-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 邮件投递审计列表
+         * @description 分页查询全部外发邮件的投递记录（评论通知、密码重置、测试邮件），按创建时间降序。需要 `settings:manage` 权限。
+         */
+        get: operations["listEmailDeliveries"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1379,6 +1399,26 @@ export interface paths {
          */
         put: operations["updatePassword"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/settings/email/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 发送 SMTP 测试邮件
+         * @description 用当前保存的 SMTP 配置向指定邮箱发送测试邮件，结果记入投递审计（`email_deliveries`，模板 `test`）。需要 `settings:manage` 权限；每用户 5 次/15 分钟限流。邮件功能未启用或配置不完整返回 400 `EMAIL_NOT_CONFIGURED`；SMTP 发送失败返回 502 `EMAIL_SEND_FAILED`（失败原因落投递审计的 `last_error`，不回传细节）。
+         */
+        post: operations["sendTestEmail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2511,6 +2551,39 @@ export interface components {
             recent_failed_jobs: components["schemas"]["FailedJobResponse"][];
             recent_pending_comments: components["schemas"]["CommentResponse"][];
         };
+        EmailDeliveryPageResponse: {
+            items: components["schemas"]["EmailDeliveryResponse"][];
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description 投递审计记录；不含任何凭据或邮件正文。 */
+        EmailDeliveryResponse: {
+            /** Format: int32 */
+            attempts: number;
+            /**
+             * Format: int64
+             * @description 关联评论 ID；密码重置、测试邮件等系统邮件为 null。
+             */
+            comment_id?: number | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            last_error?: string | null;
+            /** Format: int32 */
+            max_attempts: number;
+            recipient_email: string;
+            status: string;
+            subject: string;
+            /** @description 模板标识：`password_reset` / `comment_new` / `comment_reply` / `test`。 */
+            template: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ErrorBody: {
             /** @description 机器可读错误码，如 `UNAUTHORIZED`、`ARTICLE_NOT_FOUND`。 */
             code: string;
@@ -3447,6 +3520,15 @@ export interface components {
         SearchSuggestionResponse: {
             slug: string;
             title: string;
+        };
+        /** @description 发送 SMTP 测试邮件；`recipient` 为接收邮箱。 */
+        SendTestEmailRequest: {
+            /** @description 接收测试邮件的邮箱地址。 */
+            recipient: string;
+        };
+        SendTestEmailResponse: {
+            /** @description 发送结果：成功固定为 `sent`。 */
+            status: string;
         };
         SessionResponse: {
             /**
@@ -5751,6 +5833,58 @@ export interface operations {
                 };
             };
             /** @description 无 dashboard:view 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listEmailDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: number;
+                page_size: number;
+                /** @description 状态过滤：`pending` / `sent` / `failed` / `bounced`；缺省返回全部。 */
+                status: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 投递记录分页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDeliveryPageResponse"];
+                };
+            };
+            /** @description 状态过滤值非法（INVALID_EMAIL_DELIVERY_STATUS） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无设置管理权限 */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8990,6 +9124,75 @@ export interface operations {
             };
             /** @description 无 profile:manage 权限 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sendTestEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendTestEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description 测试邮件已发送 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendTestEmailResponse"];
+                };
+            };
+            /** @description 收件邮箱格式非法或邮件功能未配置（EMAIL_NOT_CONFIGURED） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无设置管理权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 触发限流（RATE_LIMITED） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description SMTP 发送失败（EMAIL_SEND_FAILED） */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

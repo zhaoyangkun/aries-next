@@ -8,6 +8,7 @@ pub mod auth;
 pub mod chunking;
 pub mod comments;
 pub mod content;
+pub mod email;
 pub mod galleries;
 pub mod health;
 pub mod jobs;

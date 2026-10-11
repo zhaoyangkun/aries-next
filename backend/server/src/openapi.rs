@@ -117,6 +117,9 @@ use utoipa::{Modify, OpenApi};
         // Admin Settings Groups
         crate::http::settings_groups::get_setting_group,
         crate::http::settings_groups::update_setting_group,
+        // Admin Email
+        crate::http::email::send_test_email,
+        crate::http::email::list_email_deliveries,
         // Admin AI
         crate::http::ai::editor_rewrite,
         crate::http::ai::editor_summary,

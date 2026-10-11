@@ -63,10 +63,27 @@ pub async fn maybe_app() -> anyhow::Result<Option<TestApp>> {
     maybe_app_with_ai(None).await
 }
 
+/// 允许注入自定义 EmailSender（如测试用 RecordingEmailSender）；None 用真实实现（测试中不会被调用）。
+#[allow(dead_code)] // 共享 Harness：仅 email 相关测试 Target 使用
+pub async fn maybe_app_with_email(
+    email_sender: Option<std::sync::Arc<dyn aries_core::email::EmailSender>>,
+) -> anyhow::Result<Option<TestApp>> {
+    maybe_app_with_ai_and_email(None, email_sender).await
+}
+
 /// 允许注入自定义 AI Provider（如测试用 FakeAiProvider）；None 用真实实现（测试中不会被调用）。
 #[allow(dead_code)] // 共享 Harness：仅 ai_api 测试 Target 使用
 pub async fn maybe_app_with_ai(
     ai_provider: Option<std::sync::Arc<dyn aries_core::ai::AiProvider>>,
+) -> anyhow::Result<Option<TestApp>> {
+    maybe_app_with_ai_and_email(ai_provider, None).await
+}
+
+/// 同时注入 AI Provider 与 EmailSender 的完整形式。
+#[allow(dead_code)] // 共享 Harness：仅部分测试 Target 使用
+pub async fn maybe_app_with_ai_and_email(
+    ai_provider: Option<std::sync::Arc<dyn aries_core::ai::AiProvider>>,
+    email_sender: Option<std::sync::Arc<dyn aries_core::email::EmailSender>>,
 ) -> anyhow::Result<Option<TestApp>> {
     if std::env::var("ARIES_RUN_DATABASE_TESTS").as_deref() != Ok("1") {
         return Ok(None);
@@ -147,6 +164,11 @@ pub async fn maybe_app_with_ai(
             ai_requests: std::sync::Arc::new(aries_infra::PostgresAiRequestRepository::new(
                 test_pool.clone(),
             )),
+            email: email_sender
+                .unwrap_or_else(|| std::sync::Arc::new(aries_infra::LettreEmailSender)),
+            email_deliveries: std::sync::Arc::new(
+                aries_infra::PostgresEmailDeliveryRepository::new(test_pool.clone()),
+            ),
             config: std::sync::Arc::new(config),
             rate_limiter: Default::default(),
             log_handle: std::sync::Arc::new(aries_server::logging::LogHandle::noop()),
@@ -568,10 +590,62 @@ pub fn lazy_state(config: aries_server::config::ServerConfig) -> aries_server::s
         )),
         chunks: Arc::new(aries_infra::PostgresChunkRepository::new(database.clone())),
         ai: Arc::new(aries_infra::DispatchingAiProvider::new()),
-        ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(database)),
+        ai_requests: Arc::new(aries_infra::PostgresAiRequestRepository::new(
+            database.clone(),
+        )),
+        email: Arc::new(aries_infra::LettreEmailSender),
+        email_deliveries: Arc::new(aries_infra::PostgresEmailDeliveryRepository::new(
+            database.clone(),
+        )),
         config: Arc::new(config),
         rate_limiter: Default::default(),
         log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
         log_wake: aries_server::log_store::log_wake_channel(),
+    }
+}
+
+/// 测试用 EmailSender：记录全部发送内容供断言，可配置失败模式（验证重试/终态分支）。
+#[allow(dead_code)] // 共享 Harness：仅 email 相关测试 Target 使用
+pub struct RecordingEmailSender {
+    pub sent: std::sync::Mutex<Vec<aries_core::email::EmailMessage>>,
+    pub failure: std::sync::Mutex<Option<aries_core::email::EmailError>>,
+}
+
+#[allow(dead_code)] // 共享 Harness：仅 email 相关测试 Target 使用
+impl RecordingEmailSender {
+    pub fn new() -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            sent: std::sync::Mutex::new(Vec::new()),
+            failure: std::sync::Mutex::new(None),
+        })
+    }
+
+    pub fn failing(error: aries_core::email::EmailError) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            sent: std::sync::Mutex::new(Vec::new()),
+            failure: std::sync::Mutex::new(Some(error)),
+        })
+    }
+
+    pub fn captured(&self) -> Vec<aries_core::email::EmailMessage> {
+        self.sent.lock().expect("email sender lock").clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl aries_core::email::EmailSender for RecordingEmailSender {
+    async fn send(
+        &self,
+        _settings: &aries_core::settings::EmailSettings,
+        message: &aries_core::email::EmailMessage,
+    ) -> Result<(), aries_core::email::EmailError> {
+        if let Some(error) = self.failure.lock().expect("email sender lock").clone() {
+            return Err(error);
+        }
+        self.sent
+            .lock()
+            .expect("email sender lock")
+            .push(message.clone());
+        Ok(())
     }
 }
