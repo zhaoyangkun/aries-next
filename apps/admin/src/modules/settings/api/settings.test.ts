@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/shared/api/client'
 import {
+  emailDeliveryApi,
   settingsGroupApi,
   siteSettingsApi,
   type AppearanceSettings,
+  type EmailDelivery,
   type EmailSettingsView,
   type SettingGroupResponse,
 } from './settings'
@@ -36,6 +38,20 @@ const emailResponse: SettingGroupResponse<EmailSettingsView> = {
     from_address: 'noreply@example.com',
     from_name: 'Aries',
   },
+}
+
+const delivery: EmailDelivery = {
+  id: 1,
+  comment_id: 42,
+  recipient_email: 'someone@example.com',
+  subject: '新的评论回复',
+  template: 'comment_reply',
+  status: 'sent',
+  attempts: 1,
+  max_attempts: 3,
+  last_error: null,
+  created_at: '2026-08-05T12:00:00Z',
+  updated_at: '2026-08-05T12:00:01Z',
 }
 
 afterEach(() => {
@@ -170,6 +186,30 @@ describe('settingsGroupApi', () => {
     expect(put).toHaveBeenLastCalledWith('/api/admin/settings/ai', {
       expected_version: 4,
       settings: { ...base, api_key: 'sk-new' },
+    })
+  })
+})
+
+describe('emailDeliveryApi', () => {
+  it('sends a test email to the given recipient', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { status: 'sent' } })
+
+    await expect(emailDeliveryApi.sendTest('someone@example.com')).resolves.toEqual({ status: 'sent' })
+    expect(post).toHaveBeenCalledWith('/api/admin/settings/email/test', { recipient: 'someone@example.com' })
+  })
+
+  it('lists email deliveries with optional status filter', async () => {
+    const page = { items: [delivery], total: 1, page: 1, page_size: 20 }
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: page })
+
+    await expect(emailDeliveryApi.list({ page: 1, page_size: 20 })).resolves.toEqual(page)
+    expect(get).toHaveBeenLastCalledWith('/api/admin/email-deliveries', {
+      params: { page: 1, page_size: 20, status: undefined },
+    })
+
+    await emailDeliveryApi.list({ page: 2, page_size: 10, status: 'failed' })
+    expect(get).toHaveBeenLastCalledWith('/api/admin/email-deliveries', {
+      params: { page: 2, page_size: 10, status: 'failed' },
     })
   })
 })

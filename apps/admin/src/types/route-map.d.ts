@@ -225,6 +225,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/settings/deliveries': RouteRecordInfo<
+      '/settings/deliveries',
+      '/settings/deliveries',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/settings/email': RouteRecordInfo<
       '/settings/email',
       '/settings/email',
@@ -484,6 +491,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/settings/appearance.vue': {
       routes:
         | '/settings/appearance'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/settings/deliveries.vue': {
+      routes:
+        | '/settings/deliveries'
       views:
         | never
       pathParamNames:

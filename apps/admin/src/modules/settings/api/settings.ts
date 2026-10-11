@@ -115,6 +115,54 @@ export interface SettingGroupResponse<T> {
   settings: T
 }
 
+// 邮件投递记录：@aries/api-client 尚未再生成，先按契约在本地定义。
+export type EmailDeliveryStatus = 'pending' | 'sent' | 'failed' | 'bounced'
+
+export interface EmailDelivery {
+  id: number
+  comment_id: number | null
+  recipient_email: string
+  subject: string
+  template: string
+  status: EmailDeliveryStatus
+  attempts: number
+  max_attempts: number
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EmailDeliveryListParams {
+  page: number
+  page_size: number
+  status?: EmailDeliveryStatus
+}
+
+export interface EmailDeliveryListResponse {
+  items: EmailDelivery[]
+  total: number
+  page: number
+  page_size: number
+}
+
+// 测试邮件：成功仅回 status，失败时错误结构走统一 ApiErrorResponse（见 shared/api/client）。
+export interface EmailTestResponse {
+  status: 'sent'
+}
+
+// 邮件投递（测试发信 + 投递记录查询，仅 owner 可用）。
+export const emailDeliveryApi = {
+  async sendTest(recipient: string) {
+    const { data } = await api.post<EmailTestResponse>('/api/admin/settings/email/test', { recipient })
+    return data
+  },
+
+  async list(params: EmailDeliveryListParams) {
+    const { data } = await api.get<EmailDeliveryListResponse>('/api/admin/email-deliveries', { params })
+    return data
+  },
+}
+
 // 分组设置（appearance/email/integrations/ai，仅 owner 可写）：
 // 更新必须携带 expected_version 做乐观锁，过期提交 Backend 返回 409。
 export const settingsGroupApi = {

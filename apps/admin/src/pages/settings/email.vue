@@ -3,11 +3,14 @@ import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { settingsGroupApi } from '@/modules/settings/api/settings'
-import { getApiError } from '@/shared/api/client'
+import { useSessionStore } from '@/modules/auth/stores/session'
+import { emailDeliveryApi, settingsGroupApi } from '@/modules/settings/api/settings'
+import { getApiError, getApiErrorCode } from '@/shared/api/client'
 import { toast } from 'vue-sonner'
 
 import SettingsLayout from './components/settings-layout.vue'
+
+const session = useSessionStore()
 
 // smtp_password 为 write-only secret：GET 只回 smtp_password_set，
 // 提交时留空表示保持不变，点击「清除」则显式提交空串删除已保存密码。
@@ -25,6 +28,10 @@ const clearPassword = ref(false)
 const version = ref(0)
 const loading = ref(true)
 const saving = ref(false)
+
+// 测试邮件：收件人默认取当前登录用户的邮箱。
+const testRecipient = ref('')
+const sendingTest = ref(false)
 
 onMounted(async () => {
   try {
@@ -44,7 +51,33 @@ onMounted(async () => {
   finally {
     loading.value = false
   }
+  testRecipient.value = session.user?.email ?? ''
 })
+
+async function sendTestEmail() {
+  const recipient = testRecipient.value.trim()
+  if (!recipient) {
+    toast.error('请输入收件人邮箱')
+    return
+  }
+  sendingTest.value = true
+  try {
+    await emailDeliveryApi.sendTest(recipient)
+    toast.success(`测试邮件已发送至 ${recipient}`)
+  }
+  catch (requestError) {
+    // EMAIL_NOT_CONFIGURED 提示先补全并保存 SMTP 设置；其余错误展示后端 message（含限流提示）。
+    if (getApiErrorCode(requestError) === 'EMAIL_NOT_CONFIGURED') {
+      toast.error('邮件服务未配置，请先补全 SMTP 设置并保存后再试')
+    }
+    else {
+      toast.error(getApiError(requestError, '测试邮件发送失败'))
+    }
+  }
+  finally {
+    sendingTest.value = false
+  }
+}
 
 async function save() {
   saving.value = true
@@ -157,6 +190,30 @@ async function save() {
           </Button>
         </CardFooter>
       </form>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle class="text-base">发送测试邮件</CardTitle>
+        <CardDescription>按当前已保存的 SMTP 配置发送一封测试邮件，用于验证发信链路是否可用。</CardDescription>
+      </CardHeader>
+      <CardContent class="grid max-w-2xl gap-2">
+        <label for="test-recipient" class="text-sm font-medium leading-none">收件人</label>
+        <Input
+          id="test-recipient"
+          v-model="testRecipient"
+          type="email"
+          placeholder="someone@example.com"
+          :disabled="sendingTest"
+          @keyup.enter="sendTestEmail"
+        />
+      </CardContent>
+      <CardFooter class="justify-end gap-4 border-t pt-6">
+        <Button variant="outline" :disabled="sendingTest" @click="sendTestEmail">
+          <LoaderCircleIcon v-if="sendingTest" class="animate-spin" />
+          {{ sendingTest ? '发送中' : '发送测试邮件' }}
+        </Button>
+      </CardFooter>
     </Card>
   </SettingsLayout>
 </template>

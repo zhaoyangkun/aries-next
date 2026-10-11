@@ -4,6 +4,7 @@ import {
   FolderTreeIcon,
   ImageIcon,
   ImagesIcon,
+  InboxIcon,
   LayoutDashboardIcon,
   Link2Icon,
   MailIcon,
@@ -31,6 +32,7 @@ export const settingsNavItems: SidebarLink[] = [
   { title: '外观', url: '/settings/appearance', icon: PaletteIcon, permission: 'profile:manage' },
   { title: '站点设置', url: '/settings/site', icon: MonitorCogIcon, permission: 'settings:manage' },
   { title: '邮件设置', url: '/settings/email', icon: MailIcon, permission: 'settings:manage' },
+  { title: '邮件投递', url: '/settings/deliveries', icon: InboxIcon, permission: 'settings:manage' },
   { title: '第三方集成', url: '/settings/integrations', icon: PlugIcon, permission: 'settings:manage' },
   { title: 'AI 设置', url: '/settings/ai', icon: SparklesIcon, permission: 'settings:manage' },
 ]
