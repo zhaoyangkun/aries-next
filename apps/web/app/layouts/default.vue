@@ -66,6 +66,15 @@ useHead(
     titleTemplate: (title?: string) =>
       title ? `${title} - ${site.value.site_name}` : site.value.site_name,
     meta: [{ name: 'description', content: site.value.site_description || 'Aries blog' }],
+    // RSS 自动发现：阅读器与爬虫经此找到订阅源
+    link: [
+      {
+        rel: 'alternate',
+        type: 'application/rss+xml',
+        title: `${site.value.site_name} RSS`,
+        href: '/rss.xml',
+      },
+    ],
   })),
 )
 </script>
@@ -186,6 +195,9 @@ useHead(
           :node="item"
         />
         <NuxtLink to="/search">搜索</NuxtLink>
+        <!-- RSS / Sitemap 是 Nitro Server Route，用普通 a 走完整文档加载 -->
+        <a href="/rss.xml">RSS</a>
+        <a href="/sitemap.xml">Sitemap</a>
       </nav>
       <div class="site-footer-bottom">
         <div class="flex flex-col gap-1">
