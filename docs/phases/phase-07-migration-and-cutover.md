@@ -104,7 +104,7 @@ Rollback 时将流量切回只读旧站或解除旧站维护模式。Aries Next 
 
 1. Full Snapshot Rehearsal 无未解释的 Count、Hash 或 Relation 差异。
 2. Cutover Rehearsal 与 Rollback Rehearsal 都成功。
-3. Legacy URL Redirect Map 完整，关键 URL 不出现 Redirect Chain 或 `404`。
+3. Legacy URL Redirect Map 完整，关键 URL 不出现 Redirect Chain 或 `404`。路径形态规则（`/p/{page}`、分类/标签/搜索的 `/p/N` 分页）已落地于 `apps/web/server/middleware/legacy-redirects.ts`；迁移导致 slug 变化的精确映射需按彩排数据填充该文件的 `EXACT_REDIRECTS` 表。
 4. Secret、Private Comment Data 和 Password 未出现在日志或 Report。
 5. Production Runbook 明确 Operator、时间点、命令、判断阈值和回滚负责人。
 

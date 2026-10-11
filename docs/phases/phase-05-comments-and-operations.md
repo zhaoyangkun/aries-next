@@ -122,4 +122,4 @@ Phase 05 拆为两批交付，目前两批的功能主体均已完成：
 
 ## 13. 遗留项：邮件通知未真正发送
 
-评论通知目前是 log-only 的 Background Job：`backend/server/src/worker.rs` 中明确标注「email adapter not yet implemented」，只写日志不发邮件；`email_deliveries` 表已在 Migration `202609050001` 中建立，但代码尚未写入或消费该表。SMTP 设置页（`/api/admin/settings/email`）已可配置并保存（`smtp_password` 为 write-only），但缺少实际发送的 Email Adapter。这不影响评论主链路与其余 Acceptance Gate 结论，但作为正式切换前的遗留项记录于此。
+~~评论通知目前是 log-only 的 Background Job~~（已闭环，2026-10-11）：Email Adapter 已接入——`aries-infra` 的 `LettreEmailSender`（lettre + rustls）实现 core 的 `EmailSender` 契约，配置随调用从 `email` 设置组现读；评论通知在入队时创建 `email_deliveries` 投递审计行（Migration `202609050001`）并随 Job payload 传 `delivery_id`，Worker 发送后回写状态，瞬时失败走 Job 既有退避重试；根评论通知全部 Active 管理员、回复通知被回复者、管理员后台回复同样触发通知。忘记密码邮件内联发送（raw Token 不落库），SMTP 测试邮件走 `POST /api/admin/settings/email/test`，投递审计见 `GET /api/admin/email-deliveries` 与 Admin「设置 → 邮件投递」页。

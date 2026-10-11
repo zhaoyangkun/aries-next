@@ -20,13 +20,13 @@
 - AI 检索（相关文章推荐 + 站内 AI 问答）：已实现，默认关闭；开启方式见 §9。
 - Admin：文章、页面、日志、图库、友链、导航、分类、标签、媒体库、评论、审计日志、各组设置页面均已接入真实 API；文章编辑保留 Dialog 形态并内置 AI 助手。
 - Public Web：已接入 `/api/public`，页面覆盖首页、文章详情（含评论与访问密码）、分类、标签、归档、搜索、日志、图库、友链、自定义页面，并提供 `sitemap.xml`、`rss.xml`、`robots.txt`。
-- 尚未实现：邮件发送（SMTP 配置可存，投递未接入）、Captcha、多用户管理、Twikoo Adapter、Semantic Search / RAG、社交链接、旧图床 Provider 重写、完整 Legacy 301 映射表、正式迁移 ETL（`aries-migrator` 当前只有只读 Preflight）。
+- 尚未实现：Captcha、多用户管理、Twikoo Adapter、社交链接、旧图床 Provider 重写、Legacy 301 精确映射表（切换彩排时按迁移数据填充）、Semantic Search / RAG 的配额与评估项（Phase 08）。
 
 ## 3. 旧博客功能清单
 
 | 领域 | 旧版能力 | Aries Next 处理策略 | 状态 |
 | --- | --- | --- | --- |
-| Authentication | 初始化注册、Captcha 登录、JWT、忘记密码、邮件重置 | 改为一次性 Bootstrap + Server Session；Captcha 按风险启用（未实现）；Reset Token 已生成但邮件投递未接入 | 🚧 |
+| Authentication | 初始化注册、Captcha 登录、JWT、忘记密码、邮件重置 | 改为一次性 Bootstrap + Server Session；Captcha 按风险启用（未实现）；忘记密码邮件已接入（内联发送，投递结果记审计） | 🚧 |
 | 用户 | 个人资料、头像、签名、修改密码 | 保留；已增加 Role、Session 和 Audit；多用户管理（`users:manage`）权限已定义，API 与页面未实现 | 🚧 |
 | 文章 | CRUD、分页、关键词与状态筛选 | 保留；稳定 Pagination、统一状态机，另有 Markdown Preview 与 Revision 历史 | ✅ |
 | 发布状态 | 草稿、发布、回收站 | 统一为 `draft`、`published`、`recycled`（`backend/core/src/content.rs`） | ✅ |
@@ -36,7 +36,7 @@
 | 文件导入 | 从 Markdown 文件批量导入文章 | 保留为可预览的 Import Job（`/api/admin/articles/imports`），确认后才发布 | ✅ |
 | 分类 | 文章、友链、图库三种分类，文章分类支持父子层级 | 同一物理表按 `kind` 隔离三套体系，`(kind, slug)` 唯一；文章分类保留父子层级 | ✅ |
 | 标签 | CRUD、文章多标签、文章数统计 | 保留；Count 由查询得出，不手工维护 | ✅ |
-| 评论 | 嵌套回复、审核、回收站、Markdown、邮件通知 | Built-in Comment 已实现：嵌套、`pending`/`approved`/`rejected`/`spam`/`recycled` 状态机、Backend 渲染、提交限流与重复提交防护、AI 风险标记（仅标记不自动处置）；通知已走 `comment_notification` Background Job，但仅记录日志，邮件投递未接入 | 🚧 |
+| 评论 | 嵌套回复、审核、回收站、Markdown、邮件通知 | Built-in Comment 已实现：嵌套、`pending`/`approved`/`rejected`/`spam`/`recycled` 状态机、Backend 渲染、提交限流与重复提交防护、AI 风险标记（仅标记不自动处置）；邮件通知经 `comment_notification` Background Job 异步发送（根评论通知管理员、回复通知被回复者），投递审计落 `email_deliveries` | ✅ |
 | Twikoo | Built-in Comment 与 Twikoo 切换 | 作为可选 Adapter 延后，不阻塞核心博客上线 | ⬜ |
 | 页面 | 自定义页面及 Markdown 内容 | 保留；统一 Content Contract，公开 API 为 `/api/public/pages/{slug}`，Web 路由沿用旧版 `/custom/{slug}` | ✅ |
 | 日志 | 短内容、公开或私密 | 保留为独立 Content Type，不并入 Article | ✅ |
@@ -47,7 +47,7 @@
 | 图床 | 本地、sm.ms、imgbb、Tencent COS 等 | 已支持 Local 与 S3 Compatible（`backend/infra/src/storage/`）；旧 URL 原样迁移；专用 Provider 按需增加 | 🚧 |
 | 主题 | 两套 Go Template 主题、主题切换 | 不迁移可执行 Template；Public Web 为 Nuxt 固定组件，外观通过 `appearance` 设置组与 `@aries/design-tokens` 管理 | 🚧 |
 | 网站设置 | 名称、描述、URL、Logo、备案、静态根路径、Head/Footer | 安全字段入 `site_settings`；任意 Head/Footer 注入默认不迁移，改为 `integrations` 设置组的受控配置 | ✅ |
-| 邮件设置 | SMTP、测试邮件 | SMTP 配置入 `email` 设置组（`smtp_password` 写库不读出）；Email Adapter 与测试邮件未实现 | 🚧 |
+| 邮件设置 | SMTP、测试邮件 | SMTP 配置入 `email` 设置组（`smtp_password` 写库不读出）；lettre SMTP Adapter（rustls）、`POST /api/admin/settings/email/test` 测试邮件与 `/api/admin/email-deliveries` 投递审计已实现 | ✅ |
 | 参数设置 | 首页、归档、Sitemap 分页大小 | 保留为 `site_settings` 里的强类型字段（`page_size_index` / `page_size_archive` / `page_size_search`） | ✅ |
 | 社交信息 | QQ、微信、GitHub、微博、知乎 | 规划为可排序的 Social Link 列表，尚未实现 | ⬜ |
 | Dashboard | 文章数、评论数、最新内容 | 保留；数据来自聚合 API `/api/admin/dashboard`，不由前端拼接 | ✅ |
@@ -80,9 +80,9 @@
 | Sitemap | `/sitemap.xml` | Published Content URL（`apps/web/server/routes/`） |
 | RSS | `/rss.xml` | 最新 Published Article |
 | Robots | `/robots.txt` | Crawler Policy 与 Sitemap 地址 |
-| 旧版分页 | `/p/{page}` | 301 跳转到 `/?page=N`（唯一的 Legacy Redirect，完整映射表待 Phase 07） |
+| 旧版分页 | `/p/{page}` | 301 跳转到 `/?page=N`；分页形态变化路由由 `apps/web/server/middleware/legacy-redirects.ts` 统一 301（`/category(p)?/…/p/N`、`/tag(s)?/…/p/N`、`/search/p/N`），slug 改名的精确映射表切换彩排时填充 |
 
-Legacy Route 必须在 Phase 07 形成完整 `301 Redirect` 表，不能仅依赖前端跳转；当前只有 `/p/{page}` 一条。
+Legacy Route 必须在 Phase 07 形成完整 `301 Redirect` 表，不能仅依赖前端跳转；路径形态规则已落地于 `apps/web/server/middleware/legacy-redirects.ts`（含 `/p/{page}` 之外的分页路由），迁移导致 slug 变化的精确映射（`EXACT_REDIRECTS`）在切换彩排时按迁移数据生成填充。
 
 ## 5. Admin 信息架构
 

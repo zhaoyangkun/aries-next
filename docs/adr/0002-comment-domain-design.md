@@ -88,11 +88,13 @@ recycled → approved (恢复)
 
 ### 7. 通知机制
 
-Phase 05 第一版使用 Background Job 异步发送通知邮件：
+Phase 05 第一版使用 Background Job 异步发送通知邮件（2026-10-11 已随 Email Adapter 落地）：
 
-- 新评论提交时，通知该 Target 的所有已批准评论者（可选退订）。
-- 管理员回复时，通知被回复的评论者。
-- 通知 Job 失败不回滚评论事务，记录到 `email_deliveries` 表供后续重试。
+- 新根评论提交时，通知全部 Active 管理员；访客或管理员回复时，通知被回复评论的作者。
+  （偏离最初设想：不做「通知该 Target 所有已批准评论者」的扇出——缺少退订机制前向所有
+  评论者发信有滥发风险；如未来需要，先实现退订链路再开启扇出。）
+- 通知 Job 失败不回滚评论事务；投递审计在入队时写入 `email_deliveries`（`delivery_id`
+  随 Job payload 传递，重试幂等），瞬时失败走 Job 既有退避重试，永久失败标记终态。
 
 现状注记：仅部分落地。`comment_notification` Job 类型与 `email_deliveries` 表已建好（migration `202609050001`），但 Email Adapter 尚未接入，Worker 执行该任务时只记录日志（见 `backend/server/src/worker.rs` 的 `comment_notification`）。「可选退订」未实现。
 
