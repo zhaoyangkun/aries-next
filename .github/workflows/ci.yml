@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# 同一分支/PR 的新提交取消进行中的旧运行，避免排队浪费
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     name: Rust（fmt / clippy / test）
