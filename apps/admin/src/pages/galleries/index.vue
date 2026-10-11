@@ -532,7 +532,7 @@ const hasFilter = computed(
             </div>
           </div>
           <div class="grid gap-4 sm:grid-cols-3">
-            <div class="grid gap-2">
+            <div class="grid content-start gap-2">
               <Label for="gallery-category">分类</Label>
               <select
                 id="gallery-category"
@@ -553,7 +553,7 @@ const hasFilter = computed(
                 </Button>
               </div>
             </div>
-            <div class="grid gap-2">
+            <div class="grid content-start gap-2">
               <Label for="gallery-status">状态</Label>
               <select
                 id="gallery-status"
@@ -565,7 +565,7 @@ const hasFilter = computed(
                 <option value="published">已发布</option>
               </select>
             </div>
-            <div class="grid gap-2">
+            <div class="grid content-start gap-2">
               <Label for="gallery-sort">排序</Label>
               <Input id="gallery-sort" v-model.number="form.sort_order" type="number" :disabled="saving" />
             </div>
