@@ -187,55 +187,66 @@ useHead(
     <SearchPalette />
     <AppNavDrawer v-model:open="navOpen" :items="navItems" :site-name="site.site_name" />
     <footer class="site-footer">
-      <!-- 页脚复用同一导航数据，只展示一级节点，避免页脚过重 -->
-      <nav v-if="navItems.length > 0" class="site-footer-nav" aria-label="页脚导航">
-        <AppNavLink
-          v-for="(item, index) in navItems"
-          :key="index"
-          :node="item"
-        />
-        <NuxtLink to="/search">搜索</NuxtLink>
-        <!-- RSS / Sitemap 是 Nitro Server Route，用普通 a 走完整文档加载 -->
-        <a href="/rss.xml">RSS</a>
-        <a href="/sitemap.xml">Sitemap</a>
-      </nav>
-      <div class="site-footer-bottom">
-        <div class="flex flex-col gap-1">
-          <span>© {{ new Date().getFullYear() }} {{ site.site_name }}</span>
-          <span v-if="site.site_description">{{ site.site_description }}</span>
-          <span v-if="runDays > 0">本站已运行 {{ runDays }} 天</span>
+      <div class="site-footer-inner">
+        <!-- 品牌区：站名 + 简介 + 运行天数胶囊 -->
+        <div class="site-footer-brand">
+          <NuxtLink class="site-footer-name" to="/">{{ site.site_name }}</NuxtLink>
+          <p v-if="site.site_description" class="site-footer-desc">{{ site.site_description }}</p>
+          <p v-if="runDays > 0" class="site-footer-days">
+            <span class="site-footer-days-dot" aria-hidden="true" />
+            已稳定运行 {{ runDays }} 天
+          </p>
         </div>
-        <div class="flex items-center gap-4">
+        <!-- 链接区：页脚复用同一导航数据，只展示一级节点，避免页脚过重 -->
+        <div class="site-footer-links">
+          <nav v-if="navItems.length > 0" class="site-footer-group" aria-label="页脚导航">
+            <h2 class="site-footer-heading">导航</h2>
+            <AppNavLink
+              v-for="(item, index) in navItems"
+              :key="index"
+              :node="item"
+            />
+            <NuxtLink to="/search">搜索</NuxtLink>
+          </nav>
+          <div class="site-footer-group">
+            <h2 class="site-footer-heading">订阅</h2>
+            <!-- RSS / Sitemap 是 Nitro Server Route，用普通 a 走完整文档加载 -->
+            <a href="/rss.xml">RSS</a>
+            <a href="/sitemap.xml">Sitemap</a>
+          </div>
+        </div>
+      </div>
+      <div class="site-footer-bottom">
+        <div class="site-footer-copy">
+          <span>© {{ new Date().getFullYear() }} {{ site.site_name }}</span>
           <a
             v-if="site.icp_text"
             href="https://beian.miit.gov.cn/"
             target="_blank"
             rel="noopener noreferrer nofollow"
-            class="text-muted-foreground no-underline transition-colors hover:text-primary"
           >{{ site.icp_text }}</a>
-          <a
-            href="#"
-            class="inline-flex items-center gap-1 no-underline transition-colors hover:text-primary"
-            aria-label="返回顶部"
-            @click.prevent="scrollToTop"
-          >
-            返回顶部
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m18 15-6-6-6 6" />
-            </svg>
-          </a>
         </div>
+        <button
+          type="button"
+          class="site-footer-top-btn"
+          aria-label="返回顶部"
+          @click="scrollToTop"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m18 15-6-6-6 6" />
+          </svg>
+        </button>
       </div>
     </footer>
   </div>

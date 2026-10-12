@@ -543,20 +543,160 @@
   @apply cursor-not-allowed opacity-40 hover:text-muted-foreground;
 }
 
+/* 页脚：渐变发丝线 + 品牌区 / 链接分组 / 底栏三段式；微交互全部纯 CSS，尊重 reduced-motion */
 .site-footer {
-  @apply mx-auto w-[min(1040px,calc(100%-2rem))] border-t py-10 text-xs text-muted-foreground;
+  @apply relative mx-auto mt-6 w-[min(1040px,calc(100%-2rem))] pt-12 pb-8 text-xs text-muted-foreground;
 }
 
-.site-footer-nav {
-  @apply mb-4 flex flex-wrap items-center gap-x-4 gap-y-1;
+/* 渐变发丝线替代生硬的 border-t：主色居中向两端淡出 */
+.site-footer::before {
+  content: '';
+  @apply absolute top-0 left-0 h-px w-full;
+  background: linear-gradient(to right, transparent, var(--primary) 50%, transparent);
+  opacity: 0.35;
 }
 
-.site-footer-nav a {
-  @apply no-underline transition-colors hover:text-primary;
+.site-footer-inner {
+  @apply flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between;
+}
+
+.site-footer-brand {
+  @apply flex max-w-sm flex-col gap-2;
+}
+
+.site-footer-name {
+  @apply w-fit text-base font-semibold tracking-wide text-title no-underline transition-colors hover:text-primary;
+}
+
+.site-footer-desc {
+  @apply leading-relaxed;
+}
+
+/* 运行天数胶囊：呼吸圆点提示站点「活着」 */
+.site-footer-days {
+  @apply mt-1 flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1;
+}
+
+.site-footer-days-dot {
+  @apply size-1.5 rounded-full bg-primary;
+  animation: footer-pulse 2s ease-in-out infinite;
+}
+
+@keyframes footer-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.75);
+  }
+}
+
+.site-footer-links {
+  @apply flex flex-wrap gap-10 sm:gap-14;
+}
+
+.site-footer-group {
+  @apply flex flex-col gap-2;
+}
+
+/* 导航组链接较多，桌面端两列排布以收敛页脚高度；标题独占一行 */
+@media (min-width: 640px) {
+  nav.site-footer-group {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 0.5rem 2.5rem;
+    align-content: start;
+  }
+
+  nav.site-footer-group .site-footer-heading {
+    grid-column: 1 / -1;
+  }
+}
+
+.site-footer-heading {
+  @apply text-[11px] font-medium tracking-widest text-foreground/50 uppercase;
+}
+
+/* 链接悬停：主色 + 下划线从左扫入 */
+.site-footer-group a {
+  @apply relative w-fit no-underline transition-colors hover:text-primary;
+}
+
+.site-footer-group a::after {
+  content: '';
+  @apply absolute -bottom-0.5 left-0 h-px w-full origin-left scale-x-0 bg-primary transition-transform duration-300;
+}
+
+.site-footer-group a:hover::after,
+.site-footer-group a:focus-visible::after {
+  @apply scale-x-100;
 }
 
 .site-footer-bottom {
-  @apply flex items-center justify-between gap-4;
+  @apply mt-10 flex items-center justify-between gap-4;
+}
+
+.site-footer-copy {
+  @apply flex flex-wrap items-center gap-x-4 gap-y-1;
+}
+
+.site-footer-copy a {
+  @apply no-underline transition-colors hover:text-primary;
+}
+
+/* 返回顶部：圆形图标按钮，悬停时箭头上浮 */
+.site-footer-top-btn {
+  @apply grid size-9 cursor-pointer place-items-center rounded-full border transition-colors hover:border-primary hover:text-primary;
+}
+
+.site-footer-top-btn svg {
+  transition: transform 0.3s ease;
+}
+
+.site-footer-top-btn:hover svg {
+  transform: translateY(-2px);
+}
+
+/* 滚动驱动淡入：仅支持 animation-timeline: view() 的浏览器启用，
+   不支持时保持默认完全可见，不影响 SSR 与旧浏览器 */
+@supports (animation-timeline: view()) {
+  .site-footer-inner,
+  .site-footer-bottom {
+    animation: footer-reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 80%;
+  }
+}
+
+@keyframes footer-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-footer-days-dot {
+    animation: none;
+  }
+
+  .site-footer-group a::after,
+  .site-footer-top-btn,
+  .site-footer-top-btn svg {
+    transition: none;
+  }
+
+  .site-footer-inner,
+  .site-footer-bottom {
+    animation: none;
+  }
 }
 
 /* 导航下拉：桌面端 hover / 键盘 focus 展开，纯 CSS 实现不引交互依赖 */
