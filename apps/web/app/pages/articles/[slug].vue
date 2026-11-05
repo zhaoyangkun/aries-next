@@ -66,6 +66,14 @@ const coverImage = computed(() =>
   toAbsoluteUrl(article.value?.cover_url || site.value.default_cover_url, siteUrl.value),
 )
 
+// 详情封面加载失败（旧站迁移的失效图床地址）时整图隐藏，正文不受影响；
+// 相关阅读缩略图逐项隐藏（key 为 cover_url，同一图库地址在多篇文章间复用）
+const { failed: coverFailed, onImageError: onCoverError } = useImageError()
+const failedRelatedCovers = ref(new Set<string>())
+function onRelatedCoverError(url: string) {
+  failedRelatedCovers.value = new Set([...failedRelatedCovers.value, url])
+}
+
 useSeoMeta({
   title: () => article.value?.title ?? '',
   description: () => article.value?.summary || site.value.site_description,
@@ -162,14 +170,15 @@ useHead(
              CLS 从「0 → 全高」缩减为「21/9 → 实际比例」的小幅校正；
              此处高度始终由 aspect-ratio 决定，object-cover 不产生裁切，仅为过渡配对保留 -->
         <img
-          v-if="article.cover_url"
+          v-if="article.cover_url && !coverFailed"
           :src="thumbUrl(article.cover_url, 768)"
           :srcset="thumbSrcset(article.cover_url, [480, 768, 1200])"
           sizes="(max-width: 800px) calc(100vw - 2rem), 768px"
           :alt="article.title"
           :style="{ viewTransitionName: `cover-${article.id}` }"
           class="mt-8 aspect-[auto_21/9] w-full rounded-lg object-cover"
-        />
+          @error="onCoverError"
+        >
 
         <!-- AI 导读：后端生成摘要式导读，非空时展示在正文之前 -->
         <div
@@ -194,14 +203,15 @@ useHead(
               class="group flex min-w-0 items-center gap-3 no-underline"
             >
               <img
-                v-if="item.cover_url"
+                v-if="item.cover_url && !failedRelatedCovers.has(item.cover_url)"
                 :src="thumbUrl(item.cover_url, 160)"
                 :srcset="thumbSrcset(item.cover_url, [160, 320])"
                 sizes="80px"
                 :alt="item.title"
                 loading="lazy"
                 class="h-14 w-20 shrink-0 rounded-md object-cover"
-              />
+                @error="onRelatedCoverError(item.cover_url!)"
+              >
               <span class="min-w-0 flex-1 truncate text-sm font-medium text-title transition-colors group-hover:text-primary">{{ item.title }}</span>
             </NuxtLink>
           </div>

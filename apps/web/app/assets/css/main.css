@@ -497,6 +497,11 @@
   @apply aspect-[3/2] w-full object-cover transition-transform duration-500 hover:scale-105;
 }
 
+/* 封面加载失败的占位块：与正常缩略图同尺寸（3/2）同圆角，保持列表行高稳定 */
+.post-thumb-fallback {
+  @apply grid aspect-[3/2] w-full place-items-center bg-muted text-muted-foreground/40 sm:w-52;
+}
+
 /* 顶栏搜索框：图标 + 可伸缩输入 + 下拉建议 */
 .search-box {
   @apply relative hidden items-center sm:flex;

@@ -14,6 +14,9 @@ const props = defineProps<{
 }>()
 
 const dateText = computed(() => formatDate(props.article.published_at))
+
+// 封面加载失败（迁移旧文常见）时退化为占位块，避免裸 alt 文本破坏版面
+const { failed: coverFailed, onImageError: onCoverError } = useImageError()
 </script>
 
 <template>
@@ -65,7 +68,7 @@ const dateText = computed(() => formatDate(props.article.published_at))
       </NuxtLink>
     </div>
     <NuxtLink
-      v-if="article.cover_url"
+      v-if="article.cover_url && !coverFailed"
       :to="`/articles/${article.slug}`"
       class="post-thumb"
       :aria-label="article.title"
@@ -79,7 +82,29 @@ const dateText = computed(() => formatDate(props.article.published_at))
         :alt="article.title"
         :style="{ viewTransitionName: `cover-${article.id}` }"
         loading="lazy"
-      />
+        @error="onCoverError"
+      >
     </NuxtLink>
+    <!-- 封面 404（多为旧站迁移的失效图床地址）：保留右栏占位，视觉与正常卡片对齐 -->
+    <div
+      v-else-if="article.cover_url"
+      class="post-thumb post-thumb-fallback"
+      aria-hidden="true"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="size-7"
+      >
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+      </svg>
+    </div>
   </article>
 </template>
