@@ -13,6 +13,9 @@ impl MarkdownRenderer for ComrakMarkdownRenderer {
         options.extension.table = true;
         options.extension.tasklist = true;
         options.extension.autolink = true;
+        // 脚注：旧站文章大量使用 [^n] 引用 + 文末定义语法，开启后渲染为
+        // 上标引用 + 文末脚注列表，而非字面文本
+        options.extension.footnotes = true;
         // 数学公式：$...$ / $$...$$ 与 ```math 代码块；产物保留 $ 定界符原文，
         // 由前端 KaTeX 按 data-math-style / language-math 线索做最终渲染。
         options.extension.math_dollars = true;
@@ -24,10 +27,14 @@ impl MarkdownRenderer for ComrakMarkdownRenderer {
         // Markdown 中可能包含 Raw HTML，统一使用 Allowlist 清理后才能进入公开页面。
         // 放行 class 属性：代码块的 language-* class 是前端语法高亮的唯一语言线索，
         // class 本身不具备执行能力，安全风险可忽略。
+        // 放行 id 属性：脚注的跳转锚点（fn / fnref 互指）依赖 id，id 本身不具备执行能力。
+        // 放行相对/片段 URL：脚注回链（#fnref-n）与站内相对链接需要 href 片段，
+        // 协议相对外链（//host）虽可通过，但与已放行的绝对 http(s) 外链能力等价，无新增风险面。
         // 放行 span 的 data-math-style 属性：comrak 数学扩展的渲染产物，
         // 前端 KaTeX 依此识别行内/展示公式。
         Ok(ammonia::Builder::default()
-            .add_generic_attributes(["class"])
+            .add_generic_attributes(["class", "id"])
+            .url_relative(ammonia::UrlRelative::PassThrough)
             .add_tag_attributes("span", ["data-math-style"])
             .clean(&rendered)
             .to_string())
@@ -294,9 +301,22 @@ mod tests {
         let html = ComrakMarkdownRenderer
             .render("```rust\nfn main() {}\n```")
             .expect("markdown should render");
-
         // 前端 highlight.js 依赖 language-* class 识别语言。
         assert!(html.contains("language-rust"));
+    }
+
+    #[test]
+    fn footnotes_render_as_references_and_backlinks_survive_sanitize() {
+        let html = ComrakMarkdownRenderer
+            .render("遵循命名规范[^1]。\n\n[^1]: [Rust 规范](https://doc.rust-lang.org/style/)。")
+            .expect("markdown should render");
+
+        // 引用渲染为上标（comrak 0.35 标记 class="footnote-ref"），不再是字面 [^1]
+        assert!(html.contains("footnote-ref"), "unexpected html: {html}");
+        assert!(!html.contains("[^1]"), "unexpected html: {html}");
+        // 文末定义列表 + 回链：id 锚点与 # 片段 href 必须穿过 Sanitization
+        assert!(html.contains("id=\"fn-1\""), "unexpected html: {html}");
+        assert!(html.contains("href=\"#fn"), "unexpected html: {html}");
     }
 
     #[test]

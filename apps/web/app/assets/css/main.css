@@ -854,6 +854,28 @@
   @apply my-1;
 }
 
+/* 脚注（comrak footnotes 扩展产物）：上标引用弱化处理；文末定义条目小字、
+   首条加顶分隔线与普通有序列表区分，回链（↩︎）不显示下划线 */
+.article-content .footnote-ref {
+  @apply mx-0.5 text-[0.8em];
+}
+
+.article-content li[id^='fn-'] {
+  @apply text-sm leading-relaxed text-muted-foreground;
+}
+
+.article-content li[id^='fn-']:first-child {
+  @apply mt-6 border-t border-border pt-4;
+}
+
+.article-content li[id^='fn-'] p {
+  @apply my-0.5;
+}
+
+.article-content li[id^='fn-'] a[data-footnote-backref] {
+  @apply no-underline;
+}
+
 .article-content blockquote {
   @apply my-6 border-l-4 border-primary/40 bg-muted/60 py-2 pl-4 pr-3 text-muted-foreground;
 }
