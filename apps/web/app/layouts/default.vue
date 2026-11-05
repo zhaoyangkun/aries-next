@@ -25,6 +25,15 @@ onMounted(() => {
 // 站点运行天数：created_at 缺失/非法时为 0，模板据此隐藏
 const runDays = computed(() => siteRunDays(site.value.created_at))
 
+// 公安备案链接：官方要求跳转到 beian.gov.cn 的 registerSystemInfo 并携带 recordcode 数字编号；
+// 文本中无数字编号时退化为备案首页
+const policeCode = computed(() => site.value.police_text.match(/\d{6,}/)?.[0] ?? '')
+const policeHref = computed(() =>
+  policeCode.value
+    ? `http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=${policeCode.value}`
+    : 'http://www.beian.gov.cn/',
+)
+
 // header 滚动后加毛玻璃与细边框；SSR 初始不带该 class，挂载后再读滚动位置，保证 Hydration 一致
 const scrolled = ref(false)
 onMounted(() => {
@@ -225,6 +234,31 @@ useHead(
             target="_blank"
             rel="noopener noreferrer nofollow"
           >{{ site.icp_text }}</a>
+          <a
+            v-if="site.police_text"
+            :href="policeHref"
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            class="site-footer-police"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                fill="#005bac"
+                d="M12 2 20 5v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5Z"
+              />
+              <path
+                fill="#fff"
+                d="m12 7 1.06 3.04 3.22.07-2.57 1.95.94 3.08L12 13.3l-2.65 1.84.94-3.08-2.57-1.95 3.22-.07Z"
+              />
+            </svg>
+            {{ site.police_text }}
+          </a>
         </div>
         <button
           type="button"

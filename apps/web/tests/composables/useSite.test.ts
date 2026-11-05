@@ -44,6 +44,7 @@ describe('useSite', () => {
       site_url: 'https://example.com',
       logo_url: '',
       icp_text: '',
+      police_text: '',
       default_cover_url: '',
       created_at: '2026-01-01T00:00:00Z',
     }
@@ -71,6 +72,7 @@ describe('useSite', () => {
       site_url: '',
       logo_url: '',
       icp_text: '',
+      police_text: '',
       default_cover_url: '',
       created_at: '',
     })
@@ -85,6 +87,7 @@ describe('useSite', () => {
       site_url: '',
       logo_url: '',
       icp_text: '',
+      police_text: '',
       default_cover_url: '',
       created_at: '',
     })

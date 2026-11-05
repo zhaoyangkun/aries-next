@@ -26,6 +26,8 @@ struct SiteSettingsResponse {
     logo_url: String,
     /// ICP 备案号文本，展示在 Footer。
     icp_text: String,
+    /// 公安联网备案号（网安备号）文本，展示在 Footer。
+    police_text: String,
     /// 文章默认封面 URL。
     default_cover_url: String,
     /// 首页分页大小（1–100）。
@@ -50,6 +52,7 @@ impl From<SiteSettings> for SiteSettingsResponse {
             site_url: settings.site_url,
             logo_url: settings.logo_url,
             icp_text: settings.icp_text,
+            police_text: settings.police_text,
             default_cover_url: settings.default_cover_url,
             page_size_index: settings.page_size_index,
             page_size_archive: settings.page_size_archive,
@@ -77,6 +80,8 @@ struct UpdateSiteSettingsRequest {
     logo_url: String,
     #[serde(default)]
     icp_text: String,
+    #[serde(default)]
+    police_text: String,
     #[serde(default)]
     default_cover_url: String,
     page_size_index: i32,
@@ -184,6 +189,7 @@ async fn update_settings(
             site_url: request.site_url.trim().to_owned(),
             logo_url: request.logo_url.trim().to_owned(),
             icp_text: request.icp_text.trim().to_owned(),
+            police_text: request.police_text.trim().to_owned(),
             default_cover_url: request.default_cover_url.trim().to_owned(),
             page_size_index: request.page_size_index,
             page_size_archive: request.page_size_archive,

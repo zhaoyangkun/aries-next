@@ -11,11 +11,12 @@ use axum::http::StatusCode;
 use common::TestApp;
 
 /// 期望的公开字段集合：与 `PublicSiteResponse` 一一对应，新增内部配置默认不得出现。
-const PUBLIC_SITE_KEYS: [&str; 7] = [
+const PUBLIC_SITE_KEYS: [&str; 8] = [
     "created_at",
     "default_cover_url",
     "icp_text",
     "logo_url",
+    "police_text",
     "site_description",
     "site_name",
     "site_url",
@@ -58,6 +59,7 @@ async fn public_site_returns_defaults_without_auth() -> anyhow::Result<()> {
             "site_url",
             "logo_url",
             "icp_text",
+            "police_text",
             "default_cover_url",
         ] {
             ensure!(body[key] == "", "{key} should default to empty: {body}");
@@ -98,6 +100,7 @@ async fn public_site_reflects_admin_updates_but_hides_internal_fields() -> anyho
                     "site_url": "https://blog.example.com",
                     "logo_url": "https://cdn.example.com/logo.png",
                     "icp_text": "京ICP备00000000号",
+                    "police_text": "京公网安备11010502000000号",
                     "default_cover_url": "https://cdn.example.com/cover.jpg",
                     "page_size_index": 25,
                     "page_size_archive": 30,
@@ -115,6 +118,7 @@ async fn public_site_reflects_admin_updates_but_hides_internal_fields() -> anyho
         ensure!(body["site_url"] == "https://blog.example.com");
         ensure!(body["logo_url"] == "https://cdn.example.com/logo.png");
         ensure!(body["icp_text"] == "京ICP备00000000号");
+        ensure!(body["police_text"] == "京公网安备11010502000000号");
         ensure!(body["default_cover_url"] == "https://cdn.example.com/cover.jpg");
 
         // 分页与评论策略属内部配置，绝不外泄（字段集合已由 get_public_site 精确校验，

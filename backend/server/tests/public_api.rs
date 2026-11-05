@@ -105,6 +105,7 @@ async fn site_scenario(app: &TestApp) -> anyhow::Result<()> {
             "default_cover_url",
             "icp_text",
             "logo_url",
+            "police_text",
             "site_description",
             "site_name",
             "site_url"

@@ -2030,7 +2030,7 @@ export interface paths {
         };
         /**
          * 公开站点信息
-         * @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
+         * @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
          */
         get: operations["getPublicSite"];
         put?: never;
@@ -3391,7 +3391,7 @@ export interface components {
         };
         /**
          * PublicSiteResponse
-         * @description 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。
+         * @description 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。
          */
         PublicSiteResponse: {
             /**
@@ -3402,6 +3402,7 @@ export interface components {
             default_cover_url: string;
             icp_text: string;
             logo_url: string;
+            police_text: string;
             site_description: string;
             site_name: string;
             site_url: string;
@@ -3610,6 +3611,8 @@ export interface components {
              * @description 搜索页分页大小（1–100）。
              */
             page_size_search: number;
+            /** @description 公安联网备案号（网安备号）文本，展示在 Footer。 */
+            police_text: string;
             site_description: string;
             /** @description 站点名称（1–100 字符）。 */
             site_name: string;
@@ -3742,6 +3745,7 @@ export interface components {
             page_size_index: number;
             /** Format: int32 */
             page_size_search: number;
+            police_text?: string;
             site_description?: string;
             /** @description 站点名称，Trim 后 1–100 字符（400 `INVALID_SITE_NAME`）。 */
             site_name: string;

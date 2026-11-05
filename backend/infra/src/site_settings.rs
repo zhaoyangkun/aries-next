@@ -22,6 +22,7 @@ struct SiteSettingsRow {
     site_url: String,
     logo_url: String,
     icp_text: String,
+    police_text: String,
     default_cover_url: String,
     page_size_index: i32,
     page_size_archive: i32,
@@ -42,6 +43,7 @@ impl TryFrom<SiteSettingsRow> for SiteSettings {
             site_url: row.site_url,
             logo_url: row.logo_url,
             icp_text: row.icp_text,
+            police_text: row.police_text,
             default_cover_url: row.default_cover_url,
             page_size_index: row.page_size_index,
             page_size_archive: row.page_size_archive,
@@ -58,7 +60,7 @@ impl TryFrom<SiteSettingsRow> for SiteSettings {
 }
 
 const SETTINGS_COLUMNS: &str = "site_name, site_description, site_url, logo_url, icp_text, \
-    default_cover_url, page_size_index, page_size_archive, page_size_search, \
+    police_text, default_cover_url, page_size_index, page_size_archive, page_size_search, \
     comment_policy, comments_per_page, created_at, updated_at";
 
 #[async_trait]
@@ -77,9 +79,10 @@ impl SiteSettingsRepository for PostgresSiteSettingsRepository {
     async fn update(&self, update: SiteSettingsUpdate) -> Result<SiteSettings, MediaError> {
         let query = format!(
             "UPDATE site_settings SET site_name = $1, site_description = $2, site_url = $3, \
-             logo_url = $4, icp_text = $5, default_cover_url = $6, page_size_index = $7, \
-             page_size_archive = $8, page_size_search = $9, comment_policy = $10, \
-             comments_per_page = $11, updated_at = now() \
+             logo_url = $4, icp_text = $5, police_text = $6, default_cover_url = $7, \
+             page_size_index = $8, \
+             page_size_archive = $9, page_size_search = $10, comment_policy = $11, \
+             comments_per_page = $12, updated_at = now() \
              WHERE id = 1 RETURNING {SETTINGS_COLUMNS}"
         );
         let row = logged_query_as::<SiteSettingsRow>(&query)
@@ -88,6 +91,7 @@ impl SiteSettingsRepository for PostgresSiteSettingsRepository {
             .bind(update.site_url)
             .bind(update.logo_url)
             .bind(update.icp_text)
+            .bind(update.police_text)
             .bind(update.default_cover_url)
             .bind(update.page_size_index)
             .bind(update.page_size_archive)

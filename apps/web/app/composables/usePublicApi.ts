@@ -98,8 +98,13 @@ export async function usePublicApi<T>(
   const headers =
     options.forwardCookies && import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
+  // useAsyncData 以 key 去重缓存：同 key 且上次取数为 success 时，客户端再次进入页面
+  // 不会重新请求（initialFetch 被跳过），直接复用旧数据。路径含动态段（如文章 slug）时
+  // 必须把初始路径拼进 key，否则从搜索/相关阅读跳转到另一篇文章时 URL 变了内容不变
+  const asyncKey = typeof path === 'function' ? `${key}:${path()}` : key
+
   const { data, status, error, refresh } = await useAsyncData<T | null>(
-    key,
+    asyncKey,
     () => {
       if (options.enabled && !options.enabled.value) return Promise.resolve(null)
       const resolvedPath = typeof path === 'function' ? path() : path

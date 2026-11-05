@@ -18,7 +18,8 @@ impl MarkdownRenderer for ComrakMarkdownRenderer {
         options.extension.math_dollars = true;
         options.extension.math_code = true;
 
-        let normalized = normalize_legacy_display_math(source);
+        let display_normalized = normalize_legacy_display_math(source);
+        let normalized = normalize_legacy_inline_math(display_normalized.as_ref());
         let rendered = markdown_to_html(normalized.as_ref(), &options);
         // Markdown 中可能包含 Raw HTML，统一使用 Allowlist 清理后才能进入公开页面。
         // 放行 class 属性：代码块的 language-* class 是前端语法高亮的唯一语言线索，
@@ -101,6 +102,176 @@ fn normalize_legacy_display_math(source: &str) -> Cow<'_, str> {
         result.push('\n');
     }
     Cow::Owned(result)
+}
+
+/// 兼容旧内容中 `$ x_i $`、`$ \phi(x)$` 这类定界符内侧带空白的行内公式。
+/// comrak 会把前一处公式的闭合符与后一处公式的起始符错配，因此需在 Markdown 解析前
+/// 去掉定界符内侧空白。只处理具有明显 TeX 特征的内容，避免把金额等普通文本当成公式。
+fn normalize_legacy_inline_math(source: &str) -> Cow<'_, str> {
+    let mut result = String::with_capacity(source.len());
+    let mut in_fence: Option<(char, usize)> = None;
+    let mut changed = false;
+
+    for chunk in source.split_inclusive('\n') {
+        let line = chunk.strip_suffix('\n').unwrap_or(chunk);
+        if let Some((marker, len)) = fence_marker(line) {
+            match in_fence {
+                Some((open, open_len)) if open == marker && len >= open_len => in_fence = None,
+                None => in_fence = Some((marker, len)),
+                _ => {}
+            }
+            result.push_str(chunk);
+            continue;
+        }
+        if in_fence.is_some() {
+            result.push_str(chunk);
+            continue;
+        }
+
+        match normalize_inline_math_line(line) {
+            Cow::Borrowed(_) => result.push_str(chunk),
+            Cow::Owned(normalized) => {
+                result.push_str(&normalized);
+                if chunk.ends_with('\n') {
+                    result.push('\n');
+                }
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        Cow::Owned(result)
+    } else {
+        Cow::Borrowed(source)
+    }
+}
+
+fn normalize_inline_math_line(line: &str) -> Cow<'_, str> {
+    let bytes = line.as_bytes();
+    let mut result = String::with_capacity(line.len());
+    let mut copied_until = 0;
+    let mut index = 0;
+    let mut code_delimiter: Option<usize> = None;
+    let mut math_open: Option<usize> = None;
+    let mut changed = false;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => {
+                index = escaped_char_end(line, index);
+                continue;
+            }
+            b'`' => {
+                let run = backtick_run(bytes, index);
+                match code_delimiter {
+                    Some(open) if open == run => code_delimiter = None,
+                    None => code_delimiter = Some(run),
+                    _ => {}
+                }
+                math_open = None;
+                index += run;
+                continue;
+            }
+            b'$' if code_delimiter.is_none() => {
+                if !is_single_dollar(bytes, index) {
+                    math_open = None;
+                    index += 1;
+                    continue;
+                }
+                if let Some(open) = math_open {
+                    let inner = &line[open + 1..index];
+                    let formula = inner.trim();
+                    if inner.len() == formula.len() {
+                        math_open = None;
+                        index += 1;
+                        continue;
+                    }
+                    if looks_like_math(formula) {
+                        result.push_str(&line[copied_until..open]);
+                        result.push('$');
+                        result.push_str(formula);
+                        result.push('$');
+                        copied_until = index + 1;
+                        changed = true;
+                        math_open = None;
+                        index += 1;
+                        continue;
+                    }
+                    // 当前闭合符也可能是后一段公式的起始符。
+                    math_open = Some(index);
+                } else {
+                    math_open = Some(index);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+
+    if !changed {
+        return Cow::Borrowed(line);
+    }
+    result.push_str(&line[copied_until..]);
+    Cow::Owned(result)
+}
+
+fn escaped_char_end(line: &str, slash: usize) -> usize {
+    match line[slash + 1..].chars().next() {
+        Some(character) => slash + 1 + character.len_utf8(),
+        None => slash + 1,
+    }
+}
+
+fn backtick_run(bytes: &[u8], start: usize) -> usize {
+    bytes[start..]
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count()
+}
+
+fn is_single_dollar(bytes: &[u8], index: usize) -> bool {
+    let previous_is_dollar = index > 0 && bytes[index - 1] == b'$';
+    let next_is_dollar = index + 1 < bytes.len() && bytes[index + 1] == b'$';
+    !previous_is_dollar && !next_is_dollar
+}
+
+fn looks_like_math(value: &str) -> bool {
+    if value.is_empty() || value.contains('$') || value.contains('`') {
+        return false;
+    }
+    let mut characters = value.chars();
+    if matches!(characters.next(), Some(character) if character.is_alphabetic())
+        && characters.next().is_none()
+    {
+        return true;
+    }
+    value.chars().any(|character| {
+        matches!(
+            character,
+            '\\' | '_'
+                | '^'
+                | '{'
+                | '}'
+                | '='
+                | '+'
+                | '-'
+                | '*'
+                | '/'
+                | '|'
+                | '<'
+                | '>'
+                | '!'
+                | '&'
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | ','
+                | ';'
+                | ':'
+        )
+    })
 }
 
 #[cfg(test)]
@@ -196,6 +367,58 @@ mod tests {
             normalize_legacy_display_math(source),
             Cow::Borrowed(_)
         ));
+    }
+
+    #[test]
+    fn legacy_spaced_inline_math_is_rendered() {
+        let html = ComrakMarkdownRenderer
+            .render("插值公式：$ x_0 $、$ \\phi_1(x)$、$ x_j$、$ h $、$ a$。")
+            .expect("markdown should render");
+
+        assert_eq!(
+            html.matches("data-math-style=\"inline\"").count(),
+            5,
+            "unexpected html: {html}"
+        );
+        for formula in ["x_0", "\\phi_1(x)", "x_j", "h", "a"] {
+            assert!(
+                html.contains(&format!(
+                    "<span data-math-style=\"inline\">{formula}</span>"
+                )),
+                "missing formula {formula}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn spaced_dollar_normalization_preserves_code_and_non_math_text() {
+        let source = "行内代码 `$ x_0 $` 与转义符号 \\$ x_0 $ 不应改动。\n\n\
+                      ```text\n$ x_0 $\n```\n\n\
+                      价格从 $ 100 涨到 $ 200，单独的 $ 符号保持原样。";
+        let html = ComrakMarkdownRenderer
+            .render(source)
+            .expect("markdown should render");
+
+        assert!(
+            !html.contains("data-math-style"),
+            "non-math dollars must not be normalized: {html}"
+        );
+        assert!(html.contains("$ x_0 $"), "unexpected html: {html}");
+    }
+
+    #[test]
+    fn spaced_dollar_normalization_does_not_merge_adjacent_math() {
+        let html = ComrakMarkdownRenderer
+            .render("$x$ + $ y $")
+            .expect("markdown should render");
+
+        assert_eq!(
+            html.matches("data-math-style=\"inline\"").count(),
+            2,
+            "unexpected html: {html}"
+        );
+        assert!(html.contains("<span data-math-style=\"inline\">x</span>"));
+        assert!(html.contains("<span data-math-style=\"inline\">y</span>"));
     }
 
     #[test]

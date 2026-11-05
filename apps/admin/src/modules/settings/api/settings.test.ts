@@ -16,6 +16,7 @@ const siteSettings = {
   site_url: '',
   logo_url: '',
   icp_text: '',
+  police_text: '',
   default_cover_url: '',
   page_size_index: 10,
   page_size_archive: 20,

@@ -8,6 +8,7 @@ export interface SiteSettings {
   site_url: string
   logo_url: string
   icp_text: string
+  police_text: string
   default_cover_url: string
   page_size_index: number
   page_size_archive: number

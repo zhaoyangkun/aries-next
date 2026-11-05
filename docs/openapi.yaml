@@ -5881,7 +5881,7 @@ paths:
       tags:
       - Public Site
       summary: 公开站点信息
-      description: site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
+      description: site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
       operationId: getPublicSite
       responses:
         '200':
@@ -8411,13 +8411,14 @@ components:
     PublicSiteResponse:
       type: object
       title: PublicSiteResponse
-      description: 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号与默认封面，绝不返回任何内部配置。
+      description: 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。
       required:
       - site_name
       - site_description
       - site_url
       - logo_url
       - icp_text
+      - police_text
       - default_cover_url
       - created_at
       properties:
@@ -8430,6 +8431,8 @@ components:
         icp_text:
           type: string
         logo_url:
+          type: string
+        police_text:
           type: string
         site_description:
           type: string
@@ -8737,6 +8740,7 @@ components:
       - site_url
       - logo_url
       - icp_text
+      - police_text
       - default_cover_url
       - page_size_index
       - page_size_archive
@@ -8772,6 +8776,9 @@ components:
           type: integer
           format: int32
           description: 搜索页分页大小（1–100）。
+        police_text:
+          type: string
+          description: 公安联网备案号（网安备号）文本，展示在 Footer。
         site_description:
           type: string
         site_name:
@@ -8991,6 +8998,8 @@ components:
         page_size_search:
           type: integer
           format: int32
+        police_text:
+          type: string
         site_description:
           type: string
         site_name:

@@ -6,7 +6,8 @@ import { stubRuntimeConfig } from '../helpers/nuxt-globals'
 
 // useAsyncData 替身：直接执行 handler，把结果/异常包装成与 Nuxt 相同的 { data, status, error, refresh } 形状
 function stubUseAsyncData() {
-  vi.stubGlobal('useAsyncData', async (_key: string, handler: () => Promise<unknown>) => {
+  vi.stubGlobal('useAsyncData', async (key: string, handler: () => Promise<unknown>) => {
+    stubUseAsyncData.keys.push(key)
     try {
       const data = await handler()
       return {
@@ -26,6 +27,7 @@ function stubUseAsyncData() {
     }
   })
 }
+stubUseAsyncData.keys = [] as string[]
 
 // createError 替身：构造携带 statusCode 的 Error，便于断言抛出的 Nuxt 错误
 function stubCreateError() {
@@ -77,6 +79,24 @@ describe('usePublicApi', () => {
       query: undefined,
       headers: undefined,
     })
+  })
+
+  it('should derive a unique cache key from the initial path when path is a function', async () => {
+    vi.stubGlobal('unref', unref)
+    stubRuntimeConfig({}, { internalApiBase: 'http://backend.test/api/public' })
+    stubUseAsyncData()
+    stubUseAsyncData.keys.length = 0
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ slug: 'hello' }))
+
+    await usePublicApi('article-detail', () => '/articles/hello')
+    await usePublicApi('article-detail', () => '/articles/other')
+
+    // 动态路径必须生成不同 key：useAsyncData 同 key 取数成功后客户端复访不再请求，
+    // key 相同会导致从搜索/相关阅读跳转另一篇文章时 URL 变了内容不变
+    expect(stubUseAsyncData.keys).toEqual([
+      'article-detail:/articles/hello',
+      'article-detail:/articles/other',
+    ])
   })
 
   it('should skip the request and return null when enabled is false', async () => {

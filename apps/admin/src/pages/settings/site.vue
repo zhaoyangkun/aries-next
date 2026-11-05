@@ -16,6 +16,7 @@ const form = reactive<UpdateSiteSettingsPayload>({
   site_url: '',
   logo_url: '',
   icp_text: '',
+  police_text: '',
   default_cover_url: '',
   page_size_index: 10,
   page_size_archive: 20,
@@ -79,9 +80,15 @@ async function save() {
               <label for="site-url" class="text-sm font-medium leading-none">站点 URL</label>
               <Input id="site-url" v-model="form.site_url" type="url" placeholder="https://example.com" :disabled="loading || saving" />
             </div>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
             <div class="grid gap-2">
-              <label for="icp-text" class="text-sm font-medium leading-none">备案号</label>
+              <label for="icp-text" class="text-sm font-medium leading-none">ICP 备案号</label>
               <Input id="icp-text" v-model="form.icp_text" placeholder="京ICP备xxxxxxxx号" :disabled="loading || saving" />
+            </div>
+            <div class="grid gap-2">
+              <label for="police-text" class="text-sm font-medium leading-none">公安备案号</label>
+              <Input id="police-text" v-model="form.police_text" placeholder="京公网安备 110105020xxxxx号" :disabled="loading || saving" />
             </div>
           </div>
           <div class="grid gap-4 sm:grid-cols-2">

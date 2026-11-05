@@ -59,6 +59,7 @@ fn valid_payload() -> serde_json::Value {
         "site_url": "https://blog.example.com",
         "logo_url": "/api/media/files/logo.png",
         "icp_text": "京ICP备00000000号",
+        "police_text": "京公网安备11010502000000号",
         "default_cover_url": "",
         "page_size_index": 20,
         "page_size_archive": 15,
@@ -105,6 +106,7 @@ async fn site_settings_read_update_roundtrip() -> anyhow::Result<()> {
         ensure!(reread.status == StatusCode::OK, "{}", reread.body);
         ensure!(reread.body["site_name"] == "Aries 测试站");
         ensure!(reread.body["icp_text"] == "京ICP备00000000号");
+        ensure!(reread.body["police_text"] == "京公网安备11010502000000号");
 
         // 审计：更新写入一条 site_settings.update。
         let (audit_count,): (i64,) =
