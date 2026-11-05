@@ -34,6 +34,7 @@ export const settingsNavItems: SidebarLink[] = [
   { title: '邮件设置', url: '/settings/email', icon: MailIcon, permission: 'settings:manage' },
   { title: '邮件投递', url: '/settings/deliveries', icon: InboxIcon, permission: 'settings:manage' },
   { title: '第三方集成', url: '/settings/integrations', icon: PlugIcon, permission: 'settings:manage' },
+  { title: '社交链接', url: '/settings/social', icon: Link2Icon, permission: 'settings:manage' },
   { title: 'AI 设置', url: '/settings/ai', icon: SparklesIcon, permission: 'settings:manage' },
 ]
 

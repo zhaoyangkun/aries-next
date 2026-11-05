@@ -1439,7 +1439,7 @@ export interface paths {
         get: operations["getSettingGroup"];
         /**
          * 更新分组设置
-         * @description 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+         * @description 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations / social 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
          */
         put: operations["updateSettingGroup"];
         post?: never;
@@ -2030,7 +2030,7 @@ export interface paths {
         };
         /**
          * 公开站点信息
-         * @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
+         * @description site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号、社交链接与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
          */
         get: operations["getPublicSite"];
         put?: never;
@@ -3391,7 +3391,7 @@ export interface components {
         };
         /**
          * PublicSiteResponse
-         * @description 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。
+         * @description 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号、社交链接与默认封面，绝不返回任何内部配置。
          */
         PublicSiteResponse: {
             /**
@@ -3406,6 +3406,17 @@ export interface components {
             site_description: string;
             site_name: string;
             site_url: string;
+            /** @description 社交链接（footer 展示）；未配置或读取失败时为空数组，不影响站点信息可用性。 */
+            social_links: components["schemas"]["PublicSocialLink"][];
+        };
+        /**
+         * PublicSocialLink
+         * @description 社交链接条目；`icon` 为前端图标键，未知值前端退化为通用链接图标。
+         */
+        PublicSocialLink: {
+            icon?: string | null;
+            name: string;
+            url: string;
         };
         /**
          * PublicTagResponse
@@ -3551,10 +3562,10 @@ export interface components {
         };
         /**
          * SettingGroupResponse
-         * @description 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。
+         * @description 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView` / `SocialSettings`。
          */
         SettingGroupResponse: {
-            /** @description 分组名：`appearance` / `email` / `integrations` / `ai`。 */
+            /** @description 分组名：`appearance` / `email` / `integrations` / `ai` / `social`。 */
             group: string;
             /** @description 分组设置内容，JSON 结构随 group 而不同。 */
             settings: unknown;
@@ -3568,7 +3579,7 @@ export interface components {
         };
         /**
          * UpdateSettingGroupRequest
-         * @description 分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations 组全量覆盖（`AppearanceSettings` / `IntegrationSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。
+         * @description 分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations / social 组全量覆盖（`AppearanceSettings` / `IntegrationSettings` / `SocialSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。
          */
         SettingUpdateRequest: {
             /**
@@ -9211,7 +9222,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 分组名：appearance / email / integrations / ai */
+                /** @description 分组名：appearance / email / integrations / ai / social */
                 group: string;
             };
             cookie?: never;
@@ -9261,7 +9272,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 分组名：appearance / email / integrations / ai */
+                /** @description 分组名：appearance / email / integrations / ai / social */
                 group: string;
             };
             cookie?: never;

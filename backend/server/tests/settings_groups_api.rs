@@ -675,3 +675,123 @@ async fn settings_ai_group_secret_semantics() -> anyhow::Result<()> {
     scenario?;
     cleanup_result
 }
+
+#[tokio::test]
+async fn settings_social_full_replace_and_validation() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        // 初始读取：预插默认行，version = 1，links 为空。
+        let initial = app
+            .admin_get("/api/admin/settings/social", &owner_cookie)
+            .await?;
+        ensure!(initial.status == StatusCode::OK, "{}", initial.body);
+        ensure!(initial.body["group"] == "social");
+        ensure!(initial.body["version"].as_i64() == Some(1));
+        ensure!(
+            initial.body["settings"]["links"]
+                .as_array()
+                .is_some_and(Vec::is_empty),
+            "{}",
+            initial.body
+        );
+
+        // 写入两条链接（全量覆盖语义）。
+        let updated = app
+            .admin_put(
+                "/api/admin/settings/social",
+                serde_json::json!({
+                    "expected_version": 1,
+                    "settings": {
+                        "links": [
+                            { "name": "GitHub", "url": "https://github.com/example", "icon": "github" },
+                            { "name": "微博", "url": "https://weibo.com/example", "icon": null }
+                        ]
+                    }
+                }),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(updated.status == StatusCode::OK, "{}", updated.body);
+        ensure!(updated.body["version"].as_i64() == Some(2));
+        ensure!(updated.body["settings"]["links"].as_array().map(Vec::len) == Some(2));
+
+        // 校验失败 → 400 INVALID_SETTING_PAYLOAD：非 http Scheme、空名称、重复 URL。
+        for (name, url) in [("GitHub", "javascript:alert(1)"), ("  ", "https://example.com")] {
+            let invalid = app
+                .admin_put(
+                    "/api/admin/settings/social",
+                    serde_json::json!({
+                        "expected_version": 2,
+                        "settings": { "links": [ { "name": name, "url": url, "icon": null } ] }
+                    }),
+                    &owner_cookie,
+                )
+                .await?;
+            ensure!(
+                invalid.status == StatusCode::BAD_REQUEST,
+                "{name} {url}: {}",
+                invalid.body
+            );
+            ensure!(
+                invalid.body["error"]["code"] == "INVALID_SETTING_PAYLOAD",
+                "{}",
+                invalid.body
+            );
+        }
+        // 同一 URL 出现两次 → 400。
+        let duplicated = app
+            .admin_put(
+                "/api/admin/settings/social",
+                serde_json::json!({
+                    "expected_version": 2,
+                    "settings": { "links": [
+                        { "name": "GitHub", "url": "https://github.com/example", "icon": null },
+                        { "name": "GitHub 镜像", "url": "https://github.com/example", "icon": null }
+                    ] }
+                }),
+                &owner_cookie,
+            )
+            .await?;
+        ensure!(
+            duplicated.status == StatusCode::BAD_REQUEST,
+            "{}",
+            duplicated.body
+        );
+        ensure!(
+            duplicated.body["error"]["code"] == "INVALID_SETTING_PAYLOAD",
+            "{}",
+            duplicated.body
+        );
+
+        // 非法分组名仍然 404。
+        let unknown = app
+            .admin_get("/api/admin/settings/site", &owner_cookie)
+            .await?;
+        ensure!(unknown.status == StatusCode::NOT_FOUND);
+
+        // 回读确认校验失败的提交未污染存储。
+        let reread = app
+            .admin_get("/api/admin/settings/social", &owner_cookie)
+            .await?;
+        ensure!(reread.body["version"].as_i64() == Some(2));
+        ensure!(reread.body["settings"]["links"].as_array().map(Vec::len) == Some(2));
+
+        // 审计：settings.social.updated ×1（400 不计）。
+        let (audit_count,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM audit_logs WHERE action = 'settings.social.updated'",
+        )
+        .fetch_one(&app.state.database)
+        .await?;
+        ensure!(audit_count == 1);
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}

@@ -4696,7 +4696,7 @@ paths:
       parameters:
       - name: group
         in: path
-        description: 分组名：appearance / email / integrations / ai
+        description: 分组名：appearance / email / integrations / ai / social
         required: true
         schema:
           type: string
@@ -4731,12 +4731,12 @@ paths:
       tags:
       - Admin Settings Groups
       summary: 更新分组设置
-      description: 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
+      description: 更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations / social 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。
       operationId: updateSettingGroup
       parameters:
       - name: group
         in: path
-        description: 分组名：appearance / email / integrations / ai
+        description: 分组名：appearance / email / integrations / ai / social
         required: true
         schema:
           type: string
@@ -5881,7 +5881,7 @@ paths:
       tags:
       - Public Site
       summary: 公开站点信息
-      description: site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
+      description: site_settings 的公开投影；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号、社交链接与默认封面，绝不返回任何内部配置。可匿名访问并带 CDN 缓存头。
       operationId: getPublicSite
       responses:
         '200':
@@ -8411,7 +8411,7 @@ components:
     PublicSiteResponse:
       type: object
       title: PublicSiteResponse
-      description: 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号与默认封面，绝不返回任何内部配置。
+      description: 站点公开信息；只含站点名称、描述、URL、Logo、ICP 备案号、公安备案号、社交链接与默认封面，绝不返回任何内部配置。
       required:
       - site_name
       - site_description
@@ -8420,6 +8420,7 @@ components:
       - icp_text
       - police_text
       - default_cover_url
+      - social_links
       - created_at
       properties:
         created_at:
@@ -8439,6 +8440,27 @@ components:
         site_name:
           type: string
         site_url:
+          type: string
+        social_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicSocialLink'
+          description: 社交链接（footer 展示）；未配置或读取失败时为空数组，不影响站点信息可用性。
+    PublicSocialLink:
+      type: object
+      title: PublicSocialLink
+      description: 社交链接条目；`icon` 为前端图标键，未知值前端退化为通用链接图标。
+      required:
+      - name
+      - url
+      properties:
+        icon:
+          type:
+          - string
+          - 'null'
+        name:
+          type: string
+        url:
           type: string
     PublicTagResponse:
       type: object
@@ -8697,7 +8719,7 @@ components:
     SettingGroupResponse:
       type: object
       title: SettingGroupResponse
-      description: 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。
+      description: 分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView` / `SocialSettings`。
       required:
       - group
       - version
@@ -8706,7 +8728,7 @@ components:
       properties:
         group:
           type: string
-          description: 分组名：`appearance` / `email` / `integrations` / `ai`。
+          description: 分组名：`appearance` / `email` / `integrations` / `ai` / `social`。
         settings:
           description: 分组设置内容，JSON 结构随 group 而不同。
         updated_at:
@@ -8719,7 +8741,7 @@ components:
     SettingUpdateRequest:
       type: object
       title: UpdateSettingGroupRequest
-      description: 分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations 组全量覆盖（`AppearanceSettings` / `IntegrationSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。
+      description: 分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations / social 组全量覆盖（`AppearanceSettings` / `IntegrationSettings` / `SocialSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。
       required:
       - expected_version
       - settings

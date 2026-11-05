@@ -17,6 +17,7 @@ pub enum SettingGroup {
     Email,
     Integrations,
     Ai,
+    Social,
 }
 
 impl SettingGroup {
@@ -26,6 +27,7 @@ impl SettingGroup {
             Self::Email => "email",
             Self::Integrations => "integrations",
             Self::Ai => "ai",
+            Self::Social => "social",
         }
     }
 }
@@ -45,6 +47,7 @@ impl FromStr for SettingGroup {
             "email" => Ok(Self::Email),
             "integrations" => Ok(Self::Integrations),
             "ai" => Ok(Self::Ai),
+            "social" => Ok(Self::Social),
             _ => Err(SettingError::InvalidGroup),
         }
     }
@@ -98,6 +101,73 @@ pub struct EmailSettings {
 pub struct IntegrationSettings {
     pub analytics_id: Option<String>,
     pub site_verification_token: Option<String>,
+}
+
+/// 社交链接条目：公开端 footer 展示的外部站点链接（Owner 配置，公开只读投影）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SocialLink {
+    /// 展示名，Trim 后 1–20 字符（如 `GitHub`）。
+    pub name: String,
+    /// 外部站点 http/https 绝对地址。
+    pub url: String,
+    /// 前端图标键；未知值由前端退化为通用链接图标。
+    pub icon: Option<String>,
+}
+
+/// 社交链接设置：有序列表，展示顺序即数组顺序；全量覆盖更新。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SocialSettings {
+    pub links: Vec<SocialLink>,
+}
+
+impl SocialSettings {
+    pub const MAX_LINKS: usize = 10;
+    pub const MAX_NAME_CHARS: usize = 20;
+    pub const MAX_ICON_CHARS: usize = 20;
+
+    /// 校验链接列表：数量上限、名称非空且限长、URL 必须是 http/https 绝对地址、按 URL 去重。
+    pub fn validate(&self) -> Result<(), SettingError> {
+        if self.links.len() > Self::MAX_LINKS {
+            return Err(SettingError::Validation);
+        }
+        let mut seen = std::collections::HashSet::with_capacity(self.links.len());
+        for link in &self.links {
+            let name = link.name.trim();
+            if name.is_empty() || name.chars().count() > Self::MAX_NAME_CHARS {
+                return Err(SettingError::Validation);
+            }
+            if !is_absolute_http_url(&link.url) {
+                return Err(SettingError::Validation);
+            }
+            let icon = link.icon.as_deref().map(str::trim).unwrap_or("");
+            if icon.chars().count() > Self::MAX_ICON_CHARS {
+                return Err(SettingError::Validation);
+            }
+            if !seen.insert(link.url.trim().to_owned()) {
+                return Err(SettingError::Validation);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// 保守的 http/https 绝对地址判断：显式 scheme + 非空 Host 段，
+/// 拒绝协议相对（//host）与含空白字符的输入；足够挡住 javascript: 等非 http Scheme。
+fn is_absolute_http_url(value: &str) -> bool {
+    let value = value.trim();
+    let host = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"));
+    match host {
+        Some(host) => {
+            !host.is_empty()
+                && !host.starts_with('/')
+                && !host.contains(char::is_whitespace)
+                && host.contains('.')
+        }
+        None => false,
+    }
 }
 
 /// 设置分组记录：payload 为原始 jsonb，结构化类型由 HTTP 层反序列化校验。
@@ -157,6 +227,7 @@ mod tests {
         assert_eq!("email".parse(), Ok(SettingGroup::Email));
         assert_eq!("integrations".parse(), Ok(SettingGroup::Integrations));
         assert_eq!("ai".parse(), Ok(SettingGroup::Ai));
+        assert_eq!("social".parse(), Ok(SettingGroup::Social));
         assert_eq!(
             "site".parse::<SettingGroup>(),
             Err(SettingError::InvalidGroup)
@@ -188,5 +259,73 @@ mod tests {
         let json = serde_json::to_value(&settings).unwrap();
         let parsed: EmailSettings = serde_json::from_value(json).unwrap();
         assert_eq!(parsed, settings);
+    }
+
+    #[test]
+    fn social_settings_validate_links() {
+        let valid = SocialSettings {
+            links: vec![
+                SocialLink {
+                    name: "GitHub".to_owned(),
+                    url: "https://github.com/example".to_owned(),
+                    icon: Some("github".to_owned()),
+                },
+                SocialLink {
+                    name: "微博".to_owned(),
+                    url: "http://weibo.com/example".to_owned(),
+                    icon: None,
+                },
+            ],
+        };
+        assert_eq!(valid.validate(), Ok(()));
+
+        // 空名称 / 超长名称
+        let mut invalid = valid.clone();
+        invalid.links[0].name = "  ".to_owned();
+        assert_eq!(invalid.validate(), Err(SettingError::Validation));
+        let mut invalid = valid.clone();
+        invalid.links[0].name = "长".repeat(SocialSettings::MAX_NAME_CHARS + 1);
+        assert_eq!(invalid.validate(), Err(SettingError::Validation));
+
+        // 非 http(s) 绝对地址：javascript Scheme、协议相对、站内路径
+        for bad_url in [
+            "javascript:alert(1)",
+            "//evil.example.com",
+            "/about",
+            "https://",
+        ] {
+            let mut invalid = valid.clone();
+            invalid.links[0].url = bad_url.to_owned();
+            assert_eq!(
+                invalid.validate(),
+                Err(SettingError::Validation),
+                "{bad_url}"
+            );
+        }
+
+        // URL 去重
+        let mut invalid = valid.clone();
+        invalid.links[1].url = invalid.links[0].url.clone();
+        assert_eq!(invalid.validate(), Err(SettingError::Validation));
+
+        // 数量上限
+        let too_many = SocialSettings {
+            links: (0..=SocialSettings::MAX_LINKS)
+                .map(|index| SocialLink {
+                    name: format!("S{index}"),
+                    url: format!("https://example.com/{index}"),
+                    icon: None,
+                })
+                .collect(),
+        };
+        assert_eq!(too_many.validate(), Err(SettingError::Validation));
+    }
+
+    #[test]
+    fn social_settings_tolerate_missing_links() {
+        // jsonb 缺省 links 字段应反序列化为空列表，而不是报错。
+        let settings: SocialSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings, SocialSettings::default());
+        assert_eq!(settings.validate(), Ok(()));
     }
 }

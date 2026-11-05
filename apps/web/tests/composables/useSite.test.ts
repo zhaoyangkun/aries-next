@@ -46,6 +46,7 @@ describe('useSite', () => {
       icp_text: '',
       police_text: '',
       default_cover_url: '',
+      social_links: [],
       created_at: '2026-01-01T00:00:00Z',
     }
     const fetchMock = vi.fn().mockResolvedValue(site)
@@ -74,6 +75,7 @@ describe('useSite', () => {
       icp_text: '',
       police_text: '',
       default_cover_url: '',
+      social_links: [],
       created_at: '',
     })
   })
@@ -89,6 +91,7 @@ describe('useSite', () => {
       icp_text: '',
       police_text: '',
       default_cover_url: '',
+      social_links: [],
       created_at: '',
     })
     vi.stubGlobal('$fetch', fetchMock)

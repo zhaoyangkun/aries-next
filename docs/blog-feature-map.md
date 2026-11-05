@@ -49,7 +49,7 @@
 | 网站设置 | 名称、描述、URL、Logo、备案、静态根路径、Head/Footer | 安全字段入 `site_settings`；任意 Head/Footer 注入默认不迁移，改为 `integrations` 设置组的受控配置 | ✅ |
 | 邮件设置 | SMTP、测试邮件 | SMTP 配置入 `email` 设置组（`smtp_password` 写库不读出）；lettre SMTP Adapter（rustls）、`POST /api/admin/settings/email/test` 测试邮件与 `/api/admin/email-deliveries` 投递审计已实现 | ✅ |
 | 参数设置 | 首页、归档、Sitemap 分页大小 | 保留为 `site_settings` 里的强类型字段（`page_size_index` / `page_size_archive` / `page_size_search`） | ✅ |
-| 社交信息 | QQ、微信、GitHub、微博、知乎 | 规划为可排序的 Social Link 列表，尚未实现 | ⬜ |
+| 社交信息 | QQ、微信、GitHub、微博、知乎 | 实现为 `setting_groups.social` 有序链接列表（name/url/icon，≤10 条，仅 http/https，URL 去重），Admin「设置 → 社交链接」维护，公开端 footer 渲染图标行；排序按数组顺序 | ✅ |
 | Dashboard | 文章数、评论数、最新内容 | 保留；数据来自聚合 API `/api/admin/dashboard`，不由前端拼接 | ✅ |
 | Public Web | 首页、文章详情、分类、标签、归档、搜索 | 全部保留并改为 Nuxt SSR | ✅ |
 | 扩展页面 | 友链、日志、图库、自定义页 | 全部保留 | ✅ |
@@ -112,6 +112,7 @@ Legacy Route 必须在 Phase 07 形成完整 `301 Redirect` 表，不能仅依�
     ├── 站点设置  /settings/site
     ├── 邮件设置  /settings/email
     ├── 第三方集成  /settings/integrations
+    ├── 社交链接  /settings/social
     └── AI 设置  /settings/ai
 ```
 

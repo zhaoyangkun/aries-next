@@ -688,6 +688,15 @@
   @apply inline-flex items-center gap-1;
 }
 
+/* 社交链接行：圆形图标按钮，悬停描品牌色 */
+.site-footer-social {
+  @apply mt-4 flex flex-wrap gap-2;
+}
+
+.site-footer-social-btn {
+  @apply grid size-8 place-items-center rounded-full border text-muted-foreground no-underline transition-colors hover:border-primary hover:text-primary;
+}
+
 /* 返回顶部：圆形图标按钮，悬停时箭头上浮 */
 .site-footer-top-btn {
   @apply grid size-9 cursor-pointer place-items-center rounded-full border transition-colors hover:border-primary hover:text-primary;

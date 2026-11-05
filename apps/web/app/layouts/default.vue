@@ -205,6 +205,30 @@ useHead(
             <span class="site-footer-days-dot" aria-hidden="true" />
             已稳定运行 {{ runDays }} 天
           </p>
+          <!-- 社交链接（后台「设置 → 社交链接」配置，顺序即展示顺序）；空数组不渲染 -->
+          <div v-if="site.social_links.length > 0" class="site-footer-social">
+            <a
+              v-for="(link, index) in site.social_links"
+              :key="index"
+              :href="link.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="site-footer-social-btn"
+              :aria-label="link.name"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="size-4"
+                aria-hidden="true"
+                v-html="socialIconMarkup(link.icon)"
+              />
+            </a>
+          </div>
         </div>
         <!-- 链接区：页脚复用同一导航数据，只展示一级节点，避免页脚过重 -->
         <div class="site-footer-links">

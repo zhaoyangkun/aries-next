@@ -11,7 +11,7 @@ use aries_core::{
     auth::{AuditEvent, Permission},
     settings::{
         AppearanceSettings, EmailSettings, IntegrationSettings, SettingError, SettingGroup,
-        SettingGroupRecord, SettingGroupUpdate,
+        SettingGroupRecord, SettingGroupUpdate, SocialSettings,
     },
 };
 use axum::{
@@ -36,10 +36,10 @@ pub fn router() -> Router<AppState> {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[schema(
     title = "SettingGroupResponse",
-    description = "分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView`。"
+    description = "分组设置与乐观锁版本；`settings` 结构按 group 分别为 `AppearanceSettings` / `EmailSettingsView` / `IntegrationSettings` / `AiSettingsView` / `SocialSettings`。"
 )]
 struct SettingGroupResponse {
-    /// 分组名：`appearance` / `email` / `integrations` / `ai`。
+    /// 分组名：`appearance` / `email` / `integrations` / `ai` / `social`。
     group: String,
     /// 乐观锁版本号，每次更新递增。
     version: i32,
@@ -157,7 +157,7 @@ impl From<AiSettings> for AiSettingsView {
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[schema(
     title = "UpdateSettingGroupRequest",
-    description = "分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations 组全量覆盖（`AppearanceSettings` / `IntegrationSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。"
+    description = "分组设置更新体。`settings` 结构按 group 而不同：appearance / integrations / social 组全量覆盖（`AppearanceSettings` / `IntegrationSettings` / `SocialSettings`）；email / ai 组部分合并（`EmailSettingsPatch` / `AiSettingsPatch`），字段省略或 `null` 保持不变。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`。"
 )]
 struct SettingUpdateRequest {
     /// 乐观锁版本号（先 GET 读取当前 version）。
@@ -236,6 +236,10 @@ fn settings_view(record: &SettingGroupRecord) -> Result<serde_json::Value, ApiEr
             serde_json::to_value(AiSettingsView::from(parsed))
                 .map_err(|_| SettingError::Validation.into())
         }
+        SettingGroup::Social => {
+            let parsed: SocialSettings = parse_payload(record.payload.clone())?;
+            serde_json::to_value(parsed).map_err(|_| SettingError::Validation.into())
+        }
     }
 }
 
@@ -256,7 +260,7 @@ fn to_response(record: SettingGroupRecord) -> Result<SettingGroupResponse, ApiEr
     summary = "读取分组设置",
     description = "读取分组设置，需要 `settings:manage` 权限。email 组的 `smtp_password`、ai 组的 `api_key` 为 write-only，响应只携带 `*_set` 表示是否已设置。",
     security(("cookieAuth" = [])),
-    params(("group" = String, Path, description = "分组名：appearance / email / integrations / ai")),
+    params(("group" = String, Path, description = "分组名：appearance / email / integrations / ai / social")),
     responses(
         (status = 200, description = "分组设置与乐观锁版本", body = SettingGroupResponse),
         (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
@@ -281,9 +285,9 @@ async fn get_setting_group(
     tag = "Admin Settings Groups",
     operation_id = "updateSettingGroup",
     summary = "更新分组设置",
-    description = "更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。",
+    description = "更新分组设置，需要 `settings:manage` 权限。乐观锁：`expected_version` 与当前版本不匹配返回 409 `SETTING_VERSION_CONFLICT`，成功后 `version` 递增。appearance / integrations / social 组为全量覆盖；email / ai 组为部分合并（PATCH 语义）：字段省略或 `null` 保持不变。email 组 `smtp_password`、ai 组 `api_key` 三态：省略或 `null` 保持不变、空字符串清除、非空字符串更新。",
     security(("cookieAuth" = [])),
-    params(("group" = String, Path, description = "分组名：appearance / email / integrations / ai")),
+    params(("group" = String, Path, description = "分组名：appearance / email / integrations / ai / social")),
     request_body(content = SettingUpdateRequest, content_type = "application/json", description = "分组设置更新体"),
     responses(
         (status = 200, description = "返回更新后的分组设置", body = SettingGroupResponse),
@@ -372,6 +376,12 @@ async fn update_setting_group(
                 merged.api_key = secret.filter(|value| !value.is_empty());
             }
             serde_json::to_value(merged).map_err(|_| ApiError::internal())?
+        }
+        SettingGroup::Social => {
+            // 全量覆盖语义（同 appearance）：提交体即新状态，写入前校验。
+            let parsed: SocialSettings = parse_payload(request.settings)?;
+            parsed.validate()?;
+            serde_json::to_value(parsed).map_err(|_| ApiError::internal())?
         }
     };
 

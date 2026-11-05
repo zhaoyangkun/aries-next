@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use common::TestApp;
 
 /// 期望的公开字段集合：与 `PublicSiteResponse` 一一对应，新增内部配置默认不得出现。
-const PUBLIC_SITE_KEYS: [&str; 8] = [
+const PUBLIC_SITE_KEYS: [&str; 9] = [
     "created_at",
     "default_cover_url",
     "icp_text",
@@ -20,6 +20,7 @@ const PUBLIC_SITE_KEYS: [&str; 8] = [
     "site_description",
     "site_name",
     "site_url",
+    "social_links",
 ];
 
 async fn get_public_site(app: &TestApp) -> anyhow::Result<serde_json::Value> {
@@ -64,6 +65,11 @@ async fn public_site_returns_defaults_without_auth() -> anyhow::Result<()> {
         ] {
             ensure!(body[key] == "", "{key} should default to empty: {body}");
         }
+        // 社交链接默认空数组（social 分组 Migration 预插行，payload 缺省 links）。
+        ensure!(
+            body["social_links"].as_array().is_some_and(Vec::is_empty),
+            "social_links should default to empty array: {body}"
+        );
         // 建站时间由 Migration 预插行生成，必须是合法的时间戳字符串。
         let created_at = body["created_at"]
             .as_str()
@@ -133,6 +139,32 @@ async fn public_site_reflects_admin_updates_but_hides_internal_fields() -> anyho
         ] {
             ensure!(body.get(key).is_none(), "internal field leaked: {key}");
         }
+
+        // 社交链接经 admin 写入后出现在公开投影中，且只回公开字段。
+        let social = app
+            .admin_put(
+                "/api/admin/settings/social",
+                serde_json::json!({
+                    "expected_version": 1,
+                    "settings": {
+                        "links": [
+                            { "name": "GitHub", "url": "https://github.com/example", "icon": "github" },
+                            { "name": "微博", "url": "https://weibo.com/example", "icon": null }
+                        ]
+                    }
+                }),
+                &cookie,
+            )
+            .await?;
+        ensure!(social.status == StatusCode::OK, "{}", social.body);
+
+        let body = get_public_site(&app).await?;
+        let links = body["social_links"].as_array().context("social_links")?;
+        ensure!(links.len() == 2, "unexpected social links: {body}");
+        ensure!(links[0]["name"] == "GitHub", "{body}");
+        ensure!(links[0]["url"] == "https://github.com/example", "{body}");
+        ensure!(links[0]["icon"] == "github", "{body}");
+        ensure!(links[1]["icon"].is_null(), "{body}");
         Ok(())
     }
     .await;
@@ -206,11 +238,30 @@ async fn public_site_never_leaks_setting_group_secrets() -> anyhow::Result<()> {
         ] {
             ensure!(body.get(key).is_none(), "setting group field leaked: {key}");
         }
-        // 所有字段均为字符串类型，不夹带结构化内部配置。
-        for value in body.as_object().context("site object")?.values() {
+        // 所有标量字段均为字符串类型，不夹带结构化内部配置（social_links 为公开链接数组，单独校验）。
+        for (key, value) in body.as_object().context("site object")? {
+            if key == "social_links" {
+                continue;
+            }
             ensure!(
                 value.is_string(),
                 "non-string field in public site: {value}"
+            );
+        }
+        // 社交链接只含公开投影字段，绝不带内部配置。
+        for link in body["social_links"]
+            .as_array()
+            .context("social_links array")?
+        {
+            let keys: Vec<&str> = link
+                .as_object()
+                .context("social link object")?
+                .keys()
+                .map(String::as_str)
+                .collect();
+            ensure!(
+                keys.iter().all(|key| ["icon", "name", "url"].contains(key)),
+                "unexpected social link fields: {keys:?}"
             );
         }
         Ok(())

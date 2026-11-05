@@ -108,7 +108,8 @@ async fn site_scenario(app: &TestApp) -> anyhow::Result<()> {
             "police_text",
             "site_description",
             "site_name",
-            "site_url"
+            "site_url",
+            "social_links"
         ],
         "unexpected public site fields: {keys:?}"
     );

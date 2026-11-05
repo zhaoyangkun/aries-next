@@ -33,7 +33,7 @@ export const siteSettingsApi = {
   },
 }
 
-export type SettingGroupName = 'appearance' | 'email' | 'integrations' | 'ai'
+export type SettingGroupName = 'appearance' | 'email' | 'integrations' | 'ai' | 'social'
 
 export type ColorSchemePreference = 'system' | 'light' | 'dark'
 export type ListDensity = 'comfortable' | 'compact'
@@ -71,6 +71,30 @@ export interface EmailSettingsUpdate {
 export interface IntegrationSettings {
   analytics_id: string | null
   site_verification_token: string | null
+}
+
+// 社交链接：公开端 footer 展示的外部站点链接；全量覆盖更新，展示顺序即数组顺序。
+export type SocialIconKey =
+  | 'github'
+  | 'gitee'
+  | 'gitlab'
+  | 'weibo'
+  | 'zhihu'
+  | 'x'
+  | 'bilibili'
+  | 'wechat'
+  | 'qq'
+  | 'telegram'
+  | 'link'
+
+export interface SocialLink {
+  name: string
+  url: string
+  icon: SocialIconKey | (string & {})
+}
+
+export interface SocialSettings {
+  links: SocialLink[]
 }
 
 // AI Provider 协议：anthropic 时 base_url 可省略（Backend 默认 https://api.anthropic.com）。
@@ -200,6 +224,19 @@ export const settingsGroupApi = {
 
   async updateIntegrations(expectedVersion: number, settings: IntegrationSettings) {
     const { data } = await api.put<SettingGroupResponse<IntegrationSettings>>('/api/admin/settings/integrations', {
+      expected_version: expectedVersion,
+      settings,
+    })
+    return data
+  },
+
+  async getSocial() {
+    const { data } = await api.get<SettingGroupResponse<SocialSettings>>('/api/admin/settings/social')
+    return data
+  },
+
+  async updateSocial(expectedVersion: number, settings: SocialSettings) {
+    const { data } = await api.put<SettingGroupResponse<SocialSettings>>('/api/admin/settings/social', {
       expected_version: expectedVersion,
       settings,
     })

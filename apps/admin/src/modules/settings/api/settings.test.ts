@@ -144,6 +144,27 @@ describe('settingsGroupApi', () => {
     })
   })
 
+  it('reads and updates the social group with full-replace semantics', async () => {
+    const social = {
+      group: 'social',
+      version: 1,
+      updated_at: '2026-08-05T12:00:00Z',
+      settings: {
+        links: [{ name: 'GitHub', url: 'https://github.com/example', icon: 'github' }],
+      },
+    }
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: social })
+    const put = vi.spyOn(api, 'put').mockResolvedValue({ data: { ...social, version: 2 } })
+
+    await expect(settingsGroupApi.getSocial()).resolves.toEqual(social)
+    await settingsGroupApi.updateSocial(1, social.settings)
+    expect(get).toHaveBeenCalledWith('/api/admin/settings/social')
+    expect(put).toHaveBeenCalledWith('/api/admin/settings/social', {
+      expected_version: 1,
+      settings: social.settings,
+    })
+  })
+
   it('reads and updates the ai group with api_key three-state semantics', async () => {
     const aiResponse = {
       group: 'ai',

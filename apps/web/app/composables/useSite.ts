@@ -10,6 +10,7 @@ const FALLBACK_SITE: PublicSite = {
   icp_text: '',
   police_text: '',
   default_cover_url: '',
+  social_links: [],
   // 后端暂不可用时没有建站时间，空串让 footer「已运行 X 天」按缺失处理（隐藏）
   created_at: '',
 }
