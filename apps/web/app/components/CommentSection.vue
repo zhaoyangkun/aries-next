@@ -90,9 +90,10 @@ function handleReplied(status: 'pending' | 'approved') {
         </div>
       </div>
 
-      <div v-else-if="!data || data.items.length === 0" class="empty-articles mt-6">
+      <!-- 空态用轻量行内文本：empty-articles 是页面级空态（min-h-64 居中），用于这里会在评论区与 footer 之间制造出大块空白 -->
+      <p v-else-if="!data || data.items.length === 0" class="mt-6 mb-0 text-sm text-muted-foreground">
         还没有评论，来抢沙发～
-      </div>
+      </p>
 
       <template v-else>
         <ol class="mt-8 list-none space-y-6 border-t pt-6">

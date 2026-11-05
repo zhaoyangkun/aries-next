@@ -37,6 +37,8 @@ const { failed: coverFailed, onImageError: onCoverError } = useImageError()
           :to="`/tags/${tag.slug}`"
           class="post-chip"
         >{{ tag.name }}</NuxtLink>
+        <span v-if="article.visit_count > 0" class="post-stat">{{ article.visit_count }} 次阅读</span>
+        <span v-if="article.comment_count > 0" class="post-stat">{{ article.comment_count }} 条评论</span>
       </div>
       <h2 class="post-title">
         <NuxtLink :to="`/articles/${article.slug}`">

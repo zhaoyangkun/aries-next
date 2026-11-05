@@ -147,7 +147,9 @@ useHead(
             <span aria-hidden="true" class="text-border">·</span>
             <span>{{ article.visit_count }} 次阅读</span>
             <span aria-hidden="true" class="text-border">·</span>
-            <span>约 {{ reading.minutes }} 分钟 · {{ reading.count }} 字</span>
+            <span>约 {{ reading.minutes }} 分钟</span>
+            <span aria-hidden="true" class="text-border">·</span>
+            <span>{{ reading.count }} 字</span>
             <template v-if="article.comment_count > 0">
               <span aria-hidden="true" class="text-border">·</span>
               <span>{{ article.comment_count }} 条评论</span>

@@ -318,11 +318,37 @@
   @apply h-full w-full object-cover;
 }
 
-/* 未配置站点封面时的兜底渐变：深灰蓝 → 炭黑的冷调渐变，比纯灰更有质感 */
+/* 未配置站点封面时的兜底背景：冷调渐变 + 品牌色光晕 + 细网格纹理，
+   比纯色渐变更有纵深；光晕做极缓慢漂移，reduced-motion 用户在下方关闭 */
 .home-hero-fallback {
   background:
     radial-gradient(120% 90% at 50% 0%, rgb(64 70 86 / 0.55) 0%, transparent 60%),
     linear-gradient(160deg, #23262e 0%, #1a1c22 52%, #101114 100%);
+}
+
+.home-hero-fallback::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(45% 38% at 76% 22%, color-mix(in oklab, var(--primary) 24%, transparent) 0%, transparent 70%),
+    radial-gradient(55% 45% at 18% 78%, rgb(96 128 190 / 0.14) 0%, transparent 70%),
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 44px 44px, 44px 44px;
+  mask-image: radial-gradient(85% 75% at 50% 42%, black 25%, transparent 78%);
+  animation: hero-glow-drift 26s ease-in-out infinite;
+}
+
+@keyframes hero-glow-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(1.5%, -1%, 0) scale(1.05);
+  }
 }
 
 /* 压暗封面保证白色标题在任何配图上的可读性，两种主题下一致 */
@@ -457,6 +483,11 @@
 
 .badge-locked {
   @apply rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground;
+}
+
+/* 列表卡片尾部的阅读/评论计数：比徽标更弱的灰字，不抢视觉 */
+.post-stat {
+  @apply text-xs text-muted-foreground/70;
 }
 
 .post-title {
@@ -693,7 +724,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site-footer-days-dot {
+  .site-footer-days-dot,
+  .home-hero-fallback::after {
     animation: none;
   }
 
