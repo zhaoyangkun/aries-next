@@ -3133,6 +3133,11 @@ export interface components {
         PublicArticleListItem: {
             /** Format: int64 */
             category_id?: number | null;
+            /**
+             * Format: int64
+             * @description 评论数（已发布评论的实时计数）。
+             */
+            comment_count: number;
             cover_url?: string | null;
             /** Format: int64 */
             id: number;
@@ -3146,6 +3151,11 @@ export interface components {
             summary: string;
             tag_ids: number[];
             title: string;
+            /**
+             * Format: int64
+             * @description 浏览量（列表与详情同一数据源，feed 卡片展示用）。
+             */
+            visit_count: number;
         };
         PublicArticlePageResponse: {
             items: components["schemas"]["PublicArticleListItem"][];

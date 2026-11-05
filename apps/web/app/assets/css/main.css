@@ -456,6 +456,19 @@
   @apply grid min-h-64 place-items-center text-sm text-muted-foreground;
 }
 
+/* 归档页：月份标题行的占比条（按全站最大月文章数归一化） */
+.archive-month {
+  @apply m-0 flex items-center gap-4 text-sm font-medium text-muted-foreground;
+}
+
+.archive-bar-track {
+  @apply h-1.5 flex-1 overflow-hidden rounded-full bg-muted;
+}
+
+.archive-bar {
+  @apply block h-full rounded-full bg-primary/60;
+}
+
 /* 编辑排版风文章条目：无卡片包裹，靠留白与分隔线分层 */
 .post-item {
   @apply flex flex-col gap-4 py-8 sm:flex-row sm:gap-8;

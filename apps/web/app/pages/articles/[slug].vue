@@ -99,10 +99,57 @@ useHead(
       datePublished: a.published_at ?? undefined,
       dateModified: a.updated_at,
       keywords: a.seo_keywords.join(', '),
+      // 个人博客以站点为作者/发布者实体；logo 可解析为绝对地址时补上 publisher.logo
+      author: {
+        '@type': 'Organization',
+        name: site.value.site_name,
+        url: siteUrl.value || undefined,
+      },
+      publisher: {
+        '@type': 'Organization',
+        name: site.value.site_name,
+        logo: toAbsoluteUrl(site.value.logo_url, siteUrl.value)
+          ? {
+              '@type': 'ImageObject',
+              url: toAbsoluteUrl(site.value.logo_url, siteUrl.value),
+            }
+          : undefined,
+      },
       mainEntityOfPage: siteUrl.value
         ? { '@type': 'WebPage', '@id': `${siteUrl.value}/articles/${a.slug}` }
         : undefined,
     }
+    // 面包屑结构化数据：帮助搜索引擎理解站点层级；需要绝对地址，site_url 未配置时跳过
+    const breadcrumbLd = siteUrl.value
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: '首页',
+              item: `${siteUrl.value}/`,
+            },
+            ...(a.category
+              ? [
+                  {
+                    '@type': 'ListItem',
+                    position: 2,
+                    name: a.category.name,
+                    item: `${siteUrl.value}/categories/${a.category.slug}`,
+                  },
+                ]
+              : []),
+            {
+              '@type': 'ListItem',
+              position: a.category ? 3 : 2,
+              name: a.title,
+              item: `${siteUrl.value}/articles/${a.slug}`,
+            },
+          ],
+        }
+      : undefined
     return {
       meta:
         a.seo_keywords.length > 0
@@ -113,6 +160,15 @@ useHead(
           type: 'application/ld+json',
           innerHTML: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
         },
+        // 面包屑数据仅在 site_url 可生成绝对地址时输出；保持字面量类型（unhead Script 推断）
+        ...(breadcrumbLd
+          ? [
+              {
+                type: 'application/ld+json' as const,
+                innerHTML: JSON.stringify(breadcrumbLd).replace(/</g, '\\u003c'),
+              },
+            ]
+          : []),
       ],
     }
   }),

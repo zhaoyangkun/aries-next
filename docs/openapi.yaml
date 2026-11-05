@@ -7954,12 +7954,18 @@ components:
       - tag_ids
       - is_pinned
       - password_protected
+      - visit_count
+      - comment_count
       properties:
         category_id:
           type:
           - integer
           - 'null'
           format: int64
+        comment_count:
+          type: integer
+          format: int64
+          description: 评论数（已发布评论的实时计数）。
         cover_url:
           type:
           - string
@@ -7992,6 +7998,10 @@ components:
             format: int64
         title:
           type: string
+        visit_count:
+          type: integer
+          format: int64
+          description: 浏览量（列表与详情同一数据源，feed 卡片展示用）。
     PublicArticlePageResponse:
       type: object
       required:

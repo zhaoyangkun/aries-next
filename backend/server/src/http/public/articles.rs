@@ -75,6 +75,10 @@ pub struct PublicArticleListItem {
     tag_ids: Vec<i64>,
     is_pinned: bool,
     password_protected: bool,
+    /// 浏览量（列表与详情同一数据源，feed 卡片展示用）。
+    visit_count: i64,
+    /// 评论数（已发布评论的实时计数）。
+    comment_count: i64,
     /// 搜索命中正文的纯文本片段（仅搜索接口在摘要未覆盖命中时返回；其他列表接口不出现该字段）。
     #[serde(skip_serializing_if = "Option::is_none")]
     matched_excerpt: Option<String>,
@@ -94,6 +98,8 @@ impl From<&Article> for PublicArticleListItem {
             tag_ids: article.tag_ids.clone(),
             is_pinned: article.is_pinned,
             password_protected: article.password_protected,
+            visit_count: article.visit_count,
+            comment_count: article.comment_count,
             matched_excerpt: None,
             published_at: article.published_at,
         }

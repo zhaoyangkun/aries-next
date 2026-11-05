@@ -17,6 +17,15 @@ const years = computed(() => {
   return Array.from(map.entries()).map(([year, months]) => ({ year, months }))
 })
 
+// 月度条按全站最大月文章数归一化；年份总数即该年各月之和
+const maxMonthCount = computed(() =>
+  Math.max(1, ...years.value.flatMap(group => group.months.map(month => month.count))),
+)
+
+function yearCount(group: { months: PublicArchiveMonth[] }): number {
+  return group.months.reduce((sum, month) => sum + month.count, 0)
+}
+
 usePageSeo({
   title: '归档',
   description: '按时间浏览全部文章',
@@ -32,10 +41,19 @@ useCanonical('/archives')
 
   <div v-else class="mt-10 space-y-12">
     <section v-for="group in years" :key="group.year" :aria-label="`${group.year} 年`">
-      <h2 class="m-0 text-2xl font-semibold">{{ group.year }}</h2>
+      <h2 class="m-0 flex items-baseline gap-3 text-2xl font-semibold">
+        {{ group.year }}
+        <span class="text-sm font-normal text-muted-foreground">共 {{ yearCount(group) }} 篇</span>
+      </h2>
       <div v-for="month in group.months" :key="month.month" class="mt-6">
-        <h3 class="m-0 text-sm font-medium text-muted-foreground">
-          {{ month.year }} 年 {{ month.month }} 月（{{ month.count }} 篇）
+        <h3 class="archive-month">
+          <span class="shrink-0">{{ month.year }} 年 {{ month.month }} 月（{{ month.count }} 篇）</span>
+          <span class="archive-bar-track" aria-hidden="true">
+            <span
+              class="archive-bar"
+              :style="{ width: `${(month.count / maxMonthCount) * 100}%` }"
+            />
+          </span>
         </h3>
         <ul class="mt-3 space-y-2 border-l pl-5">
           <li v-for="item in month.articles" :key="item.slug" class="list-none">
