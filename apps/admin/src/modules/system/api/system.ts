@@ -5,10 +5,16 @@ export interface CpuMetrics {
   percent: number
   /** 每核使用率。 */
   per_core: number[]
+  /** CPU 型号名（拿不到为 null）。 */
+  brand: string | null
+  /** 当前频率（各核 MHz 平均值；拿不到为 null）。 */
+  frequency_mhz: number | null
 }
 
 export interface MemoryMetrics {
   used_bytes: number
+  /** 可用内存（不触发交换的前提下可立即分配的量）。 */
+  available_bytes: number
   total_bytes: number
   /** 服务端预计算的使用率（0–100）。 */
   percent: number
@@ -79,6 +85,13 @@ export interface PgMetrics {
   active_connections: number
 }
 
+export interface TempSensor {
+  /** 传感器标签（如 `coretemp Package id 0`）。 */
+  label: string
+  /** 摄氏温度。 */
+  temperature_celsius: number
+}
+
 /** 系统指标快照（SSE 推送的 data 形状与本结构一致）。 */
 export interface SystemMetrics {
   /** 采样时刻，RFC 3339。 */
@@ -97,6 +110,8 @@ export interface SystemMetrics {
   server: ServerMetrics
   /** PostgreSQL 指标（查询失败时为 null）。 */
   pg: PgMetrics | null
+  /** 温度传感器读数（无传感器环境为空数组）。 */
+  sensors: TempSensor[]
 }
 
 export interface HistoryBucket {
@@ -138,12 +153,13 @@ export const systemApi = {
   },
 
   /**
-   * 资源占用 Top 进程（按 CPU 降序）；服务端 15 秒缓存。
+   * 资源占用 Top 进程；服务端 15 秒缓存。
+   * sort 缺省按 CPU 降序，`memory` 按 RSS 降序；非法值 400。
    * 首次调用所有进程 CPU 为 0（差值语义），约 15 秒后第二次调用即准确。
    */
-  async processes(limit = 10): Promise<TopProcessesResponse> {
+  async processes(limit = 10, sort: 'cpu' | 'memory' = 'cpu'): Promise<TopProcessesResponse> {
     const { data } = await api.get<TopProcessesResponse>('/api/admin/system/processes', {
-      params: { limit },
+      params: { limit, sort },
     })
     return data
   },

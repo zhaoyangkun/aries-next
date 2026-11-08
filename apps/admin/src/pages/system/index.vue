@@ -8,7 +8,7 @@ import { systemApi } from '@/modules/system/api/system'
 import type { HistoryBucket, ProcessMetrics, SystemMetrics } from '@/modules/system/api/system'
 import GaugeRing from '@/modules/system/components/GaugeRing.vue'
 import Sparkline from '@/modules/system/components/Sparkline.vue'
-import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, toneBarClass, toneSolidClass, toneTextClass, usageTone } from '@/modules/system/utils/format'
+import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, toneSolidClass, toneTextClass, usageTone } from '@/modules/system/utils/format'
 import { getApiError } from '@/shared/api/client'
 
 // 实时序列保留点数：5s × 120 = 最近 10 分钟。
@@ -26,6 +26,12 @@ const connectionLabel = computed(() => {
 
 const metrics = ref<SystemMetrics | null>(null)
 const error = ref('')
+
+// 最近一帧的本地时间（页面右上角显示）。
+const lastUpdated = computed(() => {
+  const ts = metrics.value?.ts
+  return ts ? dayjs(ts).format('HH:mm:ss') : ''
+})
 
 // 实时曲线序列（SSE 推送驱动追加）。
 const cpuSeries = ref<number[]>([])
@@ -132,14 +138,33 @@ function diskPercent(disk: { used_bytes: number, total_bytes: number }) {
   return Math.min(100, (disk.used_bytes / disk.total_bytes) * 100)
 }
 
+// 主频格式化：MHz → GHz（>=1000）或 MHz。
+function formatFrequency(mhz: number | null): string {
+  if (mhz == null || mhz <= 0)
+    return '-'
+  if (mhz >= 1000)
+    return `${(mhz / 1000).toFixed(2)} GHz`
+  return `${mhz} MHz`
+}
+
+// 温度配色：>=90℃ 告警、>=75℃ 注意。
+function tempClass(celsius: number): string {
+  if (celsius >= 90)
+    return 'text-destructive'
+  if (celsius >= 75)
+    return 'text-amber-600 dark:text-amber-400'
+  return ''
+}
+
 // 进程 Top：服务端 15 秒缓存，前端 10 秒轮询跟随（权限/失败静默，不打扰主指标）。
 const processes = ref<ProcessMetrics[]>([])
 const processesLoading = ref(false)
+const processSort = ref<'cpu' | 'memory'>('cpu')
 
 async function loadProcesses() {
   processesLoading.value = true
   try {
-    const top = await systemApi.processes(10)
+    const top = await systemApi.processes(10, processSort.value)
     processes.value = top.processes
   }
   catch {
@@ -148,6 +173,11 @@ async function loadProcesses() {
   finally {
     processesLoading.value = false
   }
+}
+
+function switchProcessSort(sort: number | string) {
+  processSort.value = sort === 'memory' ? 'memory' : 'cpu'
+  loadProcesses()
 }
 
 let processesTimer: ReturnType<typeof setInterval> | undefined
@@ -212,17 +242,26 @@ onBeforeUnmount(() => {
           实时资源
         </h2>
         <Separator class="flex-1" />
-        <span class="text-xs text-muted-foreground">SSE 每 5 秒推送</span>
+        <span class="text-xs text-muted-foreground">
+          SSE 每 5 秒推送<template v-if="lastUpdated"> · 更新于 {{ lastUpdated }}</template>
+        </span>
       </div>
 
       <div class="grid gap-4 lg:grid-cols-3">
         <!-- CPU -->
         <Card>
-          <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-            <CpuIcon class="size-4 text-muted-foreground" />
-            <CardTitle class="text-sm font-medium">处理器</CardTitle>
-            <Badge variant="outline" class="ml-auto h-5 px-1.5 text-xs font-normal">
-              {{ metrics ? `${metrics.cpu.per_core.length} 核` : '-' }}
+          <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+            <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CpuIcon class="size-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm font-medium">处理器</CardTitle>
+              <p class="truncate text-xs text-muted-foreground">
+                {{ metrics?.cpu.brand || '型号未知' }}
+              </p>
+            </div>
+            <Badge variant="outline" class="h-5 shrink-0 px-1.5 text-xs font-normal tabular-nums">
+              {{ metrics ? `${metrics.cpu.per_core.length} 核 · ${formatFrequency(metrics.cpu.frequency_mhz)}` : '-' }}
             </Badge>
           </CardHeader>
           <CardContent class="space-y-3">
@@ -266,10 +305,17 @@ onBeforeUnmount(() => {
 
         <!-- 内存 -->
         <Card>
-          <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-            <MemoryStickIcon class="size-4 text-muted-foreground" />
-            <CardTitle class="text-sm font-medium">内存</CardTitle>
-            <Badge variant="outline" class="ml-auto h-5 px-1.5 text-xs font-normal tabular-nums">
+          <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+            <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <MemoryStickIcon class="size-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm font-medium">内存</CardTitle>
+              <p class="truncate text-xs text-muted-foreground">
+                物理内存 + Swap
+              </p>
+            </div>
+            <Badge variant="outline" class="h-5 shrink-0 px-1.5 text-xs font-normal tabular-nums">
               {{ metrics ? formatBytes(metrics.memory.total_bytes) : '-' }}
             </Badge>
           </CardHeader>
@@ -297,6 +343,14 @@ onBeforeUnmount(() => {
                     <span class="text-muted-foreground">/ {{ metrics ? formatBytes(metrics.memory.total_bytes) : '-' }}</span>
                   </p>
                 </div>
+                <div>
+                  <p class="text-[10px] text-muted-foreground">
+                    可用
+                  </p>
+                  <p class="font-medium tabular-nums">
+                    {{ metrics ? formatBytes(metrics.memory.available_bytes) : '-' }}
+                  </p>
+                </div>
                 <div v-if="metrics && metrics.swap.total_bytes > 0">
                   <p class="text-[10px] text-muted-foreground">
                     Swap
@@ -319,10 +373,17 @@ onBeforeUnmount(() => {
 
         <!-- 网络 -->
         <Card>
-          <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-            <NetworkIcon class="size-4 text-muted-foreground" />
-            <CardTitle class="text-sm font-medium">网络 IO</CardTitle>
-            <Badge variant="outline" class="ml-auto h-5 px-1.5 text-xs font-normal">
+          <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+            <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <NetworkIcon class="size-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm font-medium">网络 IO</CardTitle>
+              <p class="truncate text-xs text-muted-foreground">
+                全部网卡合计
+              </p>
+            </div>
+            <Badge variant="outline" class="h-5 shrink-0 px-1.5 text-xs font-normal">
               {{ metrics?.network.interfaces.length ?? 0 }} 个接口
             </Badge>
           </CardHeader>
@@ -379,12 +440,16 @@ onBeforeUnmount(() => {
       <div class="grid gap-4 lg:grid-cols-3">
         <!-- 磁盘 -->
         <Card class="lg:col-span-2">
-          <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-            <HardDriveIcon class="size-4 text-muted-foreground" />
-            <CardTitle class="text-sm font-medium">磁盘占用</CardTitle>
-            <CardDescription class="ml-auto text-xs">
-              {{ metrics ? `${metrics.disks.length} 个挂载点` : '' }}
-            </CardDescription>
+          <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+            <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <HardDriveIcon class="size-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm font-medium">磁盘占用</CardTitle>
+              <p class="truncate text-xs text-muted-foreground">
+                {{ metrics ? `${metrics.disks.length} 个挂载点` : '' }}
+              </p>
+            </div>
           </CardHeader>
           <CardContent class="space-y-4">
             <div v-for="disk in metrics?.disks ?? []" :key="disk.mount_point" class="space-y-1.5">
@@ -400,11 +465,8 @@ onBeforeUnmount(() => {
                 </span>
               </div>
               <div class="flex items-center gap-3">
-                <Progress
-                  :model-value="diskPercent(disk)"
-                  class="h-2 flex-1"
-                  :class="toneBarClass[usageTone(diskPercent(disk))]"
-                />
+                <!-- 主题色进度条：百分比数字用阈值色提示压力。 -->
+                <Progress :model-value="diskPercent(disk)" class="h-2 flex-1" />
                 <span
                   class="w-12 text-right text-xs font-medium tabular-nums"
                   :class="toneTextClass[usageTone(diskPercent(disk))]"
@@ -421,15 +483,18 @@ onBeforeUnmount(() => {
 
         <!-- 系统与服务信息 -->
         <Card>
-          <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-            <ServerIcon class="size-4 text-muted-foreground" />
-            <CardTitle class="text-sm font-medium">系统与服务</CardTitle>
+          <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+            <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <ServerIcon class="size-4" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <CardTitle class="text-sm font-medium">系统与服务</CardTitle>
+              <p class="truncate text-xs text-muted-foreground">
+                {{ metrics?.host_name || '主机信息' }}
+              </p>
+            </div>
           </CardHeader>
           <CardContent class="space-y-2 text-sm">
-            <div class="flex justify-between gap-2">
-              <span class="shrink-0 text-muted-foreground">主机名</span>
-              <span class="truncate">{{ metrics?.host_name ?? '-' }}</span>
-            </div>
             <div class="flex justify-between gap-2">
               <span class="shrink-0 text-muted-foreground">系统</span>
               <span class="truncate text-right">{{ metrics?.os_version ?? '-' }}</span>
@@ -459,6 +524,20 @@ onBeforeUnmount(() => {
                 {{ loadStatus.label }}（{{ loadStatus.ratio.toFixed(2) }}×核数）
               </span>
             </p>
+            <!-- 温度传感器：无传感器环境不渲染。 -->
+            <template v-if="metrics && metrics.sensors.length > 0">
+              <Separator class="my-2" />
+              <div
+                v-for="sensor in metrics.sensors.slice(0, 3)"
+                :key="sensor.label"
+                class="flex justify-between gap-2"
+              >
+                <span class="truncate text-muted-foreground" :title="sensor.label">{{ sensor.label }}</span>
+                <span class="shrink-0 tabular-nums" :class="tempClass(sensor.temperature_celsius)">
+                  {{ sensor.temperature_celsius.toFixed(1) }} ℃
+                </span>
+              </div>
+            </template>
             <Separator class="my-2" />
             <div class="flex justify-between gap-2">
               <span class="shrink-0 text-muted-foreground">服务 RSS</span>
@@ -486,14 +565,27 @@ onBeforeUnmount(() => {
           进程
         </h2>
         <Separator class="flex-1" />
-        <span class="text-xs text-muted-foreground">按 CPU 降序 · 每 10 秒自动刷新</span>
+        <span class="text-xs text-muted-foreground">每 10 秒自动刷新</span>
       </div>
 
-      <!-- 进程 Top：10s 轮询（服务端 15s 缓存），按 CPU 降序。 -->
+      <!-- 进程 Top：10s 轮询（服务端 15s 缓存），支持按 CPU / 内存排序。 -->
       <Card>
-        <CardHeader class="flex-row items-center gap-2 space-y-0 pb-3">
-          <CpuIcon class="size-4 text-muted-foreground" />
-          <CardTitle class="text-sm font-medium">资源占用 Top 10</CardTitle>
+        <CardHeader class="flex-row items-center gap-3 space-y-0 pb-3">
+          <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <CpuIcon class="size-4" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <CardTitle class="text-sm font-medium">资源占用 Top 10</CardTitle>
+            <p class="truncate text-xs text-muted-foreground">
+              {{ processSort === 'cpu' ? '按 CPU 使用率降序' : '按内存占用降序' }}
+            </p>
+          </div>
+          <Tabs :model-value="processSort" class="ml-auto shrink-0" @update:model-value="switchProcessSort">
+            <TabsList class="h-7 w-full lg:w-auto">
+              <TabsTrigger class="flex-1 px-2 text-xs lg:flex-none" value="cpu">按 CPU</TabsTrigger>
+              <TabsTrigger class="flex-1 px-2 text-xs lg:flex-none" value="memory">按内存</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardHeader>
         <CardContent>
           <div v-if="processes.length === 0" class="py-6 text-center text-sm text-muted-foreground">

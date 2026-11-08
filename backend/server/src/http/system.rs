@@ -60,21 +60,38 @@ struct SystemMetricsResponse {
     server: ServerMetrics,
     /// PostgreSQL 侧指标（查询失败时为 null，不影响其他字段）。
     pg: Option<PgMetrics>,
+    /// 温度传感器读数（无传感器环境为空数组）。
+    sensors: Vec<TempSensor>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-#[schema(title = "CpuMetrics", description = "CPU 使用率（0–100）。")]
+#[schema(title = "TempSensor", description = "温度传感器读数。")]
+struct TempSensor {
+    /// 传感器标签（如 `coretemp Package id 0`）。
+    label: String,
+    /// 摄氏温度。
+    temperature_celsius: f32,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "CpuMetrics", description = "CPU 使用率（0–100）与型号信息。")]
 struct CpuMetrics {
     /// 全局使用率。
     percent: f32,
     /// 每核使用率（顺序与系统枚举一致）。
     per_core: Vec<f32>,
+    /// CPU 型号名（拿不到为 null）。
+    brand: Option<String>,
+    /// 当前频率（各核 MHz 平均值；拿不到为 null）。
+    frequency_mhz: Option<u64>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[schema(title = "MemoryMetrics", description = "物理内存占用。")]
 struct MemoryMetrics {
     used_bytes: u64,
+    /// 可用内存（不触发交换的前提下可立即分配的量）。
+    available_bytes: u64,
     total_bytes: u64,
     /// 使用率（0–100，由服务端算好，前端直接展示）。
     percent: f32,
@@ -182,9 +199,12 @@ fn snapshot_response(snapshot: SystemSnapshot) -> SystemMetricsResponse {
         cpu: CpuMetrics {
             percent: snapshot.cpu_percent,
             per_core: snapshot.per_core_percent,
+            brand: snapshot.cpu_brand,
+            frequency_mhz: snapshot.cpu_frequency_mhz,
         },
         memory: MemoryMetrics {
             used_bytes: snapshot.memory_used_bytes,
+            available_bytes: snapshot.memory_available_bytes,
             total_bytes: snapshot.memory_total_bytes,
             percent: memory_percent,
         },
@@ -228,6 +248,14 @@ fn snapshot_response(snapshot: SystemSnapshot) -> SystemMetricsResponse {
             database_size_bytes: pg.database_size_bytes,
             active_connections: pg.active_connections,
         }),
+        sensors: snapshot
+            .sensors
+            .iter()
+            .map(|sensor| TempSensor {
+                label: sensor.label.clone(),
+                temperature_celsius: sensor.celsius,
+            })
+            .collect(),
     }
 }
 
@@ -366,6 +394,8 @@ fn history_bucket(point: MetricsSamplePoint) -> HistoryBucket {
 pub(crate) struct TopProcessesParams {
     /// 返回条数：默认 10，范围 1–50（越界钳位）。
     limit: Option<u32>,
+    /// 排序维度：`cpu`（默认，按 CPU 降序）或 `memory`（按 RSS 降序）；非法值 400。
+    sort: Option<String>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -416,6 +446,7 @@ impl From<ProcessSnapshot> for ProcessMetrics {
     params(TopProcessesParams),
     responses(
         (status = 200, description = "Top 进程列表", body = TopProcessesResponse),
+        (status = 400, description = "sort 非法（INVALID_PROCESS_SORT）", body = crate::openapi::ErrorResponse),
         (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
         (status = 403, description = "无 settings:manage 权限", body = crate::openapi::ErrorResponse),
     )
@@ -427,7 +458,17 @@ async fn get_top_processes(
 ) -> Result<Json<TopProcessesResponse>, ApiError> {
     current.require(Permission::ManageSettings)?;
     let limit = params.limit.unwrap_or(10).clamp(1, 50) as usize;
-    let (ts, processes) = state.metrics.top_processes(limit).await;
+    let sort = match params.sort.as_deref() {
+        None | Some("cpu") => crate::metrics::ProcessSort::Cpu,
+        Some("memory") => crate::metrics::ProcessSort::Memory,
+        Some(_) => {
+            return Err(ApiError::bad_request(
+                "INVALID_PROCESS_SORT",
+                "sort must be 'cpu' or 'memory'",
+            ));
+        }
+    };
+    let (ts, processes) = state.metrics.top_processes(sort, limit).await;
     Ok(Json(TopProcessesResponse {
         ts: ts.format(&Rfc3339).unwrap_or_else(|_| String::new()),
         processes: processes.into_iter().map(Into::into).collect(),

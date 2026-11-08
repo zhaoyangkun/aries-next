@@ -65,6 +65,15 @@ pub struct ProcessSnapshot {
     pub memory_bytes: u64,
 }
 
+/// 温度传感器读数（主板 / CPU 温度等；容器与部分虚拟机没有传感器时为空表）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct TempSensorSnapshot {
+    /// 传感器标签（如 "coretemp Package id 0"）。
+    pub label: String,
+    /// 摄氏温度。
+    pub celsius: f32,
+}
+
 /// 系统指标单次快照（纯数据；响应 DTO 与 SSE 事件在 `http::system` 定义）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct SystemSnapshot {
@@ -74,8 +83,14 @@ pub struct SystemSnapshot {
     pub cpu_percent: f32,
     /// 每核使用率（顺序与系统枚举一致），供前端画核占用格。
     pub per_core_percent: Vec<f32>,
+    /// CPU 型号名（多核相同，取首核；拿不到为 None）。
+    pub cpu_brand: Option<String>,
+    /// 当前频率（各核 MHz 的平均值，取整；拿不到为 None）。
+    pub cpu_frequency_mhz: Option<u64>,
     /// 已用内存（不含 Page Cache 等可回收部分，与 free 口径一致）。
     pub memory_used_bytes: u64,
+    /// 可用内存（不触发交换的前提下可立即分配的量）。
+    pub memory_available_bytes: u64,
     /// 物理内存总量。
     pub memory_total_bytes: u64,
     pub swap_used_bytes: u64,
@@ -96,6 +111,8 @@ pub struct SystemSnapshot {
     pub load_avg_fifteen: f64,
     /// 系统进程总数。
     pub process_count: usize,
+    /// 温度传感器读数（无传感器环境为空表）。
+    pub sensors: Vec<TempSensorSnapshot>,
     /// 主机已运行秒数（系统级 uptime）。
     pub uptime_seconds: u64,
     pub host_name: Option<String>,
@@ -108,6 +125,15 @@ pub struct SystemSnapshot {
     pub pg: Option<PgSnapshot>,
 }
 
+/// 进程 Top 排序维度。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessSort {
+    /// 按 CPU 使用率降序。
+    Cpu,
+    /// 按 RSS 降序。
+    Memory,
+}
+
 /// 系统指标采集器：持有 `sysinfo` 刷新状态与 PostgreSQL 快照缓存。
 ///
 /// `System` / `Networks` 的 refresh 都是 `&mut self`，并发采集用 Mutex 串行化；
@@ -116,6 +142,8 @@ pub struct MetricsCollector {
     system: Mutex<System>,
     networks: Mutex<Networks>,
     disks: Disks,
+    /// 温度传感器；随 collect 周期刷新（读取 hwmon 开销小）。
+    components: Mutex<sysinfo::Components>,
     server_pid: Pid,
     server_started_at: Instant,
     pg_pool: PgPool,
@@ -124,6 +152,7 @@ pub struct MetricsCollector {
     pg_cache: Mutex<Option<(Instant, PgSnapshot)>>,
     /// 进程 Top 缓存：全量 refresh_processes 需要遍历进程表，开销明显大于
     /// 其他采样，15s TTL 足够排查场景使用，且不走 SSE（前端低频轮询）。
+    /// 缓存全量快照（不按序截断），查询时按维度排序取前 N。
     process_cache: Mutex<Option<(Instant, Vec<ProcessSnapshot>)>>,
 }
 
@@ -131,8 +160,6 @@ pub struct MetricsCollector {
 const PG_CACHE_TTL: Duration = Duration::from_secs(30);
 /// 进程 Top 缓存有效期。
 const PROCESS_CACHE_TTL: Duration = Duration::from_secs(15);
-/// 进程 Top 缓存容量：缓存按 CPU 排序的前 50 个，足以服务任何 limit 查询。
-const PROCESS_CACHE_TOP: usize = 50;
 
 impl MetricsCollector {
     /// 新建采集器并做一次预热 refresh：sysinfo 的 CPU 使用率与网络速率基于
@@ -147,10 +174,13 @@ impl MetricsCollector {
         system.refresh_cpu_usage();
         let networks =
             Networks::new_with_refreshed_list().expect("sysinfo networks initialization failed");
+        let components = sysinfo::Components::new_with_refreshed_list()
+            .expect("sysinfo components initialization failed");
         Self {
             system: Mutex::new(system),
             networks: Mutex::new(networks),
             disks: Disks::new_with_refreshed_list().expect("sysinfo disks initialization failed"),
+            components: Mutex::new(components),
             server_pid: Pid::from_u32(std::process::id()),
             server_started_at: Instant::now(),
             pg_pool,
@@ -162,7 +192,16 @@ impl MetricsCollector {
     /// 采集一次完整快照：refresh CPU / 内存 / 网络（差值语义），磁盘与
     /// 系统静态信息低频变化，随进程启动时刷新即可。
     pub async fn collect(&self) -> SystemSnapshot {
-        let (cpu_percent, per_core_percent, memory, swap, process_count, server_rss_bytes) = {
+        let (
+            cpu_percent,
+            per_core_percent,
+            cpu_brand,
+            cpu_frequency_mhz,
+            memory,
+            swap,
+            process_count,
+            server_rss_bytes,
+        ) = {
             let mut system = self.system.lock().unwrap_or_else(|e| e.into_inner());
             system.refresh_cpu_usage();
             system.refresh_memory();
@@ -174,7 +213,15 @@ impl MetricsCollector {
                 ProcessRefreshKind::nothing().with_memory(),
             );
             let cpu_percent = system.global_cpu_usage();
-            let per_core_percent = system.cpus().iter().map(|cpu| cpu.usage()).collect();
+            let cpus = system.cpus();
+            let per_core_percent = cpus.iter().map(|cpu| cpu.usage()).collect();
+            // 品牌名多核一致，取首核；频率取各核平均（核间动态调频时更平稳）。
+            let cpu_brand = cpus
+                .first()
+                .map(|cpu| cpu.brand().trim().to_owned())
+                .filter(|brand| !brand.is_empty());
+            let cpu_frequency_mhz = (!cpus.is_empty())
+                .then(|| cpus.iter().map(|cpu| cpu.frequency()).sum::<u64>() / cpus.len() as u64);
             let server_rss_bytes = system
                 .process(self.server_pid)
                 .map(|process| process.memory())
@@ -182,7 +229,13 @@ impl MetricsCollector {
             (
                 cpu_percent,
                 per_core_percent,
-                (system.used_memory(), system.total_memory()),
+                cpu_brand,
+                cpu_frequency_mhz,
+                (
+                    system.used_memory(),
+                    system.available_memory(),
+                    system.total_memory(),
+                ),
                 (system.used_swap(), system.total_swap()),
                 system.processes().len(),
                 server_rss_bytes,
@@ -222,8 +275,11 @@ impl MetricsCollector {
             ts: OffsetDateTime::now_utc(),
             cpu_percent,
             per_core_percent,
+            cpu_brand,
+            cpu_frequency_mhz,
             memory_used_bytes: memory.0,
-            memory_total_bytes: memory.1,
+            memory_available_bytes: memory.1,
+            memory_total_bytes: memory.2,
             swap_used_bytes: swap.0,
             swap_total_bytes: swap.1,
             disks: self
@@ -246,6 +302,7 @@ impl MetricsCollector {
             load_avg_five: load.five,
             load_avg_fifteen: load.fifteen,
             process_count,
+            sensors: self.temp_sensors(),
             uptime_seconds: System::uptime().unwrap_or(0),
             host_name: System::host_name().ok(),
             os_version: System::long_os_version().ok(),
@@ -256,44 +313,79 @@ impl MetricsCollector {
         }
     }
 
+    /// 温度传感器读数：随 collect 周期刷新（读取 hwmon/sysfs，开销小）；
+    /// 无传感器的环境（多数容器/虚拟机）返回空表。
+    fn temp_sensors(&self) -> Vec<TempSensorSnapshot> {
+        let mut components = self.components.lock().unwrap_or_else(|e| e.into_inner());
+        components.refresh(true);
+        components
+            .iter()
+            .filter_map(|component| {
+                component.temperature().map(|celsius| TempSensorSnapshot {
+                    label: component.label().to_owned(),
+                    celsius,
+                })
+            })
+            .collect()
+    }
+
     /// 资源占用 Top 进程（按 CPU 降序，取前 `limit` 个；15s 缓存）。
     ///
     /// 全量 refresh_processes 需遍历进程表， deliberately 独立于 5s 快照循环：
     /// SSE 不携带本数据，由前端按需低频轮询。首次调用因无上次 CPU 采样点，
     /// 所有进程的 cpu 分量会为 0（sysinfo 差值语义），属预期行为。
-    pub async fn top_processes(&self, limit: usize) -> (OffsetDateTime, Vec<ProcessSnapshot>) {
-        if let Some((fetched_at, processes)) = self.process_cache.lock().unwrap().as_ref() {
-            if fetched_at.elapsed() < PROCESS_CACHE_TTL {
-                return (
-                    OffsetDateTime::now_utc(),
-                    processes.iter().take(limit).cloned().collect(),
-                );
+    /// 资源占用 Top 进程（按 `sort` 维度降序，取前 `limit` 个；15s 缓存全量快照）。
+    ///
+    /// 全量 refresh_processes 需遍历进程表， deliberately 独立于 5s 快照循环：
+    /// SSE 不携带本数据，由前端按需低频轮询。首次调用因无上次 CPU 采样点，
+    /// 所有进程的 cpu 分量会为 0（sysinfo 差值语义），属预期行为。
+    pub async fn top_processes(
+        &self,
+        sort: ProcessSort,
+        limit: usize,
+    ) -> (OffsetDateTime, Vec<ProcessSnapshot>) {
+        let cached = {
+            let cache = self.process_cache.lock().unwrap();
+            cache
+                .as_ref()
+                .filter(|(fetched_at, _)| fetched_at.elapsed() < PROCESS_CACHE_TTL)
+                .map(|(_, processes)| processes.clone())
+        };
+        let processes = match cached {
+            Some(processes) => processes,
+            None => {
+                let kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
+                let fresh = {
+                    let mut system = self.system.lock().unwrap_or_else(|e| e.into_inner());
+                    system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, kind);
+                    system
+                        .processes()
+                        .values()
+                        .map(|process| ProcessSnapshot {
+                            pid: process.pid().as_u32(),
+                            name: process.name().to_string_lossy().into_owned(),
+                            cpu_percent: process.cpu_usage(),
+                            memory_bytes: process.memory(),
+                        })
+                        .collect::<Vec<_>>()
+                };
+                *self.process_cache.lock().unwrap() = Some((Instant::now(), fresh.clone()));
+                fresh
             }
-        }
-        let kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
-        let processes = {
-            let mut system = self.system.lock().unwrap_or_else(|e| e.into_inner());
-            system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, kind);
-            system
-                .processes()
-                .values()
-                .map(|process| ProcessSnapshot {
-                    pid: process.pid().as_u32(),
-                    name: process.name().to_string_lossy().into_owned(),
-                    cpu_percent: process.cpu_usage(),
-                    memory_bytes: process.memory(),
-                })
-                .collect::<Vec<_>>()
         };
         let mut top = processes;
-        top.sort_by(|a, b| {
-            b.cpu_percent
+        top.sort_by(|a, b| match sort {
+            ProcessSort::Cpu => b
+                .cpu_percent
                 .partial_cmp(&a.cpu_percent)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes)),
+            ProcessSort::Memory => b.memory_bytes.cmp(&a.memory_bytes).then_with(|| {
+                b.cpu_percent
+                    .partial_cmp(&a.cpu_percent)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }),
         });
-        top.truncate(PROCESS_CACHE_TOP);
-        *self.process_cache.lock().unwrap() = Some((Instant::now(), top.clone()));
         (
             OffsetDateTime::now_utc(),
             top.into_iter().take(limit).collect(),

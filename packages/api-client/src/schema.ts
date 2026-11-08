@@ -2559,9 +2559,16 @@ export interface components {
         };
         /**
          * CpuMetrics
-         * @description CPU 使用率（0–100）。
+         * @description CPU 使用率（0–100）与型号信息。
          */
         CpuMetrics: {
+            /** @description CPU 型号名（拿不到为 null）。 */
+            brand?: string | null;
+            /**
+             * Format: int64
+             * @description 当前频率（各核 MHz 平均值；拿不到为 null）。
+             */
+            frequency_mhz?: number | null;
             /** @description 每核使用率（顺序与系统枚举一致）。 */
             per_core: number[];
             /**
@@ -3126,6 +3133,11 @@ export interface components {
          * @description 物理内存占用。
          */
         MemoryMetrics: {
+            /**
+             * Format: int64
+             * @description 可用内存（不触发交换的前提下可立即分配的量）。
+             */
+            available_bytes: number;
             /**
              * Format: float
              * @description 使用率（0–100，由服务端算好，前端直接展示）。
@@ -3954,6 +3966,8 @@ export interface components {
              * @description 系统进程总数。
              */
             process_count: number;
+            /** @description 温度传感器读数（无传感器环境为空数组）。 */
+            sensors: components["schemas"]["TempSensor"][];
             /** @description aries-server 进程自身指标。 */
             server: components["schemas"]["ServerMetrics"];
             swap: components["schemas"]["SwapMetrics"];
@@ -3980,6 +3994,19 @@ export interface components {
             id: number;
             name: string;
             slug: string;
+        };
+        /**
+         * TempSensor
+         * @description 温度传感器读数。
+         */
+        TempSensor: {
+            /** @description 传感器标签（如 `coretemp Package id 0`）。 */
+            label: string;
+            /**
+             * Format: float
+             * @description 摄氏温度。
+             */
+            temperature_celsius: number;
         };
         /**
          * TopProcessesResponse
@@ -9885,6 +9912,8 @@ export interface operations {
             path: {
                 /** @description 返回条数：默认 10，范围 1–50（越界钳位）。 */
                 limit: number | null;
+                /** @description 排序维度：`cpu`（默认，按 CPU 降序）或 `memory`（按 RSS 降序）；非法值 400。 */
+                sort: string | null;
             };
             cookie?: never;
         };
@@ -9897,6 +9926,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TopProcessesResponse"];
+                };
+            };
+            /** @description sort 非法（INVALID_PROCESS_SORT） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description 未认证 */

@@ -104,6 +104,18 @@ async fn metrics_snapshot_contains_host_process_and_pg_metrics() -> anyhow::Resu
         ensure!(body["swap"]["total_bytes"].is_u64());
         ensure!(body["swap"]["used_bytes"].is_u64());
 
+        // CPU 型号与频率：字段恒在（容器/虚拟机可能为 null，但键必须在）。
+        ensure!(body["cpu"].get("brand").is_some());
+        ensure!(body["cpu"].get("frequency_mhz").is_some());
+        // 内存可用量字段恒在且不大于总量。
+        let available = body["memory"]["available_bytes"]
+            .as_u64()
+            .context("memory.available_bytes")?;
+        ensure!(available <= memory_total, "available memory > total");
+
+        // 温度传感器：数组恒在（无传感器环境为空数组）。
+        ensure!(body["sensors"].as_array().is_some());
+
         // 磁盘：挂载点非空，used ≤ total。
         let disks = body["disks"].as_array().context("disks")?;
         ensure!(!disks.is_empty(), "disks must not be empty");
@@ -254,6 +266,32 @@ async fn top_processes_returns_sorted_list_and_clamps_limit() -> anyhow::Result<
             .await?;
         ensure!(clamped.status == StatusCode::OK, "{}", clamped.body);
         ensure!(clamped.body["processes"].as_array().unwrap().len() <= 50);
+
+        // 按内存排序：首条内存不低于末条。
+        let by_memory = app
+            .admin_get("/api/admin/system/processes?sort=memory", &owner_cookie)
+            .await?;
+        ensure!(by_memory.status == StatusCode::OK, "{}", by_memory.body);
+        let memory_sorted = by_memory.body["processes"].as_array().unwrap();
+        let first_mem = memory_sorted[0]["memory_bytes"].as_u64().unwrap_or(0);
+        let last_mem = memory_sorted[memory_sorted.len() - 1]["memory_bytes"]
+            .as_u64()
+            .unwrap_or(0);
+        ensure!(
+            first_mem >= last_mem,
+            "memory sort violated: {first_mem} < {last_mem}"
+        );
+
+        // 非法 sort 返回 400。
+        let invalid = app
+            .admin_get("/api/admin/system/processes?sort=whatever", &owner_cookie)
+            .await?;
+        ensure!(
+            invalid.status == StatusCode::BAD_REQUEST,
+            "{}",
+            invalid.body
+        );
+        ensure!(invalid.body["error"]["code"] == "INVALID_PROCESS_SORT");
         Ok(())
     }
     .await;

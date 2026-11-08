@@ -4967,6 +4967,14 @@ paths:
           - 'null'
           format: int32
           minimum: 0
+      - name: sort
+        in: path
+        description: 排序维度：`cpu`（默认，按 CPU 降序）或 `memory`（按 RSS 降序）；非法值 400。
+        required: true
+        schema:
+          type:
+          - string
+          - 'null'
       responses:
         '200':
           description: Top 进程列表
@@ -4974,6 +4982,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TopProcessesResponse'
+        '400':
+          description: sort 非法（INVALID_PROCESS_SORT）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: 未认证
           content:
@@ -6753,11 +6767,23 @@ components:
     CpuMetrics:
       type: object
       title: CpuMetrics
-      description: CPU 使用率（0–100）。
+      description: CPU 使用率（0–100）与型号信息。
       required:
       - percent
       - per_core
       properties:
+        brand:
+          type:
+          - string
+          - 'null'
+          description: CPU 型号名（拿不到为 null）。
+        frequency_mhz:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: 当前频率（各核 MHz 平均值；拿不到为 null）。
+          minimum: 0
         per_core:
           type: array
           items:
@@ -7854,9 +7880,15 @@ components:
       description: 物理内存占用。
       required:
       - used_bytes
+      - available_bytes
       - total_bytes
       - percent
       properties:
+        available_bytes:
+          type: integer
+          format: int64
+          description: 可用内存（不触发交换的前提下可立即分配的量）。
+          minimum: 0
         percent:
           type: number
           format: float
@@ -9278,6 +9310,7 @@ components:
       - process_count
       - uptime_seconds
       - server
+      - sensors
       properties:
         cpu:
           $ref: '#/components/schemas/CpuMetrics'
@@ -9315,6 +9348,11 @@ components:
           format: int64
           description: 系统进程总数。
           minimum: 0
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/TempSensor'
+          description: 温度传感器读数（无传感器环境为空数组）。
         server:
           $ref: '#/components/schemas/ServerMetrics'
           description: aries-server 进程自身指标。
@@ -9358,6 +9396,21 @@ components:
           type: string
         slug:
           type: string
+    TempSensor:
+      type: object
+      title: TempSensor
+      description: 温度传感器读数。
+      required:
+      - label
+      - temperature_celsius
+      properties:
+        label:
+          type: string
+          description: 传感器标签（如 `coretemp Package id 0`）。
+        temperature_celsius:
+          type: number
+          format: float
+          description: 摄氏温度。
     TopProcessesResponse:
       type: object
       title: TopProcessesResponse
