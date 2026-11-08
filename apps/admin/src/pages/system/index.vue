@@ -465,8 +465,13 @@ onBeforeUnmount(() => {
                 </span>
               </div>
               <div class="flex items-center gap-3">
-                <!-- 主题色进度条：百分比数字用阈值色提示压力。 -->
-                <Progress :model-value="diskPercent(disk)" class="h-2 flex-1" />
+                <!-- 自绘百分比条（width 驱动）：填充为主题色，比 transform 方案行为更可控。 -->
+                <div class="h-2 flex-1 overflow-hidden rounded-full bg-primary/15">
+                  <div
+                    class="h-full rounded-full bg-primary transition-[width] duration-500"
+                    :style="{ width: `${diskPercent(disk)}%` }"
+                  />
+                </div>
                 <span
                   class="w-12 text-right text-xs font-medium tabular-nums"
                   :class="toneTextClass[usageTone(diskPercent(disk))]"
