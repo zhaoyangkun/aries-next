@@ -9,6 +9,8 @@ import type { HistoryBucket, ProcessMetrics, SystemMetrics } from '@/modules/sys
 import GaugeRing from '@/modules/system/components/GaugeRing.vue'
 import Sparkline from '@/modules/system/components/Sparkline.vue'
 import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, toneSolidClass, toneTextClass, usageTone } from '@/modules/system/utils/format'
+import { groupProcesses, sortProcessGroups } from '@/modules/system/utils/processes'
+import type { ProcessGroup } from '@/modules/system/utils/processes'
 import { AppDataTablePagination } from '@/shared/components/data-table'
 import { getApiError } from '@/shared/api/client'
 
@@ -167,14 +169,14 @@ function tempClass(celsius: number): string {
 }
 
 // 进程 Top：服务端 15 秒缓存，前端 10 秒轮询跟随（权限/失败静默，不打扰主指标）。
-// 一次拉 50 条（排序在服务端全量快照上进行），前端每页 20 条分页。
+// 一次拉 100 条，按进程名聚合后分页展示（任务管理器风格，多进程程序聚合成一行）。
 const processes = ref<ProcessMetrics[]>([])
 const processesLoading = ref(false)
 
 async function loadProcesses() {
   processesLoading.value = true
   try {
-    const top = await systemApi.processes(50, sortKey.value, sortDesc.value ? 'desc' : 'asc')
+    const top = await systemApi.processes(100, sortKey.value, sortDesc.value ? 'desc' : 'asc')
     processes.value = top.processes
   }
   catch {
@@ -204,24 +206,29 @@ function toggleSort(key: 'cpu' | 'memory') {
   loadProcesses()
 }
 
-// 前端分页：每页 20 条（排序后的前 50 条内分页）。
+// 前端分页：每页 20 条（聚合后的进程组）。
 const processPage = ref(1)
 const processPageSize = ref(20)
 
-const sortedProcesses = computed(() => {
-  const direction = sortDesc.value ? -1 : 1
-  // 兜底排序：数据来自服务端已按请求维度排好序，这里仅保证极端情况下的稳定性。
-  return [...processes.value].sort((a, b) => {
-    const left = sortKey.value === 'cpu' ? a.cpu_percent : a.memory_bytes
-    const right = sortKey.value === 'cpu' ? b.cpu_percent : b.memory_bytes
-    return (left - right) * direction
-  })
-})
+// 按名称聚合成进程组后再排序：同名多进程（如宝塔 BT-Task worker 池）
+// 合并为一行，CPU / 内存显示合计，避免刷屏。
+const processGroups = computed(() => groupProcesses(processes.value))
+
+const sortedProcesses = computed(() =>
+  sortProcessGroups(processGroups.value, sortKey.value, sortDesc.value),
+)
 
 const pagedProcesses = computed(() => {
   const start = (processPage.value - 1) * processPageSize.value
   return sortedProcesses.value.slice(start, start + processPageSize.value)
 })
+
+// 内存合计列的口径说明（fork 共享页会重复计数）。
+function processGroupTitle(group: ProcessGroup): string {
+  const pids = group.pids.slice(0, 10).join(', ')
+  const suffix = group.pids.length > 10 ? ` … 共 ${group.pids.length} 个` : ''
+  return `PID: ${pids}${suffix}\n内存为多进程 RSS 合计，共享内存会重复计数`
+}
 
 let processesTimer: ReturnType<typeof setInterval> | undefined
 
@@ -628,9 +635,9 @@ onBeforeUnmount(() => {
               <CpuIcon class="size-4" />
             </div>
             <div class="min-w-0 flex-1">
-              <CardTitle class="text-sm font-medium">资源占用 Top 50</CardTitle>
+              <CardTitle class="text-sm font-medium">进程资源占用</CardTitle>
               <p class="truncate text-xs text-muted-foreground">
-                服务端排序取前 50 · 每页 20 条 · 点击表头切换排序
+                同名进程已聚合 · 每页 20 条 · 点击表头切换排序
               </p>
             </div>
           </CardHeader>
@@ -647,7 +654,7 @@ onBeforeUnmount(() => {
                       进程
                     </th>
                     <th class="pb-2 pr-4 text-right font-medium">
-                      PID
+                      实例
                     </th>
                     <th class="pb-2 pr-4 text-right font-medium">
                       <button
@@ -657,7 +664,7 @@ onBeforeUnmount(() => {
                         :aria-sort="sortKey === 'cpu' ? (sortDesc ? 'descending' : 'ascending') : 'none'"
                         @click="toggleSort('cpu')"
                       >
-                        CPU
+                        CPU 合计
                         <ArrowDownIcon v-if="sortKey === 'cpu' && sortDesc" class="size-3" />
                         <ArrowUpIcon v-else-if="sortKey === 'cpu'" class="size-3" />
                         <ArrowUpDownIcon v-else class="size-3 opacity-40" />
@@ -671,7 +678,7 @@ onBeforeUnmount(() => {
                         :aria-sort="sortKey === 'memory' ? (sortDesc ? 'descending' : 'ascending') : 'none'"
                         @click="toggleSort('memory')"
                       >
-                        内存（RSS）
+                        内存合计（RSS）
                         <ArrowDownIcon v-if="sortKey === 'memory' && sortDesc" class="size-3" />
                         <ArrowUpIcon v-else-if="sortKey === 'memory'" class="size-3" />
                         <ArrowUpDownIcon v-else class="size-3 opacity-40" />
@@ -680,21 +687,26 @@ onBeforeUnmount(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="process in pagedProcesses" :key="process.pid" class="border-b last:border-0">
-                    <td class="max-w-64 truncate py-2 pr-4 font-medium" :title="process.name">
-                      {{ process.name || '(未命名)' }}
+                  <tr v-for="group in pagedProcesses" :key="group.name || '(未命名)'" class="border-b last:border-0">
+                    <td class="max-w-64 truncate py-2 pr-4 font-medium" :title="group.name">
+                      {{ group.name || '(未命名)' }}
                     </td>
                     <td class="py-2 pr-4 text-right tabular-nums text-muted-foreground">
-                      {{ process.pid }}
+                      <span :title="processGroupTitle(group)">
+                        {{ group.count > 1 ? `×${group.count}` : group.pids[0] }}
+                      </span>
                     </td>
                     <td
                       class="py-2 pr-4 text-right tabular-nums"
-                      :class="toneTextClass[usageTone(process.cpu_percent)]"
+                      :class="toneTextClass[usageTone(group.cpu_percent)]"
                     >
-                      {{ formatPercent(process.cpu_percent) }}
+                      {{ formatPercent(group.cpu_percent) }}
                     </td>
-                    <td class="py-2 text-right tabular-nums">
-                      {{ formatBytes(process.memory_bytes) }}
+                    <td
+                      class="py-2 text-right tabular-nums"
+                      :title="group.count > 1 ? '多进程 RSS 合计，共享内存会重复计数' : undefined"
+                    >
+                      {{ formatBytes(group.memory_bytes) }}
                     </td>
                   </tr>
                 </tbody>
