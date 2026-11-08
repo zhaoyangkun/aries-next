@@ -9,11 +9,15 @@ export interface ProcessGroup {
   pids: number[]
   /** CPU 合计（单核口径：100 = 打满一个核）。 */
   cpu_percent: number
-  /** RSS 合计（注意：fork 共享页会在多个进程间重复计数，合计值会夸大）。 */
+  /**
+   * 组内最大 RSS（近似物理占用）：同名进程多为 fork 共享基线内存，
+   * 取最大避免共享页被重复计数（sum 会把 19 个 469 MB 算成 8.9 GB）。
+   * 注意：对 postgres 这类共享缓冲区大的进程组会偏保守（低估私有部分之和）。
+   */
   memory_bytes: number
 }
 
-/** 进程列表 → 按名称聚合的进程组（求和 count/cpu/内存，保留全部 PID）。 */
+/** 进程列表 → 按名称聚合的进程组（count/cpu 求和，内存取组内最大 RSS）。 */
 export function groupProcesses(processes: ProcessMetrics[]): ProcessGroup[] {
   const groups = new Map<string, ProcessGroup>()
   for (const process of processes) {
@@ -22,7 +26,8 @@ export function groupProcesses(processes: ProcessMetrics[]): ProcessGroup[] {
       existing.count += 1
       existing.pids.push(process.pid)
       existing.cpu_percent += process.cpu_percent
-      existing.memory_bytes += process.memory_bytes
+      // 内存取最大而非求和：fork 子进程共享基线页面，求和会重复计数共享内存。
+      existing.memory_bytes = Math.max(existing.memory_bytes, process.memory_bytes)
     }
     else {
       groups.set(process.name, {

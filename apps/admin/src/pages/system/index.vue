@@ -223,11 +223,11 @@ const pagedProcesses = computed(() => {
   return sortedProcesses.value.slice(start, start + processPageSize.value)
 })
 
-// 内存合计列的口径说明（fork 共享页会重复计数）。
+// 内存列的口径说明（同名进程共享内存，取组内最大 RSS 近似物理占用）。
 function processGroupTitle(group: ProcessGroup): string {
   const pids = group.pids.slice(0, 10).join(', ')
   const suffix = group.pids.length > 10 ? ` … 共 ${group.pids.length} 个` : ''
-  return `PID: ${pids}${suffix}\n内存为多进程 RSS 合计，共享内存会重复计数`
+  return `PID: ${pids}${suffix}\n同名进程共享内存，内存列为组内最大 RSS（近似物理占用）`
 }
 
 let processesTimer: ReturnType<typeof setInterval> | undefined
@@ -678,7 +678,7 @@ onBeforeUnmount(() => {
                         :aria-sort="sortKey === 'memory' ? (sortDesc ? 'descending' : 'ascending') : 'none'"
                         @click="toggleSort('memory')"
                       >
-                        内存合计（RSS）
+                        内存（RSS）
                         <ArrowDownIcon v-if="sortKey === 'memory' && sortDesc" class="size-3" />
                         <ArrowUpIcon v-else-if="sortKey === 'memory'" class="size-3" />
                         <ArrowUpDownIcon v-else class="size-3 opacity-40" />
@@ -704,7 +704,7 @@ onBeforeUnmount(() => {
                     </td>
                     <td
                       class="py-2 text-right tabular-nums"
-                      :title="group.count > 1 ? '多进程 RSS 合计，共享内存会重复计数' : undefined"
+                      :title="group.count > 1 ? '同名进程共享内存，取组内最大 RSS 近似物理占用' : undefined"
                     >
                       {{ formatBytes(group.memory_bytes) }}
                     </td>

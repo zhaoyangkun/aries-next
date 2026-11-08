@@ -7,7 +7,7 @@ function process(pid: number, name: string, cpu: number, memory: number) {
 }
 
 describe('groupProcesses', () => {
-  it('sums same-name processes into one group', () => {
+  it('merges same-name processes into one group with max memory', () => {
     const groups = groupProcesses([
       process(1, 'worker', 10, 100),
       process(2, 'worker', 20, 200),
@@ -18,10 +18,12 @@ describe('groupProcesses', () => {
     expect(worker.count).toBe(2)
     expect(worker.pids).toEqual([1, 2])
     expect(worker.cpu_percent).toBeCloseTo(30)
-    expect(worker.memory_bytes).toBe(300)
+    // 内存取组内最大而非求和（避免 fork 共享页重复计数）。
+    expect(worker.memory_bytes).toBe(200)
     const db = groups.find(group => group.name === 'db')!
     expect(db.count).toBe(1)
     expect(db.pids).toEqual([3])
+    expect(db.memory_bytes).toBe(500)
   })
 
   it('treats empty names as a single unnamed group', () => {
