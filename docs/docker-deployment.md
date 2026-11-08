@@ -333,6 +333,7 @@ MEDIA_PUBLIC_BASE_URL=/api/media/files
 | 配置                                                             | 取值                 | 说明                                                                                                            |
 | ---------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `build.context: ..` + `dockerfile: deploy/server.Dockerfile` | 以仓库根为构建上下文 | 三阶段：Admin SPA 构建（node）→ Rust 编译（include_dir 把产物编入 Binary）→ slim 运行时                     |
+| `pid: "host"`                                                  | 共享宿主机 PID namespace | Admin「系统监控」的进程 Top 需要看到宿主机全部进程；去掉则只能看到容器自身（且已过滤线程）。代价：容器内可见宿主机进程信息，自托管单机可接受；改动需重建容器生效 |
 | `env_file: ../.env`                                            | 全部 Server 环境变量 | `environment:` 同名键优先                                                                                   |
 | `volumes: aries_data`                                          | `/var/lib/aries`     | 单根目录持久化（内含 `media/` 与 `logs/`）；`media/` 必须进备份                                                |
 | `depends_on.postgres.condition: service_healthy`               | 等 PG 就绪           | 避免启动竞态导致首次 Migration 失败                                                                             |

@@ -26,6 +26,10 @@ services:
       context: ..
       dockerfile: deploy/server.Dockerfile
     restart: unless-stopped
+    # 系统监控的进程 Top 依赖宿主机 PID namespace：默认容器只能看到自身进程，
+    # 加 pid: host 后监控页展示宿主机全部进程（与 netdata/cAdvisor 监控容器同法）。
+    # 代价：容器内可见宿主机进程信息（自托管单机可接受的风险面）；重建容器生效。
+    pid: "host"
     env_file: ../.env
     environment:
       SERVER_ADDR: 0.0.0.0:8088

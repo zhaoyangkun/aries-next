@@ -370,6 +370,9 @@ impl MetricsCollector {
                     system
                         .processes()
                         .values()
+                        // Linux /proc 顶层会为每个线程建条目（top 默认隐藏线程），
+                        // 监控列表只保留真正的进程：thread_kind 为 Some 的是线程。
+                        .filter(|process| process.thread_kind().is_none())
                         .map(|process| ProcessSnapshot {
                             pid: process.pid().as_u32(),
                             name: process.name().to_string_lossy().into_owned(),
