@@ -61,6 +61,20 @@ export const toneTextClass: Record<UsageTone, string> = {
   critical: 'text-destructive',
 }
 
+/** 阈值档位 → 实心填充色（heatmap 竖条 / 徽标底）。 */
+export const toneSolidClass: Record<UsageTone, string> = {
+  ok: 'bg-green-500/80',
+  warning: 'bg-amber-500/80',
+  critical: 'bg-destructive/80',
+}
+
+/** 阈值档位 → 圆环描边色（GaugeRing 进度弧）。 */
+export const toneRingClass: Record<UsageTone, string> = {
+  ok: 'stroke-green-500',
+  warning: 'stroke-amber-500',
+  critical: 'stroke-destructive',
+}
+
 /** 秒数格式化为中文时长（系统 uptime / 进程运行时长展示用）。 */
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0)
