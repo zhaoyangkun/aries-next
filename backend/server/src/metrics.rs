@@ -41,6 +41,30 @@ pub struct DiskSnapshot {
     pub used_bytes: u64,
 }
 
+/// 单网卡网络指标（合计值的明细拆解）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct NetworkInterfaceSnapshot {
+    pub name: String,
+    /// 接收速率（B/s）。
+    pub rx_bytes_per_sec: u64,
+    /// 发送速率（B/s）。
+    pub tx_bytes_per_sec: u64,
+    pub total_received_bytes: u64,
+    pub total_transmitted_bytes: u64,
+}
+
+/// 单个进程的资源占用（进程 Top 列表元素）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProcessSnapshot {
+    pub pid: u32,
+    /// 进程名（sysinfo 可执行文件名；匿名/内核线程可能为空串）。
+    pub name: String,
+    /// CPU 使用率（0–100，单核口径：100 = 打满一个核）。
+    pub cpu_percent: f32,
+    /// 常驻内存（RSS）。
+    pub memory_bytes: u64,
+}
+
 /// 系统指标单次快照（纯数据；响应 DTO 与 SSE 事件在 `http::system` 定义）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct SystemSnapshot {
@@ -64,6 +88,8 @@ pub struct SystemSnapshot {
     /// 全部网卡累计收发字节数（进程启动至今的计数器）。
     pub network_total_received_bytes: u64,
     pub network_total_transmitted_bytes: u64,
+    /// 各网卡明细（名称 + 速率 + 累计）。
+    pub network_interfaces: Vec<NetworkInterfaceSnapshot>,
     /// 系统负载均值（Windows 恒为 0，无 loadavg 概念）。
     pub load_avg_one: f64,
     pub load_avg_five: f64,
@@ -96,10 +122,17 @@ pub struct MetricsCollector {
     /// PostgreSQL 快照缓存：库大小/连接数变化缓慢，30s TTL 足够且避免
     /// SSE 每 5s 一轮的两条标量查询刷进慢查询日志。
     pg_cache: Mutex<Option<(Instant, PgSnapshot)>>,
+    /// 进程 Top 缓存：全量 refresh_processes 需要遍历进程表，开销明显大于
+    /// 其他采样，15s TTL 足够排查场景使用，且不走 SSE（前端低频轮询）。
+    process_cache: Mutex<Option<(Instant, Vec<ProcessSnapshot>)>>,
 }
 
 /// PostgreSQL 快照缓存有效期。
 const PG_CACHE_TTL: Duration = Duration::from_secs(30);
+/// 进程 Top 缓存有效期。
+const PROCESS_CACHE_TTL: Duration = Duration::from_secs(15);
+/// 进程 Top 缓存容量：缓存按 CPU 排序的前 50 个，足以服务任何 limit 查询。
+const PROCESS_CACHE_TOP: usize = 50;
 
 impl MetricsCollector {
     /// 新建采集器并做一次预热 refresh：sysinfo 的 CPU 使用率与网络速率基于
@@ -122,6 +155,7 @@ impl MetricsCollector {
             server_started_at: Instant::now(),
             pg_pool,
             pg_cache: Mutex::new(None),
+            process_cache: Mutex::new(None),
         }
     }
 
@@ -154,20 +188,29 @@ impl MetricsCollector {
                 server_rss_bytes,
             )
         };
-        let (network_rx, network_tx, network_total_rx, network_total_tx) = {
+        let (network_rx, network_tx, network_total_rx, network_total_tx, interfaces) = {
             let mut networks = self.networks.lock().unwrap_or_else(|e| e.into_inner());
             networks.refresh(true);
             let mut rx = 0_u64;
             let mut tx = 0_u64;
             let mut total_rx = 0_u64;
             let mut total_tx = 0_u64;
-            for network in networks.values() {
+            let mut interfaces = Vec::with_capacity(networks.len());
+            for (name, network) in networks.iter() {
                 rx = rx.saturating_add(network.received());
                 tx = tx.saturating_add(network.transmitted());
                 total_rx = total_rx.saturating_add(network.total_received());
                 total_tx = total_tx.saturating_add(network.total_transmitted());
+                interfaces.push(NetworkInterfaceSnapshot {
+                    name: name.to_string_lossy().into_owned(),
+                    rx_bytes_per_sec: network.received(),
+                    tx_bytes_per_sec: network.transmitted(),
+                    total_received_bytes: network.total_received(),
+                    total_transmitted_bytes: network.total_transmitted(),
+                });
             }
-            (rx, tx, total_rx, total_tx)
+            interfaces.sort_by(|a, b| b.name.cmp(&a.name));
+            (rx, tx, total_rx, total_tx, interfaces)
         };
         let load = System::load_average().unwrap_or(sysinfo::LoadAvg {
             one: 0.0,
@@ -198,6 +241,7 @@ impl MetricsCollector {
             network_tx_bytes_per_sec: network_tx,
             network_total_received_bytes: network_total_rx,
             network_total_transmitted_bytes: network_total_tx,
+            network_interfaces: interfaces,
             load_avg_one: load.one,
             load_avg_five: load.five,
             load_avg_fifteen: load.fifteen,
@@ -210,6 +254,50 @@ impl MetricsCollector {
             server_uptime_seconds: self.server_started_at.elapsed().as_secs(),
             pg: self.pg_snapshot().await,
         }
+    }
+
+    /// 资源占用 Top 进程（按 CPU 降序，取前 `limit` 个；15s 缓存）。
+    ///
+    /// 全量 refresh_processes 需遍历进程表， deliberately 独立于 5s 快照循环：
+    /// SSE 不携带本数据，由前端按需低频轮询。首次调用因无上次 CPU 采样点，
+    /// 所有进程的 cpu 分量会为 0（sysinfo 差值语义），属预期行为。
+    pub async fn top_processes(&self, limit: usize) -> (OffsetDateTime, Vec<ProcessSnapshot>) {
+        if let Some((fetched_at, processes)) = self.process_cache.lock().unwrap().as_ref() {
+            if fetched_at.elapsed() < PROCESS_CACHE_TTL {
+                return (
+                    OffsetDateTime::now_utc(),
+                    processes.iter().take(limit).cloned().collect(),
+                );
+            }
+        }
+        let kind = ProcessRefreshKind::nothing().with_cpu().with_memory();
+        let processes = {
+            let mut system = self.system.lock().unwrap_or_else(|e| e.into_inner());
+            system.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, kind);
+            system
+                .processes()
+                .values()
+                .map(|process| ProcessSnapshot {
+                    pid: process.pid().as_u32(),
+                    name: process.name().to_string_lossy().into_owned(),
+                    cpu_percent: process.cpu_usage(),
+                    memory_bytes: process.memory(),
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut top = processes;
+        top.sort_by(|a, b| {
+            b.cpu_percent
+                .partial_cmp(&a.cpu_percent)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+        });
+        top.truncate(PROCESS_CACHE_TOP);
+        *self.process_cache.lock().unwrap() = Some((Instant::now(), top.clone()));
+        (
+            OffsetDateTime::now_utc(),
+            top.into_iter().take(limit).collect(),
+        )
     }
 
     /// PostgreSQL 快照（30s 缓存）：库大小与活跃连接数；查询失败记 WARN

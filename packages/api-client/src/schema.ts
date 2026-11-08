@@ -1533,6 +1533,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/system/processes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 资源占用 Top 进程
+         * @description 按 CPU 使用率降序返回进程列表（单核口径：100 = 打满一个核），附 RSS；服务端 15 秒缓存。首次调用（或缓存过期后首次）所有进程 CPU 为 0（sysinfo 差值语义），约 15 秒后第二次调用即准确。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["getTopProcesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/tags": {
         parameters: {
             query?: never;
@@ -3184,10 +3204,27 @@ export interface components {
             title: string;
         };
         /**
+         * NetworkInterfaceMetrics
+         * @description 单网卡网络 IO 明细。
+         */
+        NetworkInterfaceMetrics: {
+            name: string;
+            /** Format: int64 */
+            rx_bytes_per_sec: number;
+            /** Format: int64 */
+            total_received_bytes: number;
+            /** Format: int64 */
+            total_transmitted_bytes: number;
+            /** Format: int64 */
+            tx_bytes_per_sec: number;
+        };
+        /**
          * NetworkMetrics
          * @description 全部网卡合计网络 IO。
          */
         NetworkMetrics: {
+            /** @description 各网卡明细（名称 + 速率 + 累计），名称升序。 */
+            interfaces: components["schemas"]["NetworkInterfaceMetrics"][];
             /**
              * Format: int64
              * @description 接收速率（B/s，相邻采样差值 / 间隔）。
@@ -3276,6 +3313,25 @@ export interface components {
         PreviewArticleResponse: {
             /** @description 经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML。 */
             rendered_html: string;
+        };
+        /**
+         * ProcessMetrics
+         * @description 单进程资源占用。
+         */
+        ProcessMetrics: {
+            /**
+             * Format: float
+             * @description CPU 使用率（0–100，单核口径：100 = 打满一个核）。
+             */
+            cpu_percent: number;
+            /**
+             * Format: int64
+             * @description 常驻内存（RSS）。
+             */
+            memory_bytes: number;
+            name: string;
+            /** Format: int32 */
+            pid: number;
         };
         /**
          * @description 公开详情：受密码保护且未解锁时 `rendered_html` 为 `null`；
@@ -3924,6 +3980,16 @@ export interface components {
             id: number;
             name: string;
             slug: string;
+        };
+        /**
+         * TopProcessesResponse
+         * @description 资源占用 Top 进程列表（按 CPU 降序；15 秒服务端缓存）。
+         */
+        TopProcessesResponse: {
+            /** @description Top 进程列表。 */
+            processes: components["schemas"]["ProcessMetrics"][];
+            /** @description 本次采样时刻，RFC 3339。 */
+            ts: string;
         };
         UnlockRequest: {
             /** @description 访问密码。 */
@@ -9790,6 +9856,47 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["SystemMetricsResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTopProcesses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 返回条数：默认 10，范围 1–50（越界钳位）。 */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Top 进程列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopProcessesResponse"];
                 };
             };
             /** @description 未认证 */

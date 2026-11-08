@@ -144,6 +144,16 @@ async fn metrics_snapshot_contains_host_process_and_pg_metrics() -> anyhow::Resu
             .as_i64()
             .context("pg.active_connections")?;
         ensure!(connections >= 1, "at least the querying connection");
+
+        // 网卡明细：interfaces 数组恒在（无网卡环境可为空），元素字段齐全。
+        let interfaces = body["network"]["interfaces"]
+            .as_array()
+            .context("network.interfaces")?;
+        for interface in interfaces {
+            ensure!(!interface["name"].as_str().unwrap_or("").is_empty());
+            ensure!(interface["rx_bytes_per_sec"].is_u64());
+            ensure!(interface["tx_bytes_per_sec"].is_u64());
+        }
         Ok(())
     }
     .await;
@@ -201,6 +211,59 @@ async fn metrics_history_returns_samples_and_clamps_window() -> anyhow::Result<(
 }
 
 #[tokio::test]
+async fn top_processes_returns_sorted_list_and_clamps_limit() -> anyhow::Result<()> {
+    let Some(app) = common::maybe_app().await? else {
+        return Ok(());
+    };
+    let scenario = async {
+        let owner_cookie = app.bootstrap_owner().await?;
+
+        let response = app
+            .admin_get("/api/admin/system/processes", &owner_cookie)
+            .await?;
+        ensure!(response.status == StatusCode::OK, "{}", response.body);
+        ensure!(
+            response.body["ts"]
+                .as_str()
+                .is_some_and(|ts| ts.contains('T') && ts.ends_with('Z')),
+            "{}",
+            response.body["ts"]
+        );
+        // 本测试进程一定在列表中，字段齐全。
+        let processes = response.body["processes"].as_array().context("processes")?;
+        ensure!(!processes.is_empty(), "process list must not be empty");
+        for process in processes {
+            ensure!(process["pid"].as_u64().unwrap_or(0) > 0, "{process}");
+            ensure!(process["name"].as_str().is_some());
+            ensure!(process["cpu_percent"].as_f64().is_some());
+            ensure!(process["memory_bytes"].as_u64().is_some());
+        }
+        // 按 CPU 降序。
+        let cpus: Vec<f64> = processes
+            .iter()
+            .map(|process| process["cpu_percent"].as_f64().unwrap_or(f64::NAN))
+            .collect();
+        ensure!(
+            cpus.windows(2).all(|w| w[0] >= w[1]),
+            "processes must be sorted by cpu desc: {cpus:?}"
+        );
+
+        // limit 越界钳位到 50：响应不超过 50 条且不报错。
+        let clamped = app
+            .admin_get("/api/admin/system/processes?limit=999", &owner_cookie)
+            .await?;
+        ensure!(clamped.status == StatusCode::OK, "{}", clamped.body);
+        ensure!(clamped.body["processes"].as_array().unwrap().len() <= 50);
+        Ok(())
+    }
+    .await;
+
+    let cleanup_result = app.cleanup().await;
+    scenario?;
+    cleanup_result
+}
+
+#[tokio::test]
 async fn metrics_endpoints_require_authentication_and_owner() -> anyhow::Result<()> {
     let Some(app) = common::maybe_app().await? else {
         return Ok(());
@@ -212,6 +275,7 @@ async fn metrics_endpoints_require_authentication_and_owner() -> anyhow::Result<
         for path in [
             "/api/admin/system/metrics",
             "/api/admin/system/metrics/history",
+            "/api/admin/system/processes",
         ] {
             let unauthenticated = app.get(path).await?;
             ensure!(
@@ -224,10 +288,14 @@ async fn metrics_endpoints_require_authentication_and_owner() -> anyhow::Result<
         // Editor 无 settings:manage 权限，403。
         let editor_cookie =
             create_user_and_login(&app, "editor-metrics", "editor", "editor-pass-1").await?;
-        let denied = app
-            .admin_get("/api/admin/system/metrics", &editor_cookie)
-            .await?;
-        ensure!(denied.status == StatusCode::FORBIDDEN, "{}", denied.body);
+        for path in ["/api/admin/system/metrics", "/api/admin/system/processes"] {
+            let denied = app.admin_get(path, &editor_cookie).await?;
+            ensure!(
+                denied.status == StatusCode::FORBIDDEN,
+                "{path}: {}",
+                denied.body
+            );
+        }
         Ok(())
     }
     .await;

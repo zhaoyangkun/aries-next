@@ -1,11 +1,12 @@
 <script setup lang="ts">
-/** 系统监控页：主机 CPU / 内存 / 磁盘 / 网络实时指标（SSE 推送）与历史趋势。 */
+/** 系统监控页：主机 CPU / 内存 / 磁盘 / 网络实时指标（SSE 推送）、进程 Top 与历史趋势。 */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import dayjs from 'dayjs'
 
 import { systemApi } from '@/modules/system/api/system'
-import type { HistoryBucket, SystemMetrics } from '@/modules/system/api/system'
+import type { HistoryBucket, ProcessMetrics, SystemMetrics } from '@/modules/system/api/system'
 import Sparkline from '@/modules/system/components/Sparkline.vue'
-import { formatBytes, formatDuration, formatPercent, formatRate } from '@/modules/system/utils/format'
+import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, toneBarClass, toneTextClass, usageTone } from '@/modules/system/utils/format'
 import { getApiError } from '@/shared/api/client'
 
 // 实时序列保留点数：5s × 120 = 最近 10 分钟。
@@ -119,6 +120,49 @@ function diskPercent(disk: { used_bytes: number, total_bytes: number }) {
   return Math.min(100, (disk.used_bytes / disk.total_bytes) * 100)
 }
 
+// 进程 Top：服务端 15 秒缓存，前端 10 秒轮询跟随（权限/失败静默，不打扰主指标）。
+const processes = ref<ProcessMetrics[]>([])
+const processesLoading = ref(false)
+
+async function loadProcesses() {
+  processesLoading.value = true
+  try {
+    const top = await systemApi.processes(10)
+    processes.value = top.processes
+  }
+  catch {
+    // 进程列表属增强信息，加载失败保留现状即可。
+  }
+  finally {
+    processesLoading.value = false
+  }
+}
+
+let processesTimer: ReturnType<typeof setInterval> | undefined
+
+// 负载解读：load1 与核数对比（Windows 无 loadavg，恒 0 显示不可用）。
+const loadStatus = computed(() => {
+  if (!metrics.value)
+    return null
+  const { one } = metrics.value.load
+  if (one === 0)
+    return null
+  const cores = metrics.value.cpu.per_core.length || 1
+  return {
+    ratio: one / cores,
+    label: one >= cores ? '偏高' : '正常',
+  }
+})
+
+// 历史趋势时间轴：窗口内首尾采样点的本地时间。
+const historyRange = computed(() => {
+  const first = historyBuckets.value[0]?.bucket
+  const last = historyBuckets.value[historyBuckets.value.length - 1]?.bucket
+  if (!first || !last)
+    return ''
+  return `${dayjs(first).format('MM-DD HH:mm')} — ${dayjs(last).format('MM-DD HH:mm')}`
+})
+
 onMounted(async () => {
   // 首帧前先用快照端点填充页面，避免打开时空白等待。
   try {
@@ -130,9 +174,17 @@ onMounted(async () => {
   }
   openStream()
   loadHistory()
+  loadProcesses()
+  processesTimer = setInterval(loadProcesses, 10_000)
 })
 
-onBeforeUnmount(closeStream)
+onBeforeUnmount(() => {
+  closeStream()
+  if (processesTimer) {
+    clearInterval(processesTimer)
+    processesTimer = undefined
+  }
+})
 </script>
 
 <template>
@@ -157,7 +209,10 @@ onBeforeUnmount(closeStream)
         </CardHeader>
         <CardContent class="space-y-3">
           <div class="flex items-baseline gap-2">
-            <span class="text-3xl font-semibold tabular-nums">
+            <span
+              class="text-3xl font-semibold tabular-nums"
+              :class="metrics ? toneTextClass[usageTone(metrics.cpu.percent)] : ''"
+            >
               {{ metrics ? formatPercent(metrics.cpu.percent) : '-' }}
             </span>
             <span class="text-xs text-muted-foreground">
@@ -184,14 +239,21 @@ onBeforeUnmount(closeStream)
         </CardHeader>
         <CardContent class="space-y-3">
           <div class="flex items-baseline justify-between gap-2">
-            <span class="text-3xl font-semibold tabular-nums">
+            <span
+              class="text-3xl font-semibold tabular-nums"
+              :class="metrics ? toneTextClass[usageTone(metrics.memory.percent)] : ''"
+            >
               {{ metrics ? formatPercent(metrics.memory.percent) : '-' }}
             </span>
             <span class="text-xs tabular-nums text-muted-foreground">
               {{ metrics ? `${formatBytes(metrics.memory.used_bytes)} / ${formatBytes(metrics.memory.total_bytes)}` : '' }}
             </span>
           </div>
-          <Progress :model-value="metrics?.memory.percent ?? 0" class="h-2" />
+          <Progress
+            :model-value="metrics?.memory.percent ?? 0"
+            class="h-2"
+            :class="metrics ? toneBarClass[usageTone(metrics.memory.percent)] : ''"
+          />
           <Sparkline :points="memorySeries" :max="100" :height="56" />
           <div v-if="metrics && metrics.swap.total_bytes > 0" class="text-xs text-muted-foreground">
             Swap {{ formatBytes(metrics.swap.used_bytes) }} / {{ formatBytes(metrics.swap.total_bytes) }}
@@ -209,18 +271,31 @@ onBeforeUnmount(closeStream)
             <div>
               <p class="text-xs text-muted-foreground">接收</p>
               <p class="text-xl font-semibold tabular-nums">
-                {{ metrics ? formatRate(metrics.network.rx_bytes_per_sec) : '-' }}
+                {{ metrics ? formatBitrate(metrics.network.rx_bytes_per_sec) : '-' }}
               </p>
             </div>
             <div>
               <p class="text-xs text-muted-foreground">发送</p>
               <p class="text-xl font-semibold tabular-nums">
-                {{ metrics ? formatRate(metrics.network.tx_bytes_per_sec) : '-' }}
+                {{ metrics ? formatBitrate(metrics.network.tx_bytes_per_sec) : '-' }}
               </p>
             </div>
           </div>
           <Sparkline :points="netRxSeries" :height="24" />
           <Sparkline :points="netTxSeries" :height="24" stroke="var(--chart-2)" />
+          <!-- 各网卡明细。 -->
+          <div v-if="metrics && metrics.network.interfaces.length > 0" class="space-y-1 border-t pt-2">
+            <div
+              v-for="iface in metrics.network.interfaces"
+              :key="iface.name"
+              class="flex items-center justify-between gap-2 text-xs"
+            >
+              <span class="truncate font-mono text-muted-foreground">{{ iface.name }}</span>
+              <span class="shrink-0 tabular-nums">
+                ↓{{ formatRate(iface.rx_bytes_per_sec) }} ↑{{ formatRate(iface.tx_bytes_per_sec) }}
+              </span>
+            </div>
+          </div>
           <p class="text-xs text-muted-foreground">
             累计 {{ metrics ? formatBytes(metrics.network.total_received_bytes) : '-' }} ↓ /
             {{ metrics ? formatBytes(metrics.network.total_transmitted_bytes) : '-' }} ↑
@@ -250,7 +325,11 @@ onBeforeUnmount(closeStream)
                 （{{ formatPercent(diskPercent(disk)) }}）
               </span>
             </div>
-            <Progress :model-value="diskPercent(disk)" class="h-2" />
+            <Progress
+              :model-value="diskPercent(disk)"
+              class="h-2"
+              :class="toneBarClass[usageTone(diskPercent(disk))]"
+            />
           </div>
           <p v-if="!metrics" class="text-sm text-muted-foreground">
             等待数据…
@@ -288,6 +367,13 @@ onBeforeUnmount(closeStream)
             <span class="text-muted-foreground">负载（1/5/15 分）</span>
             <span class="tabular-nums">
               {{ metrics ? `${metrics.load.one.toFixed(2)} / ${metrics.load.five.toFixed(2)} / ${metrics.load.fifteen.toFixed(2)}` : '-' }}
+              <span
+                v-if="loadStatus"
+                class="ml-1"
+                :class="loadStatus.label === '偏高' ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'"
+              >
+                {{ loadStatus.label }}（{{ loadStatus.ratio.toFixed(2) }}×核数）
+              </span>
             </span>
           </div>
           <Separator class="my-2" />
@@ -310,6 +396,53 @@ onBeforeUnmount(closeStream)
         </CardContent>
       </Card>
     </div>
+
+    <!-- 进程 Top：10s 轮询（服务端 15s 缓存），按 CPU 降序。 -->
+    <Card class="mt-4">
+      <CardHeader>
+        <CardTitle class="text-sm font-medium">进程资源占用 Top 10</CardTitle>
+        <CardDescription>
+          按 CPU 使用率降序（单核口径：100% = 打满一个核），每 10 秒自动刷新。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div v-if="processes.length === 0" class="py-6 text-center text-sm text-muted-foreground">
+          <Skeleton v-if="processesLoading" class="mx-auto h-5 w-48" />
+          <template v-else>暂无进程数据</template>
+        </div>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b text-left text-xs text-muted-foreground">
+                <th class="pb-2 pr-4 font-medium">进程</th>
+                <th class="pb-2 pr-4 text-right font-medium">PID</th>
+                <th class="pb-2 pr-4 text-right font-medium">CPU</th>
+                <th class="pb-2 text-right font-medium">内存（RSS）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="process in processes" :key="process.pid" class="border-b last:border-0">
+                <td class="max-w-64 truncate py-2 pr-4 font-medium" :title="process.name">
+                  {{ process.name || '(未命名)' }}
+                </td>
+                <td class="py-2 pr-4 text-right tabular-nums text-muted-foreground">
+                  {{ process.pid }}
+                </td>
+                <td
+                  class="py-2 pr-4 text-right tabular-nums"
+                  :class="toneTextClass[usageTone(process.cpu_percent)]"
+                >
+                  {{ formatPercent(process.cpu_percent) }}
+                </td>
+                <td class="py-2 text-right tabular-nums">
+                  {{ formatBytes(process.memory_bytes) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- 历史趋势 -->
     <Card class="mt-4">
@@ -350,6 +483,9 @@ onBeforeUnmount(closeStream)
             <Sparkline :points="historyNetTx" :max="historyNetMax" :height="72" stroke="var(--chart-2)" />
           </div>
         </div>
+        <p v-if="historyRange" class="mt-3 text-right text-xs tabular-nums text-muted-foreground">
+          {{ historyRange }}
+        </p>
       </CardContent>
     </Card>
   </BasicPage>

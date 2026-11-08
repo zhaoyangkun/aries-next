@@ -141,6 +141,7 @@ use utoipa::{Modify, OpenApi};
         crate::http::system::get_metrics,
         crate::http::system::stream_metrics,
         crate::http::system::get_metrics_history,
+        crate::http::system::get_top_processes,
         // Admin Profile
         crate::http::profile::get_profile,
         crate::http::profile::update_profile,

@@ -13,7 +13,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 
-use crate::metrics::{MetricsCollector, MetricsSamplePoint, SystemSnapshot};
+use crate::metrics::{
+    MetricsCollector, MetricsSamplePoint, NetworkInterfaceSnapshot, ProcessSnapshot, SystemSnapshot,
+};
 use crate::state::AppState;
 
 use super::auth::CurrentUser;
@@ -25,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/system/metrics", get(get_metrics))
         .route("/system/metrics/stream", get(stream_metrics))
         .route("/system/metrics/history", get(get_metrics_history))
+        .route("/system/processes", get(get_top_processes))
 }
 
 /// SSE 推送周期：5 秒一帧，与 sysinfo 的 CPU 差值采样窗口匹配。
@@ -109,6 +112,34 @@ struct NetworkMetrics {
     total_received_bytes: u64,
     /// 累计发送字节数（计数器）。
     total_transmitted_bytes: u64,
+    /// 各网卡明细（名称 + 速率 + 累计），名称升序。
+    interfaces: Vec<NetworkInterfaceMetrics>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "NetworkInterfaceMetrics",
+    description = "单网卡网络 IO 明细。"
+)]
+struct NetworkInterfaceMetrics {
+    name: String,
+    rx_bytes_per_sec: u64,
+    tx_bytes_per_sec: u64,
+    total_received_bytes: u64,
+    total_transmitted_bytes: u64,
+}
+
+impl From<&NetworkInterfaceSnapshot> for NetworkInterfaceMetrics {
+    /// 网卡采集数据 → 响应 DTO。
+    fn from(interface: &NetworkInterfaceSnapshot) -> Self {
+        Self {
+            name: interface.name.clone(),
+            rx_bytes_per_sec: interface.rx_bytes_per_sec,
+            tx_bytes_per_sec: interface.tx_bytes_per_sec,
+            total_received_bytes: interface.total_received_bytes,
+            total_transmitted_bytes: interface.total_transmitted_bytes,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -177,6 +208,7 @@ fn snapshot_response(snapshot: SystemSnapshot) -> SystemMetricsResponse {
             tx_bytes_per_sec: snapshot.network_tx_bytes_per_sec,
             total_received_bytes: snapshot.network_total_received_bytes,
             total_transmitted_bytes: snapshot.network_total_transmitted_bytes,
+            interfaces: snapshot.network_interfaces.iter().map(Into::into).collect(),
         },
         load: LoadMetrics {
             one: snapshot.load_avg_one,
@@ -328,6 +360,78 @@ fn history_bucket(point: MetricsSamplePoint) -> HistoryBucket {
         network_rx_bytes_per_sec: point.network_rx_bytes_per_sec,
         network_tx_bytes_per_sec: point.network_tx_bytes_per_sec,
     }
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub(crate) struct TopProcessesParams {
+    /// 返回条数：默认 10，范围 1–50（越界钳位）。
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(
+    title = "TopProcessesResponse",
+    description = "资源占用 Top 进程列表（按 CPU 降序；15 秒服务端缓存）。"
+)]
+struct TopProcessesResponse {
+    /// 本次采样时刻，RFC 3339。
+    ts: String,
+    /// Top 进程列表。
+    processes: Vec<ProcessMetrics>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[schema(title = "ProcessMetrics", description = "单进程资源占用。")]
+struct ProcessMetrics {
+    pid: u32,
+    name: String,
+    /// CPU 使用率（0–100，单核口径：100 = 打满一个核）。
+    cpu_percent: f32,
+    /// 常驻内存（RSS）。
+    memory_bytes: u64,
+}
+
+impl From<ProcessSnapshot> for ProcessMetrics {
+    /// 进程采集数据 → 响应 DTO。
+    fn from(process: ProcessSnapshot) -> Self {
+        Self {
+            pid: process.pid,
+            name: process.name,
+            cpu_percent: process.cpu_percent,
+            memory_bytes: process.memory_bytes,
+        }
+    }
+}
+
+/// 资源占用 Top 进程：按 CPU 降序，服务端 15 秒缓存（全量进程表刷新开销较大，
+/// 独立于 5 秒快照循环）；需要 `settings:manage` 权限。
+#[utoipa::path(
+    get,
+    path = "/api/admin/system/processes",
+    tag = "Admin System",
+    operation_id = "getTopProcesses",
+    summary = "资源占用 Top 进程",
+    description = "按 CPU 使用率降序返回进程列表（单核口径：100 = 打满一个核），附 RSS；服务端 15 秒缓存。首次调用（或缓存过期后首次）所有进程 CPU 为 0（sysinfo 差值语义），约 15 秒后第二次调用即准确。仅 Owner（`ManageSettings`）可访问。",
+    security(("cookieAuth" = [])),
+    params(TopProcessesParams),
+    responses(
+        (status = 200, description = "Top 进程列表", body = TopProcessesResponse),
+        (status = 401, description = "未认证", body = crate::openapi::ErrorResponse),
+        (status = 403, description = "无 settings:manage 权限", body = crate::openapi::ErrorResponse),
+    )
+)]
+async fn get_top_processes(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Query(params): Query<TopProcessesParams>,
+) -> Result<Json<TopProcessesResponse>, ApiError> {
+    current.require(Permission::ManageSettings)?;
+    let limit = params.limit.unwrap_or(10).clamp(1, 50) as usize;
+    let (ts, processes) = state.metrics.top_processes(limit).await;
+    Ok(Json(TopProcessesResponse {
+        ts: ts.format(&Rfc3339).unwrap_or_else(|_| String::new()),
+        processes: processes.into_iter().map(Into::into).collect(),
+    }))
 }
 
 /// 历史趋势：最近 N 小时的采样点序列（10s 采样、内存环形缓冲、重启清空）；需要 `settings:manage` 权限。

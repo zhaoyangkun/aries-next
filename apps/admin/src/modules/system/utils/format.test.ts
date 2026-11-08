@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatBytes, formatDuration, formatPercent, formatRate } from './format'
+import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, usageTone } from './format'
 
 describe('formatBytes', () => {
   it('formats bytes below one KiB as B', () => {
@@ -65,5 +65,34 @@ describe('formatPercent', () => {
   it('clamps out-of-range values', () => {
     expect(formatPercent(120)).toBe('100.0%')
     expect(formatPercent(-3)).toBe('0.0%')
+  })
+})
+
+describe('formatBitrate', () => {
+  it('converts bytes per second to bit-rate units', () => {
+    expect(formatBitrate(0)).toBe('0 Kbps')
+    expect(formatBitrate(125_000)).toBe('1.0 Mbps')
+    expect(formatBitrate(125_000 * 100)).toBe('100.0 Mbps')
+    expect(formatBitrate(125_000_000)).toBe('1.00 Gbps')
+  })
+
+  it('guards invalid input', () => {
+    expect(formatBitrate(Number.NaN)).toBe('-')
+    expect(formatBitrate(-1)).toBe('-')
+  })
+})
+
+describe('usageTone', () => {
+  it('maps percent to threshold tiers', () => {
+    expect(usageTone(0)).toBe('ok')
+    expect(usageTone(69.9)).toBe('ok')
+    expect(usageTone(70)).toBe('warning')
+    expect(usageTone(89.9)).toBe('warning')
+    expect(usageTone(90)).toBe('critical')
+    expect(usageTone(100)).toBe('critical')
+  })
+
+  it('treats invalid input as ok', () => {
+    expect(usageTone(Number.NaN)).toBe('ok')
   })
 })

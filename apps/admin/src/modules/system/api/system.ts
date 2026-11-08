@@ -34,6 +34,32 @@ export interface NetworkMetrics {
   tx_bytes_per_sec: number
   total_received_bytes: number
   total_transmitted_bytes: number
+  /** 各网卡明细（名称升序）。 */
+  interfaces: NetworkInterfaceMetrics[]
+}
+
+export interface NetworkInterfaceMetrics {
+  name: string
+  rx_bytes_per_sec: number
+  tx_bytes_per_sec: number
+  total_received_bytes: number
+  total_transmitted_bytes: number
+}
+
+export interface ProcessMetrics {
+  pid: number
+  name: string
+  /** CPU 使用率（0–100，单核口径：100 = 打满一个核）。 */
+  cpu_percent: number
+  /** 常驻内存（RSS）。 */
+  memory_bytes: number
+}
+
+export interface TopProcessesResponse {
+  /** 采样时刻，RFC 3339。 */
+  ts: string
+  /** 按 CPU 降序。 */
+  processes: ProcessMetrics[]
 }
 
 export interface LoadMetrics {
@@ -109,5 +135,16 @@ export const systemApi = {
   /** 实时推送 SSE URL：用原生 EventSource 消费（同域自动带 cookie），事件名 `metrics`。 */
   buildStreamUrl() {
     return '/api/admin/system/metrics/stream'
+  },
+
+  /**
+   * 资源占用 Top 进程（按 CPU 降序）；服务端 15 秒缓存。
+   * 首次调用所有进程 CPU 为 0（差值语义），约 15 秒后第二次调用即准确。
+   */
+  async processes(limit = 10): Promise<TopProcessesResponse> {
+    const { data } = await api.get<TopProcessesResponse>('/api/admin/system/processes', {
+      params: { limit },
+    })
+    return data
   },
 }

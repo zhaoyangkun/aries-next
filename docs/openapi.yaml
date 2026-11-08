@@ -4949,6 +4949,45 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       security:
       - cookieAuth: []
+  /api/admin/system/processes:
+    get:
+      tags:
+      - Admin System
+      summary: 资源占用 Top 进程
+      description: 按 CPU 使用率降序返回进程列表（单核口径：100 = 打满一个核），附 RSS；服务端 15 秒缓存。首次调用（或缓存过期后首次）所有进程 CPU 为 0（sysinfo 差值语义），约 15 秒后第二次调用即准确。仅 Owner（`ManageSettings`）可访问。
+      operationId: getTopProcesses
+      parameters:
+      - name: limit
+        in: path
+        description: 返回条数：默认 10，范围 1–50（越界钳位）。
+        required: true
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+      responses:
+        '200':
+          description: Top 进程列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopProcessesResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无 settings:manage 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
   /api/admin/tags:
     get:
       tags:
@@ -7968,6 +8007,35 @@ components:
           type: string
         title:
           type: string
+    NetworkInterfaceMetrics:
+      type: object
+      title: NetworkInterfaceMetrics
+      description: 单网卡网络 IO 明细。
+      required:
+      - name
+      - rx_bytes_per_sec
+      - tx_bytes_per_sec
+      - total_received_bytes
+      - total_transmitted_bytes
+      properties:
+        name:
+          type: string
+        rx_bytes_per_sec:
+          type: integer
+          format: int64
+          minimum: 0
+        total_received_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        total_transmitted_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        tx_bytes_per_sec:
+          type: integer
+          format: int64
+          minimum: 0
     NetworkMetrics:
       type: object
       title: NetworkMetrics
@@ -7977,7 +8045,13 @@ components:
       - tx_bytes_per_sec
       - total_received_bytes
       - total_transmitted_bytes
+      - interfaces
       properties:
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkInterfaceMetrics'
+          description: 各网卡明细（名称 + 速率 + 累计），名称升序。
         rx_bytes_per_sec:
           type: integer
           format: int64
@@ -8122,6 +8196,31 @@ components:
         rendered_html:
           type: string
           description: 经过 `comrak` 渲染和 `ammonia` Sanitization 的 HTML。
+    ProcessMetrics:
+      type: object
+      title: ProcessMetrics
+      description: 单进程资源占用。
+      required:
+      - pid
+      - name
+      - cpu_percent
+      - memory_bytes
+      properties:
+        cpu_percent:
+          type: number
+          format: float
+          description: CPU 使用率（0–100，单核口径：100 = 打满一个核）。
+        memory_bytes:
+          type: integer
+          format: int64
+          description: 常驻内存（RSS）。
+          minimum: 0
+        name:
+          type: string
+        pid:
+          type: integer
+          format: int32
+          minimum: 0
     PublicArticleDetail:
       type: object
       description: |-
@@ -9259,6 +9358,22 @@ components:
           type: string
         slug:
           type: string
+    TopProcessesResponse:
+      type: object
+      title: TopProcessesResponse
+      description: 资源占用 Top 进程列表（按 CPU 降序；15 秒服务端缓存）。
+      required:
+      - ts
+      - processes
+      properties:
+        processes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessMetrics'
+          description: Top 进程列表。
+        ts:
+          type: string
+          description: 本次采样时刻，RFC 3339。
     UnlockRequest:
       type: object
       required:
