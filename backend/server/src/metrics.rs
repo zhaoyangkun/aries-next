@@ -342,7 +342,7 @@ impl MetricsCollector {
     /// 全量 refresh_processes 需遍历进程表， deliberately 独立于 5s 快照循环：
     /// SSE 不携带本数据，由前端按需低频轮询。首次调用因无上次 CPU 采样点，
     /// 所有进程的 cpu 分量会为 0（sysinfo 差值语义），属预期行为。
-    /// 资源占用 Top 进程（按 `sort` 维度降序，取前 `limit` 个；15s 缓存全量快照）。
+    /// 资源占用 Top 进程（按 `sort` 维度排序，取前 `limit` 个；15s 缓存全量快照）。
     ///
     /// 全量 refresh_processes 需遍历进程表， deliberately 独立于 5s 快照循环：
     /// SSE 不携带本数据，由前端按需低频轮询。首次调用因无上次 CPU 采样点，
@@ -350,6 +350,7 @@ impl MetricsCollector {
     pub async fn top_processes(
         &self,
         sort: ProcessSort,
+        descending: bool,
         limit: usize,
     ) -> (OffsetDateTime, Vec<ProcessSnapshot>) {
         let cached = {
@@ -382,17 +383,29 @@ impl MetricsCollector {
             }
         };
         let mut top = processes;
-        top.sort_by(|a, b| match sort {
-            ProcessSort::Cpu => b
-                .cpu_percent
-                .partial_cmp(&a.cpu_percent)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes)),
-            ProcessSort::Memory => b.memory_bytes.cmp(&a.memory_bytes).then_with(|| {
-                b.cpu_percent
+        top.sort_by(|a, b| {
+            // 先按目标字段降序比较；asc 时整体反转（相等保持相等）。
+            let ordering = match sort {
+                ProcessSort::Cpu => b
+                    .cpu_percent
                     .partial_cmp(&a.cpu_percent)
                     .unwrap_or(std::cmp::Ordering::Equal)
-            }),
+                    .then_with(|| b.memory_bytes.cmp(&a.memory_bytes)),
+                ProcessSort::Memory => b.memory_bytes.cmp(&a.memory_bytes).then_with(|| {
+                    b.cpu_percent
+                        .partial_cmp(&a.cpu_percent)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                }),
+            };
+            if descending {
+                ordering
+            } else {
+                match ordering {
+                    std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+                    std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+                    std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+                }
+            }
         });
         (
             OffsetDateTime::now_utc(),

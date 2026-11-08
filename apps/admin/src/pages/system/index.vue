@@ -9,6 +9,7 @@ import type { HistoryBucket, ProcessMetrics, SystemMetrics } from '@/modules/sys
 import GaugeRing from '@/modules/system/components/GaugeRing.vue'
 import Sparkline from '@/modules/system/components/Sparkline.vue'
 import { formatBitrate, formatBytes, formatDuration, formatPercent, formatRate, toneSolidClass, toneTextClass, usageTone } from '@/modules/system/utils/format'
+import { AppDataTablePagination } from '@/shared/components/data-table'
 import { getApiError } from '@/shared/api/client'
 
 // 实时序列保留点数：5s × 120 = 最近 10 分钟。
@@ -166,14 +167,14 @@ function tempClass(celsius: number): string {
 }
 
 // 进程 Top：服务端 15 秒缓存，前端 10 秒轮询跟随（权限/失败静默，不打扰主指标）。
-// 一次拉 50 条：表头点击排序（升降序切换）在前端完成，展示前 10。
+// 一次拉 50 条（排序在服务端全量快照上进行），前端每页 20 条分页。
 const processes = ref<ProcessMetrics[]>([])
 const processesLoading = ref(false)
 
 async function loadProcesses() {
   processesLoading.value = true
   try {
-    const top = await systemApi.processes(50)
+    const top = await systemApi.processes(50, sortKey.value, sortDesc.value ? 'desc' : 'asc')
     processes.value = top.processes
   }
   catch {
@@ -185,10 +186,12 @@ async function loadProcesses() {
 }
 
 // 表头排序状态：排序键 + 升降序（默认降序，先看到占用最高的）。
+// 排序语义在服务端全量进程快照上生效——修复了固定按 CPU 截断导致
+// 「内存大户进不了列表」的问题。
 const sortKey = ref<'cpu' | 'memory'>('cpu')
 const sortDesc = ref(true)
 
-// 点击表头：同列反转方向，异列切换过去并默认降序。
+// 点击表头：同列反转方向，异列切换过去并默认降序；排序变化重新取数。
 function toggleSort(key: 'cpu' | 'memory') {
   if (sortKey.value === key) {
     sortDesc.value = !sortDesc.value
@@ -197,16 +200,27 @@ function toggleSort(key: 'cpu' | 'memory') {
     sortKey.value = key
     sortDesc.value = true
   }
+  processPage.value = 1
+  loadProcesses()
 }
+
+// 前端分页：每页 20 条（排序后的前 50 条内分页）。
+const processPage = ref(1)
+const processPageSize = ref(20)
 
 const sortedProcesses = computed(() => {
   const direction = sortDesc.value ? -1 : 1
-  const sorted = [...processes.value].sort((a, b) => {
+  // 兜底排序：数据来自服务端已按请求维度排好序，这里仅保证极端情况下的稳定性。
+  return [...processes.value].sort((a, b) => {
     const left = sortKey.value === 'cpu' ? a.cpu_percent : a.memory_bytes
     const right = sortKey.value === 'cpu' ? b.cpu_percent : b.memory_bytes
     return (left - right) * direction
   })
-  return sorted.slice(0, 10)
+})
+
+const pagedProcesses = computed(() => {
+  const start = (processPage.value - 1) * processPageSize.value
+  return sortedProcesses.value.slice(start, start + processPageSize.value)
 })
 
 let processesTimer: ReturnType<typeof setInterval> | undefined
@@ -614,9 +628,9 @@ onBeforeUnmount(() => {
               <CpuIcon class="size-4" />
             </div>
             <div class="min-w-0 flex-1">
-              <CardTitle class="text-sm font-medium">资源占用 Top 10</CardTitle>
+              <CardTitle class="text-sm font-medium">资源占用 Top 50</CardTitle>
               <p class="truncate text-xs text-muted-foreground">
-                点击 CPU / 内存表头切换排序
+                服务端排序取前 50 · 每页 20 条 · 点击表头切换排序
               </p>
             </div>
           </CardHeader>
@@ -666,7 +680,7 @@ onBeforeUnmount(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="process in sortedProcesses" :key="process.pid" class="border-b last:border-0">
+                  <tr v-for="process in pagedProcesses" :key="process.pid" class="border-b last:border-0">
                     <td class="max-w-64 truncate py-2 pr-4 font-medium" :title="process.name">
                       {{ process.name || '(未命名)' }}
                     </td>
@@ -687,6 +701,15 @@ onBeforeUnmount(() => {
               </table>
             </div>
           </CardContent>
+          <CardFooter v-if="sortedProcesses.length > 0" class="h-auto">
+            <AppDataTablePagination
+              v-model:page="processPage"
+              v-model:page-size="processPageSize"
+              :total="sortedProcesses.length"
+              :loading="processesLoading"
+              unit="个进程"
+            />
+          </CardFooter>
         </Card>
       </section>
 

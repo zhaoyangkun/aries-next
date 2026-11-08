@@ -1542,7 +1542,7 @@ export interface paths {
         };
         /**
          * 资源占用 Top 进程
-         * @description 按 CPU 使用率降序返回进程列表（单核口径：100 = 打满一个核），附 RSS；服务端 15 秒缓存。首次调用（或缓存过期后首次）所有进程 CPU 为 0（sysinfo 差值语义），约 15 秒后第二次调用即准确。仅 Owner（`ManageSettings`）可访问。
+         * @description 按资源占用排序返回进程列表（单核口径：100 = 打满一个核），附 RSS；服务端 15 秒缓存。`sort` 支持 `cpu` / `memory`，`order` 支持 `desc`（默认）/ `asc`。注意排序发生在服务端全量进程快照上，内存高但 CPU 低的进程用 `sort=memory` 即可看到。首次调用（或缓存过期后首次）所有进程 CPU 为 0（sysinfo 差值语义），约 15 秒后第二次调用即准确。仅 Owner（`ManageSettings`）可访问。
          */
         get: operations["getTopProcesses"];
         put?: never;
@@ -9917,8 +9917,10 @@ export interface operations {
             path: {
                 /** @description 返回条数：默认 10，范围 1–50（越界钳位）。 */
                 limit: number | null;
-                /** @description 排序维度：`cpu`（默认，按 CPU 降序）或 `memory`（按 RSS 降序）；非法值 400。 */
+                /** @description 排序维度：`cpu`（默认，按 CPU 排序）或 `memory`（按 RSS 排序）；非法值 400。 */
                 sort: string | null;
+                /** @description 排序方向：`desc`（默认，降序）或 `asc`（升序）；非法值 400。 */
+                order: string | null;
             };
             cookie?: never;
         };
@@ -9933,7 +9935,7 @@ export interface operations {
                     "application/json": components["schemas"]["TopProcessesResponse"];
                 };
             };
-            /** @description sort 非法（INVALID_PROCESS_SORT） */
+            /** @description sort/order 非法（INVALID_PROCESS_SORT / INVALID_PROCESS_ORDER） */
             400: {
                 headers: {
                     [name: string]: unknown;

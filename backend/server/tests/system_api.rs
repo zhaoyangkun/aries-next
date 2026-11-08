@@ -303,6 +303,33 @@ async fn top_processes_returns_sorted_list_and_clamps_limit() -> anyhow::Result<
             invalid.body
         );
         ensure!(invalid.body["error"]["code"] == "INVALID_PROCESS_SORT");
+
+        // 非法 order 返回 400。
+        let invalid_order = app
+            .admin_get("/api/admin/system/processes?order=sideways", &owner_cookie)
+            .await?;
+        ensure!(
+            invalid_order.status == StatusCode::BAD_REQUEST,
+            "{}",
+            invalid_order.body
+        );
+        ensure!(invalid_order.body["error"]["code"] == "INVALID_PROCESS_ORDER");
+
+        // 升序：首条 CPU 不高于末条。
+        let ascending = app
+            .admin_get("/api/admin/system/processes?order=asc", &owner_cookie)
+            .await?;
+        ensure!(ascending.status == StatusCode::OK, "{}", ascending.body);
+        let asc_cpus: Vec<f64> = ascending.body["processes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|process| process["cpu_percent"].as_f64().unwrap_or(f64::NAN))
+            .collect();
+        ensure!(
+            asc_cpus.windows(2).all(|w| w[0] <= w[1]),
+            "ascending order violated: {asc_cpus:?}"
+        );
         Ok(())
     }
     .await;

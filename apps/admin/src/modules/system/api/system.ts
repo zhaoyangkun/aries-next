@@ -155,13 +155,13 @@ export const systemApi = {
   },
 
   /**
-   * 资源占用 Top 进程；服务端 15 秒缓存。
-   * sort 缺省按 CPU 降序，`memory` 按 RSS 降序；非法值 400。
+   * 资源占用 Top 进程；服务端 15 秒缓存，排序在服务端全量进程快照上进行。
+   * sort 缺省 `cpu`，`memory` 按 RSS；order 缺省 `desc`，`asc` 升序；非法值 400。
    * 首次调用所有进程 CPU 为 0（差值语义），约 15 秒后第二次调用即准确。
    */
-  async processes(limit = 10, sort: 'cpu' | 'memory' = 'cpu'): Promise<TopProcessesResponse> {
+  async processes(limit = 50, sort: 'cpu' | 'memory' = 'cpu', order: 'asc' | 'desc' = 'desc'): Promise<TopProcessesResponse> {
     const { data } = await api.get<TopProcessesResponse>('/api/admin/system/processes', {
-      params: { limit, sort },
+      params: { limit, sort, order },
     })
     return data
   },
