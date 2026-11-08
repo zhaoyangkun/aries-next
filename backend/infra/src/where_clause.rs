@@ -20,18 +20,21 @@ pub enum BindValue {
 }
 
 impl From<i64> for BindValue {
+    /// 绑定值：整型。
     fn from(value: i64) -> Self {
         Self::I64(value)
     }
 }
 
 impl From<String> for BindValue {
+    /// 绑定值：String（转移所有权）。
     fn from(value: String) -> Self {
         Self::Str(value)
     }
 }
 
 impl From<&str> for BindValue {
+    /// 绑定值：&str（借用）。
     fn from(value: &str) -> Self {
         Self::Str(value.to_owned())
     }
@@ -44,6 +47,7 @@ pub trait BindConditions<'q> {
 }
 
 impl<'q> BindConditions<'q> for LoggedQuery<'q> {
+    /// i64 绑定。
     fn bind_condition(self, value: &'q BindValue) -> Self {
         match value {
             BindValue::I64(value) => self.bind(*value),
@@ -56,6 +60,7 @@ impl<'q, O> BindConditions<'q> for LoggedQueryAs<'q, O>
 where
     O: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
+    /// String 绑定。
     fn bind_condition(self, value: &'q BindValue) -> Self {
         match value {
             BindValue::I64(value) => self.bind(*value),
@@ -68,6 +73,7 @@ impl<'q, O> BindConditions<'q> for LoggedQueryScalar<'q, O>
 where
     O: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
 {
+    /// &str 绑定。
     fn bind_condition(self, value: &'q BindValue) -> Self {
         match value {
             BindValue::I64(value) => self.bind(*value),
@@ -84,6 +90,7 @@ pub struct WhereBuilder {
 }
 
 impl WhereBuilder {
+    /// 空条件集起步（clause 生成恒真 WHERE）。
     pub fn new() -> Self {
         Self::default()
     }

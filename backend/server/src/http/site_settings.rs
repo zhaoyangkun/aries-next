@@ -11,6 +11,7 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册站点设置读写路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new().route("/site-settings", get(get_settings).put(update_settings))
 }
@@ -45,6 +46,7 @@ struct SiteSettingsResponse {
 }
 
 impl From<SiteSettings> for SiteSettingsResponse {
+    /// 站点设置领域对象 → 响应 DTO。
     fn from(settings: SiteSettings) -> Self {
         Self {
             site_name: settings.site_name,
@@ -95,14 +97,17 @@ struct UpdateSiteSettingsRequest {
     comments_per_page: i32,
 }
 
+/// 评论策略缺省值：先审后发。
 fn default_comment_policy() -> String {
     "moderated".to_owned()
 }
 
+/// 评论每页条数缺省值。
 fn default_comments_per_page() -> i32 {
     20
 }
 
+/// 读取单行站点设置；仅 Owner（`settings:manage`）可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/site-settings",
@@ -126,6 +131,7 @@ async fn get_settings(
     Ok(Json(settings.into()))
 }
 
+/// 全量更新站点设置并写审计；仅 Owner 可访问，字段校验失败给出具体错误码。
 #[utoipa::path(
     put,
     path = "/api/admin/site-settings",
@@ -181,6 +187,7 @@ async fn update_settings(
         .parse()
         .map_err(|_| ApiError::bad_request("INVALID_COMMENT_POLICY", "Invalid comment policy"))?;
 
+    // 全部字段校验通过后才落库；站点设置为单行表，更新即全量 UPSERT。
     let settings = state
         .site_settings
         .update(SiteSettingsUpdate {
@@ -211,7 +218,8 @@ async fn update_settings(
     Ok(Json(settings.into()))
 }
 
-/// URL 字段允许为空；非空时必须是 http/https 绝对 URL 或站内绝对路径。
+/// URL 字段允许为空；非空时必须是 http/https 绝对 URL 或站内绝对路径
+///（拒绝协议相对 `//` 与路径穿越 `..`）。
 fn validate_optional_url(field: &'static str, value: &str) -> Result<(), ApiError> {
     let value = value.trim();
     if value.is_empty() {

@@ -12,6 +12,7 @@ pub struct S3MediaStorage {
 }
 
 impl S3MediaStorage {
+    /// 从环境变量装配 S3 Client（endpoint/bucket/credentials/region）。
     pub fn from_env() -> anyhow::Result<Self> {
         let endpoint = required_env("S3_ENDPOINT")?;
         let bucket_name = required_env("S3_BUCKET")?;
@@ -39,6 +40,7 @@ impl S3MediaStorage {
 
 #[async_trait]
 impl MediaStorage for S3MediaStorage {
+    /// 上传对象（按 mime 设 Content-Type），返回对外 URL。
     async fn put(&self, object_key: &str, bytes: &[u8], mime: &str) -> Result<String, MediaError> {
         validate_object_key(object_key)?;
         let response = self
@@ -53,6 +55,7 @@ impl MediaStorage for S3MediaStorage {
         Ok(self.url_for(object_key))
     }
 
+    /// 下载对象；不存在返回 None。
     async fn get(&self, object_key: &str) -> Result<Option<Vec<u8>>, MediaError> {
         validate_object_key(object_key)?;
         let response = self.bucket.get_object(object_key).await.map_err(map_s3)?;
@@ -66,6 +69,7 @@ impl MediaStorage for S3MediaStorage {
         Ok(Some(response.bytes().to_vec()))
     }
 
+    /// 删除对象。
     async fn delete(&self, object_key: &str) -> Result<(), MediaError> {
         validate_object_key(object_key)?;
         let response = self
@@ -81,6 +85,7 @@ impl MediaStorage for S3MediaStorage {
         Ok(())
     }
 
+    /// 对外 URL：PUBLIC_BASE_URL + object_key（S3 文件不经由本站服务）。
     fn url_for(&self, object_key: &str) -> String {
         format!(
             "{}/{}",
@@ -89,15 +94,18 @@ impl MediaStorage for S3MediaStorage {
         )
     }
 
+    /// S3 存储不由 Server 本地服务文件。
     fn serves_files_locally(&self) -> bool {
         false
     }
 }
 
+/// 读取必填环境变量。
 fn required_env(name: &str) -> anyhow::Result<String> {
     std::env::var(name).with_context(|| format!("missing required environment variable {name}"))
 }
 
+/// S3 错误映射：NotFound 归 None/NotFound，其余记日志归存储故障。
 fn map_s3(error: s3::error::S3Error) -> MediaError {
     tracing::error!(error = %error, "s3 storage operation failed");
     MediaError::StoreUnavailable

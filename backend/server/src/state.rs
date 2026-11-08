@@ -1,3 +1,4 @@
+//! AppState：全部 Repository / Service 的装配点，以 Arc<dyn Trait> 持有实现（依赖注入与测试替身的基础）。
 use std::sync::Arc;
 
 use aries_core::{

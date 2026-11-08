@@ -51,6 +51,7 @@ pub struct NewGalleryItem {
     pub created_at: OffsetDateTime,
 }
 
+/// 抽取图库条目源行。
 pub async fn extract_rows(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyGalleryRow>> {
     sqlx::query_as::<_, LegacyGalleryRow>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(category_id AS SIGNED) AS category_id, \
@@ -64,6 +65,7 @@ pub async fn extract_rows(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyGallery
     .context("failed to extract legacy galleries")
 }
 
+/// 抽取旧版图库分类（复用 categories 表的行结构）。
 async fn extract_gallery_categories(
     mysql: &MySqlPool,
 ) -> anyhow::Result<Vec<super::categories::LegacyCategory>> {
@@ -118,6 +120,7 @@ pub fn transform_gallery(
     }))
 }
 
+/// ETL：分类与条目分别转换写入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let owner_id = ctx.owner_id().await?;
 

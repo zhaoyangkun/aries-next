@@ -16,6 +16,7 @@ pub struct LegacyTagArticle {
     pub tag_id: i64,
 }
 
+/// 从 MySQL tag_article 抽取关联行（id 统一 CAST 为 SIGNED）。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyTagArticle>> {
     sqlx::query_as::<_, LegacyTagArticle>(
         "SELECT CAST(article_id AS SIGNED) AS article_id, CAST(tag_id AS SIGNED) AS tag_id \
@@ -58,6 +59,7 @@ pub fn transform(
     (valid, archives, duplicates)
 }
 
+/// ETL：去重、悬空对归档，写入目标联合唯一约束表。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     ctx.report.table(TABLE).source_rows = rows.len() as i64;

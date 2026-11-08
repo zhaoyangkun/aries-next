@@ -23,9 +23,12 @@ use crate::state::AppState;
 
 use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 评论内容长度下限（字符）。
 const MIN_COMMENT_LENGTH: usize = 1;
+/// 评论内容长度上限（字符），与数据库 CHECK 一致。
 const MAX_COMMENT_LENGTH: usize = 2_000;
 
+/// 注册评论管理路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/comments", get(list_comments))
@@ -103,6 +106,7 @@ pub(super) struct CommentResponse {
 }
 
 impl From<Comment> for CommentResponse {
+    /// 领域评论 → Admin 响应 DTO（Admin 视图含访客 Email，Public API 不返回该字段）。
     fn from(comment: Comment) -> Self {
         Self {
             id: comment.id,
@@ -128,6 +132,7 @@ impl From<Comment> for CommentResponse {
     }
 }
 
+/// 评论分页列表（Admin 视角，含访客 Email）；需要 `comments:moderate` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/comments",
@@ -162,6 +167,7 @@ async fn list_comments(
         .transpose()?;
     let page = params.page.max(1);
     let page_size = params.page_size.clamp(1, 100);
+    // 空白关键字视为未筛选（与其他列表接口参数语义一致）。
     let result = state
         .comments
         .list(CommentListQuery {
@@ -184,6 +190,7 @@ async fn list_comments(
     }))
 }
 
+/// 评论详情；需要 `comments:moderate` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/comments/{id}",
@@ -221,6 +228,7 @@ struct ChangeCommentStatusRequest {
     reason: Option<String>,
 }
 
+/// 评论审核：按 core 状态机校验转换合法性，写审计（含备注）。
 #[utoipa::path(
     patch,
     path = "/api/admin/comments/{id}/status",
@@ -293,6 +301,7 @@ struct ReplyCommentRequest {
     content_markdown: String,
 }
 
+/// 管理员回复：与访客评论共用渲染管线，直接置 `approved` 并通知被回复者。
 #[utoipa::path(
     post,
     path = "/api/admin/comments/{id}/reply",
@@ -362,6 +371,7 @@ async fn reply_to_comment(
     Ok((StatusCode::CREATED, Json(comment.into())))
 }
 
+/// 物理删除评论：仅 `recycled` 状态允许，删除不可恢复，写审计。
 #[utoipa::path(
     delete,
     path = "/api/admin/comments/{id}",

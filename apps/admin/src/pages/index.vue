@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 后台首页：默认重定向到仪表盘。 */
 import { useRouter } from 'vue-router'
 
 import Loading from '@/components/loading.vue'

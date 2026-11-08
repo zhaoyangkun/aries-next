@@ -182,6 +182,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 连接 MySQL 源库（只读，连接数受限）。
 async fn connect_mysql(url: &str) -> anyhow::Result<MySqlPool> {
     MySqlPoolOptions::new()
         .max_connections(4)
@@ -190,6 +191,7 @@ async fn connect_mysql(url: &str) -> anyhow::Result<MySqlPool> {
         .context("failed to connect to source MySQL")
 }
 
+/// 连接 PostgreSQL 目标库（Schema 名先经白名单校验）。
 async fn connect_postgres(url: &str, schema: &str) -> anyhow::Result<PgPool> {
     validate_schema(schema)?;
     let options = PgConnectOptions::from_str(url)
@@ -203,6 +205,7 @@ async fn connect_postgres(url: &str, schema: &str) -> anyhow::Result<PgPool> {
         .context("failed to connect to target PostgreSQL")
 }
 
+/// 校验目标 Schema 名称为简单标识符（字母/数字/下划线）。
 fn validate_schema(schema: &str) -> anyhow::Result<()> {
     let mut chars = schema.chars();
     let valid_start = chars
@@ -215,10 +218,12 @@ fn validate_schema(schema: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 解析 ±HH:MM 形式的时区偏移（旧版 MySQL 时间字段转换用）。
 fn parse_offset(raw: &str) -> anyhow::Result<time::UtcOffset> {
     timeconv::parse_source_offset(raw).map_err(anyhow::Error::from)
 }
 
+/// 打印 preflight 检查结论（通过项与失败项）。
 fn print_preflight(report: &preflight::PreflightReport) {
     println!(
         "{}",
@@ -226,6 +231,7 @@ fn print_preflight(report: &preflight::PreflightReport) {
     );
 }
 
+/// preflight 子命令：执行只读检查并打印/落盘报告。
 async fn run_preflight(args: PreflightArgs) -> anyhow::Result<i32> {
     let (mut report, started) = RunReport::start("preflight");
     let mysql = connect_mysql(&args.common.mysql_url).await?;
@@ -260,6 +266,7 @@ async fn run_preflight(args: PreflightArgs) -> anyhow::Result<i32> {
     Ok(if preflight.is_clean() { 0 } else { 1 })
 }
 
+/// migrate 子命令：全量 ETL（时区偏移 → 抽取 → 转换 → 写入 → 对账报告）。
 async fn run_migrate(args: MigrateArgs) -> anyhow::Result<i32> {
     let offset = parse_offset(&args.common.source_offset)?;
     let mysql = connect_mysql(&args.common.mysql_url).await?;
@@ -430,6 +437,7 @@ async fn run_migrate(args: MigrateArgs) -> anyhow::Result<i32> {
     Ok(0)
 }
 
+/// validate 子命令：迁移后对账（行数/主键区间/内容 Hash/关联完整性）。
 async fn run_validate(args: ValidateArgs) -> anyhow::Result<i32> {
     let mysql = connect_mysql(&args.common.mysql_url).await?;
     let pg = connect_postgres(&args.common.postgres_url, &args.common.pg_schema).await?;
@@ -458,12 +466,14 @@ async fn run_validate(args: ValidateArgs) -> anyhow::Result<i32> {
     Ok(if has_failures { 1 } else { 0 })
 }
 
+/// re-render 子命令：用当前渲染器重算存量派生 HTML 列。
 async fn run_re_render(args: ReRenderArgs) -> anyhow::Result<i32> {
     let pg = connect_postgres(&args.postgres_url, &args.pg_schema).await?;
     rerender::run(&pg, &args.only, args.dry_run).await?;
     Ok(0)
 }
 
+/// 保存运行报告到 JSON 文件并打印摘要。
 fn save_and_print(report: &RunReport, path: Option<&std::path::Path>) -> anyhow::Result<()> {
     if let Some(path) = path {
         report.save(path)?;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 标签管理页：文章标签的增删改。 */
 import { onMounted, ref } from 'vue'
 import {
   EllipsisIcon,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 文章管理页：列表、筛选、排序模式、状态流转与编辑器入口。 */
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ColumnDef, RowSelectionState } from '@tanstack/vue-table'
 import {

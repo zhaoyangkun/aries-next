@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 多页签栏：已访问页面的页签展示、切换与关闭。 */
 import { ChevronDownIcon, XIcon } from '@lucide/vue'
 import { storeToRefs } from 'pinia'
 import { Button } from '@/components/ui/button'

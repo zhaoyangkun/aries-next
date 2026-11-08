@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 分类详情页：该分类下的文章分页列表。 */
 import type { PublicArticlePage, PublicCategory } from '~/composables/usePublicApi'
 
 const route = useRoute()

@@ -20,6 +20,7 @@ pub enum NavigationTargetType {
 }
 
 impl NavigationTargetType {
+    /// 返回目标类型的小写字符串标识，与数据库 `target_type` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Article => "article",
@@ -39,6 +40,7 @@ impl fmt::Display for NavigationTargetType {
 impl FromStr for NavigationTargetType {
     type Err = NavigationError;
 
+    /// 解析目标类型字符串；未知取值返回 `NavigationError::InvalidTargetType`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "article" => Ok(Self::Article),
@@ -92,6 +94,7 @@ pub struct NavigationItemUpdate {
     pub sort_order: i32,
 }
 
+/// 导航领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum NavigationError {
     #[error("invalid navigation target type")]

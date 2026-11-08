@@ -19,6 +19,7 @@ pub struct PostgresGalleryRepository {
 }
 
 impl PostgresGalleryRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -42,6 +43,7 @@ struct GalleryRow {
 impl TryFrom<GalleryRow> for Gallery {
     type Error = GalleryError;
 
+    /// 查询行 → 领域对象：status 解析失败映射 InvalidStatus。
     fn try_from(row: GalleryRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -79,6 +81,7 @@ struct GalleryItemRow {
 }
 
 impl From<GalleryItemRow> for GalleryItemDetail {
+    /// 查询行 → 条目详情：媒体列为 NULL（软删除资产）时 media 置空。
     fn from(row: GalleryItemRow) -> Self {
         let media = row.media_id.map(|id| GalleryItemMedia {
             id,
@@ -116,6 +119,7 @@ struct PublicPhotoRow {
 }
 
 impl From<PublicPhotoRow> for PublicPhoto {
+    /// 查询行 → 照片墙条目（一条 JOIN 同时取条目、相册与媒体字段）。
     fn from(row: PublicPhotoRow) -> Self {
         Self {
             url: row.url,
@@ -139,6 +143,7 @@ const GALLERY_ITEM_DETAIL_COLUMNS: &str = "i.id, i.gallery_id, i.media_asset_id,
     m.id AS media_id, m.url AS media_url, m.alt AS media_alt, \
     m.width AS media_width, m.height AS media_height";
 
+/// SQLx 错误到 GalleryError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> GalleryError {
     if let sqlx::Error::Database(db) = &error {
         match db.code().as_deref() {
@@ -155,6 +160,7 @@ fn map_sqlx(error: sqlx::Error) -> GalleryError {
 
 #[async_trait]
 impl GalleryRepository for PostgresGalleryRepository {
+    /// 新建图库（slug/title 校验通过后插入）。
     async fn create_gallery(&self, gallery: NewGallery) -> Result<Gallery, GalleryError> {
         aries_core::galleries::validate_slug(&gallery.slug)?;
         aries_core::galleries::validate_title(&gallery.title)?;
@@ -178,6 +184,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         row.try_into()
     }
 
+    /// 按 id 查未软删图库。
     async fn find_gallery(&self, gallery_id: i64) -> Result<Option<Gallery>, GalleryError> {
         let query =
             format!("SELECT {GALLERY_COLUMNS} FROM galleries WHERE id = $1 AND deleted_at IS NULL");
@@ -192,6 +199,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         }
     }
 
+    /// 按 slug 查已发布图库（citext 大小写不敏感）。
     async fn find_published_by_slug(&self, slug: &str) -> Result<Option<Gallery>, GalleryError> {
         let query = format!(
             "SELECT {GALLERY_COLUMNS} FROM galleries \
@@ -208,6 +216,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         }
     }
 
+    /// 管理端分页：WhereBuilder 构建条件，count 与列表共享同一份条件与绑定序列。
     async fn list_galleries(&self, query: GalleryListQuery) -> Result<GalleryPage, GalleryError> {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         let limit = i64::from(query.page_size);
@@ -263,6 +272,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         })
     }
 
+    /// 公开列表：复用管理端列表逻辑，固定 status = published。
     async fn list_public(&self, page: u32, page_size: u32) -> Result<GalleryPage, GalleryError> {
         // 复用 list 的过滤逻辑，固定 status = published。
         self.list_galleries(GalleryListQuery {
@@ -275,6 +285,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         .await
     }
 
+    /// 照片墙：published 相册的条目 JOIN 未软删媒体；相册分类被删时 category_name 为 NULL。
     async fn list_public_photos(&self) -> Result<Vec<PublicPhoto>, GalleryError> {
         // 照片墙：只取 published 且未软删相册的条目；媒体 JOIN 过滤软删除资产
         // （已删除媒体的 URL 不可再展示）；
@@ -296,6 +307,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
+    /// 更新图库；软删行视为 NotFound。
     async fn update_gallery(
         &self,
         gallery_id: i64,
@@ -325,6 +337,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         row.try_into()
     }
 
+    /// 软删除图库；条目保留（图库恢复时仍可用）。
     async fn delete_gallery(&self, gallery_id: i64) -> Result<(), GalleryError> {
         // 软删除图库本身；条目保留（图库恢复时仍然可用）。
         let result = logged_query(
@@ -341,6 +354,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(())
     }
 
+    /// 条目列表 + 内联媒体摘要：LEFT JOIN 一次查询，消除逐条 N+1。
     async fn list_items(&self, gallery_id: i64) -> Result<Vec<GalleryItemDetail>, GalleryError> {
         // LEFT JOIN 一次查全媒体摘要，消除逐条查询的 N+1；软删除资产媒体列为 NULL。
         let query = format!(
@@ -356,6 +370,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
+    /// 添加条目；CTE 让插入与媒体摘要一次 round trip 返回。
     async fn add_item(&self, item: NewGalleryItem) -> Result<GalleryItemDetail, GalleryError> {
         // CTE：插入与媒体摘要一次 round trip 返回。
         let query = format!(
@@ -379,6 +394,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(row.into())
     }
 
+    /// 更新条目（alt/location/sort_order）；不存在返回 ItemNotFound。
     async fn update_item(
         &self,
         item_id: i64,
@@ -405,6 +421,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(row.into())
     }
 
+    /// 移除条目。
     async fn remove_item(&self, item_id: i64) -> Result<(), GalleryError> {
         let result = logged_query("DELETE FROM gallery_items WHERE id = $1")
             .bind(item_id)
@@ -417,6 +434,7 @@ impl GalleryRepository for PostgresGalleryRepository {
         Ok(())
     }
 
+    /// 事务内按入参顺序重写 sort_order，批量排序原子生效。
     async fn reorder_items(
         &self,
         gallery_id: i64,

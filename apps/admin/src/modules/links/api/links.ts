@@ -43,6 +43,7 @@ export interface LinkCategory {
 }
 
 export const linksApi = {
+  /** 分页查询友链，支持状态/分类/关键字筛选。 */
   async list(params: {
     page: number
     page_size: number
@@ -54,6 +55,7 @@ export const linksApi = {
     return data
   },
 
+  /** 读取单个友链详情。 */
   async get(linkId: number) {
     const { data } = await api.get<Link>(`/api/admin/links/${linkId}`)
     return data
@@ -65,30 +67,36 @@ export const linksApi = {
     return data
   },
 
+  /** 更新友链。 */
   async update(linkId: number, payload: UpsertLinkPayload) {
     const { data } = await api.put<Link>(`/api/admin/links/${linkId}`, payload)
     return data
   },
 
+  /** 删除友链。 */
   async remove(linkId: number) {
     await api.delete(`/api/admin/links/${linkId}`)
   },
 
+  /** 友链分类列表（复用 categories 表 kind=link）。 */
   async listCategories() {
     const { data } = await api.get<LinkCategory[]>('/api/admin/links/categories')
     return data
   },
 
+  /** 新建友链分类。 */
   async createCategory(payload: { name: string, slug?: string }) {
     const { data } = await api.post<LinkCategory>('/api/admin/links/categories', payload)
     return data
   },
 
+  /** 更新友链分类。 */
   async updateCategory(categoryId: number, payload: { name: string, slug?: string }) {
     const { data } = await api.put<LinkCategory>(`/api/admin/links/categories/${categoryId}`, payload)
     return data
   },
 
+  /** 删除友链分类。 */
   async removeCategory(categoryId: number) {
     await api.delete(`/api/admin/links/categories/${categoryId}`)
   },

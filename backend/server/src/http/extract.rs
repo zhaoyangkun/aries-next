@@ -20,6 +20,7 @@ where
 {
     type Rejection = ApiError;
 
+    /// axum Json 的薄包装：反序列化拒绝统一转为 400 INVALID_REQUEST_BODY，不泄露解析细节。
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
         match Json::<T>::from_request(request, state).await {
             Ok(Json(value)) => Ok(Self(value)),

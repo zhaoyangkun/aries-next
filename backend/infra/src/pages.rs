@@ -17,6 +17,7 @@ pub struct PostgresPageRepository {
 }
 
 impl PostgresPageRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -40,6 +41,7 @@ struct PageRow {
 impl TryFrom<PageRow> for Page {
     type Error = PageError;
 
+    /// 查询行 → 领域对象：status 字符串解析为枚举。
     fn try_from(row: PageRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -59,6 +61,7 @@ impl TryFrom<PageRow> for Page {
 const PAGE_COLUMNS: &str = "id, slug::text AS slug, title, content_markdown, content_html, \
     status, sort_order, created_by, created_at, updated_at";
 
+/// SQLx 错误到 PageError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> PageError {
     // 23505 = unique_violation：slug 部分唯一索引冲突。
     if let sqlx::Error::Database(db) = &error {
@@ -72,6 +75,7 @@ fn map_sqlx(error: sqlx::Error) -> PageError {
 
 #[async_trait]
 impl PageRepository for PostgresPageRepository {
+    /// 新建自定义页面（content_html 由 HTTP 层渲染传入）。
     async fn create(&self, page: NewPage) -> Result<Page, PageError> {
         aries_core::pages::validate_slug(&page.slug)?;
         aries_core::pages::validate_title(&page.title)?;
@@ -95,6 +99,7 @@ impl PageRepository for PostgresPageRepository {
         row.try_into()
     }
 
+    /// 按 id 查页面。
     async fn find(&self, page_id: i64) -> Result<Option<Page>, PageError> {
         let query =
             format!("SELECT {PAGE_COLUMNS} FROM pages WHERE id = $1 AND deleted_at IS NULL");
@@ -109,6 +114,7 @@ impl PageRepository for PostgresPageRepository {
         }
     }
 
+    /// 按 slug 查已发布页面（citext）。
     async fn find_published_by_slug(&self, slug: &str) -> Result<Option<Page>, PageError> {
         let query = format!(
             "SELECT {PAGE_COLUMNS} FROM pages \
@@ -125,6 +131,7 @@ impl PageRepository for PostgresPageRepository {
         }
     }
 
+    /// 管理端分页：可按状态/关键字筛选。
     async fn list(&self, query: PageListQuery) -> Result<PagePage, PageError> {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         let limit = i64::from(query.page_size);
@@ -177,6 +184,7 @@ impl PageRepository for PostgresPageRepository {
         })
     }
 
+    /// 更新页面。
     async fn update(&self, page_id: i64, update: PageUpdate) -> Result<Page, PageError> {
         aries_core::pages::validate_slug(&update.slug)?;
         aries_core::pages::validate_title(&update.title)?;
@@ -201,6 +209,7 @@ impl PageRepository for PostgresPageRepository {
         row.try_into()
     }
 
+    /// 删除页面。
     async fn delete(&self, page_id: i64) -> Result<(), PageError> {
         let result = logged_query(
             "UPDATE pages SET deleted_at = now(), updated_at = now() \

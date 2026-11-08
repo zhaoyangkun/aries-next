@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 密码输入框：可见性切换与错误提示。Props: id/modelValue/label/autocomplete 等。 */
 import { ref } from 'vue'
 import { EyeIcon, EyeOffIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'

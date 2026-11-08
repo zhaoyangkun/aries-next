@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 侧边栏菜单风格切换（collapsible/vercel）。 */
 import { ChevronRightIcon, LayoutListIcon } from '@lucide/vue'
 import { storeToRefs } from 'pinia'
 

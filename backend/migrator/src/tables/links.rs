@@ -45,6 +45,7 @@ pub struct NewLink {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取友链源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyLink>> {
     sqlx::query_as::<_, LegacyLink>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(category_id AS SIGNED) AS category_id, \
@@ -58,10 +59,12 @@ pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyLink>> {
     .context("failed to extract legacy links")
 }
 
+/// 仅 http/https 判定（其余形态保留原值并加备注）。
 pub fn is_http_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
 
+/// 转换：分类悬空归 NULL、非 http(s) URL 保留加备注、默认 active、长度强制。
 pub fn transform(
     row: &LegacyLink,
     params: &CommonParams,
@@ -167,6 +170,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {
@@ -224,6 +228,7 @@ pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 拉取目标库已有友链分类 id 集合（悬空分类判定用）。
 async fn fetch_link_category_ids(mysql: &MySqlPool) -> anyhow::Result<HashSet<i64>> {
     let ids: Vec<i64> =
         sqlx::query_scalar("SELECT CAST(id AS SIGNED) FROM categories WHERE `type` = 1")

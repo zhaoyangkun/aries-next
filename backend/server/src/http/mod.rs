@@ -1,3 +1,8 @@
+//! HTTP 层模块注册与 Admin 路由装配。
+//!
+//! `admin_router` 汇总全部 `/api/admin/*` 子模块，并统一挂载 `enforce_origin`
+//! 中间件；`public/` 下的匿名端点不经此中间件。
+
 pub mod admin_spa;
 pub mod ai;
 pub mod articles;
@@ -41,10 +46,12 @@ pub const fn default_page() -> u32 {
     DEFAULT_PAGE
 }
 
+/// 每页条数默认值（配合 `default_page` 使用）。
 pub const fn default_page_size() -> u32 {
     DEFAULT_PAGE_SIZE
 }
 
+/// 装配全部 Admin 子路由并挂载 Origin 校验中间件（在 `/api/admin` 前缀下使用）。
 pub fn admin_router(state: AppState) -> Router<AppState> {
     Router::new()
         .merge(auth::router())
@@ -68,6 +75,11 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(state, enforce_origin))
 }
 
+/// Admin 写请求的 CSRF 防线：非 GET/HEAD/OPTIONS 必须携带与 `ADMIN_ORIGINS`
+/// 精确匹配的 `Origin` Header；读请求放行。
+///
+/// 额外把路由层的 405（Method Not Allowed）改写为 400：对带 Origin 的跨站请求，
+/// 浏览器预检与实际方法不匹配时 405 会泄露端点存在性，统一为业务错误更稳妥。
 async fn enforce_origin(
     State(state): State<AppState>,
     request: Request,
@@ -97,6 +109,7 @@ async fn enforce_origin(
         ));
     }
 
+    // 405 改写为 400：带 Origin 的跨站请求下，405 会泄露端点存在性，统一为业务错误更稳妥。
     let response = next.run(request).await;
     if response.status() == StatusCode::METHOD_NOT_ALLOWED {
         return Err(ApiError::bad_request(

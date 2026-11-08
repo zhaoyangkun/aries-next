@@ -17,6 +17,7 @@ pub enum JournalVisibility {
 }
 
 impl JournalVisibility {
+    /// 返回可见性的小写字符串标识，与数据库 `visibility` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Public => "public",
@@ -34,6 +35,7 @@ impl fmt::Display for JournalVisibility {
 impl FromStr for JournalVisibility {
     type Err = JournalError;
 
+    /// 解析可见性字符串；未知取值返回 `JournalError::InvalidVisibility`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "public" => Ok(Self::Public),
@@ -89,6 +91,7 @@ pub struct JournalPage {
     pub page_size: u32,
 }
 
+/// 日志领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum JournalError {
     #[error("invalid journal visibility")]

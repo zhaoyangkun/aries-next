@@ -4,6 +4,7 @@
 import type { Ref } from 'vue'
 import type { PublicTag, PublicTaxonomyRef } from './usePublicApi'
 
+/** 标签表 Composable：全站共享一份（useState 缓存）；返回 tags 列表与 tag_ids → 标签的解析函数。 */
 export async function useTags(): Promise<{
   tags: Ref<PublicTag[]>
   resolveTags: (tagIds: number[]) => PublicTaxonomyRef[]

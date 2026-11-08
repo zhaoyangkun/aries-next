@@ -60,6 +60,7 @@ export function validateMediaFiles(files: File[]): string | null {
   return null
 }
 
+/** 导入文件客户端预校验（1–10 个 .md/.markdown，单文件 ≤ 2MB）；最终约束以 Backend 为准。 */
 export function validateImportFiles(files: File[]): string | null {
   if (files.length === 0) return '请选择要导入的 Markdown 文件'
   if (files.length > IMPORT_MAX_FILES) return `一次最多导入 ${IMPORT_MAX_FILES} 个文件`
@@ -92,9 +93,9 @@ export function getMediaInUseUsages(error: unknown): MediaUsage[] | null {
   return Array.isArray(usages) ? (usages as MediaUsage[]) : []
 }
 
+// 组装 multipart 上传体：字段名与 Backend 约定为 `file[]`。
 function buildUploadFormData(files: File[]) {
   const form = new FormData()
-  // Multipart 字段名与 Backend 约定为 `file[]`。
   for (const file of files) form.append('file[]', file)
   return form
 }
@@ -105,6 +106,7 @@ function toPercent(event: { loaded: number; total?: number }) {
 }
 
 export const mediaApi = {
+  /** 分页查询媒体资产，支持关键字/来源/类型筛选。 */
   async list(params: {
     page: number
     page_size: number
@@ -116,6 +118,7 @@ export const mediaApi = {
     return data
   },
 
+  /** 批量本地上传（multipart，字段名与 Backend 约定为 file[]），进度经回调上报百分比。 */
   async upload(files: File[], onUploadProgress?: (percent: number) => void) {
     const { data } = await api.post<MediaAsset[]>('/api/admin/media', buildUploadFormData(files), {
       onUploadProgress: (event) => onUploadProgress?.(toPercent(event)),
@@ -123,16 +126,19 @@ export const mediaApi = {
     return data
   },
 
+  /** 远程图片入库：由服务端代理下载（带 SSRF 防护），避免浏览器直连目标站。 */
   async uploadRemote(url: string) {
     const { data } = await api.post<MediaAsset>('/api/admin/media/remote', { url })
     return data
   },
 
+  /** 读取单个媒体资产详情。 */
   async get(assetId: number) {
     const { data } = await api.get<MediaAsset>(`/api/admin/media/${assetId}`)
     return data
   },
 
+  /** 更新媒体资产元信息（alt 等）。 */
   async update(assetId: number, payload: UpdateMediaPayload) {
     const { data } = await api.put<MediaAsset>(`/api/admin/media/${assetId}`, payload)
     return data
@@ -149,6 +155,7 @@ export const mediaApi = {
     return data
   },
 
+  /** 查询媒体资产的引用列表（删除前确认用途）。 */
   async listUsages(assetId: number) {
     const { data } = await api.get<MediaUsage[]>(`/api/admin/media/${assetId}/usages`)
     return data
@@ -156,6 +163,7 @@ export const mediaApi = {
 }
 
 export const importsApi = {
+  /** 上传 Markdown 导入包并创建导入 Job。 */
   async createImport(files: File[], onUploadProgress?: (percent: number) => void) {
     const { data } = await api.post<ImportJob>(
       '/api/admin/articles/imports',
@@ -165,6 +173,7 @@ export const importsApi = {
     return data
   },
 
+  /** 查询导入 Job 的状态与预览结果。 */
   async getImport(jobId: number) {
     const { data } = await api.get<ImportJob>(`/api/admin/imports/${jobId}`)
     return data

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 404 兜底路由：未匹配路径渲染自定义错误页。 */
 import Error from '@/components/custom-error.vue'
 </script>
 

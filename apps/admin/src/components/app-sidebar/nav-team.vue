@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 团队导航分发组件：按当前菜单风格（collapsible/vercel）渲染对应实现。 */
 import { useSidebar } from '@/components/ui/sidebar'
 import { useSidebarConfigStore } from '@/stores/sidebar-config'
 

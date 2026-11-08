@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 页面标题区：标题 + 描述。Props: title/description。 */
 defineProps<{
   title: string
   description: string

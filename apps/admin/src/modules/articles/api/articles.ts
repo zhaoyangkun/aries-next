@@ -42,6 +42,7 @@ export interface CreateArticlePayload {
 }
 
 export const articlesApi = {
+  /** 分页查询文章列表，支持状态/分类/标签/关键字筛选与排序。 */
   async list(params: {
     page: number
     page_size: number
@@ -56,16 +57,19 @@ export const articlesApi = {
     return data
   },
 
+  /** 新建文章；payload 的三态语义见 CreateArticlePayload。 */
   async create(payload: CreateArticlePayload) {
     const { data } = await api.post<AdminArticle>('/api/admin/articles', payload)
     return data
   },
 
+  /** 读取单篇文章详情。 */
   async get(articleId: number) {
     const { data } = await api.get<AdminArticle>(`/api/admin/articles/${articleId}`)
     return data
   },
 
+  /** 全量更新文章，携带 expected_version 乐观锁，冲突返回 409。 */
   async update(
     articleId: number,
     payload: CreateArticlePayload & { expected_version: number },
@@ -74,6 +78,7 @@ export const articlesApi = {
     return data
   },
 
+  /** 列出文章的历史版本。 */
   async listRevisions(articleId: number) {
     const { data } = await api.get<ArticleRevision[]>(
       `/api/admin/articles/${articleId}/revisions`,
@@ -81,6 +86,7 @@ export const articlesApi = {
     return data
   },
 
+  /** 回滚到指定历史版本（乐观锁），返回恢复后的文章。 */
   async restoreRevision(articleId: number, revisionNo: number, expectedVersion: number) {
     const { data } = await api.post<AdminArticle>(
       `/api/admin/articles/${articleId}/revisions/${revisionNo}/restore`,
@@ -109,6 +115,7 @@ export const articlesApi = {
     return data.moved
   },
 
+  /** 文章状态流转（发布/下线/回收/还原等）；非法转换 Backend 返回 409。 */
   async changeStatus(
     articleId: number,
     command: ArticleStatusCommand,
@@ -121,6 +128,7 @@ export const articlesApi = {
     return data
   },
 
+  /** Markdown 实时预览：返回 Backend 渲染并 Sanitize 后的 HTML。 */
   async preview(markdown_source: string) {
     const { data } = await api.post<{ rendered_html: string }>('/api/admin/articles/preview', {
       markdown_source,
@@ -128,16 +136,19 @@ export const articlesApi = {
     return data
   },
 
+  /** 全部分类（不分页，供筛选下拉与编辑器选择）。 */
   async listCategories() {
     const { data } = await api.get<ArticleCategory[]>('/api/admin/categories')
     return data
   },
 
+  /** 新建分类。 */
   async createCategory(name: string) {
     const { data } = await api.post<ArticleCategory>('/api/admin/categories', { name })
     return data
   },
 
+  /** 更新分类（name/slug）。 */
   async updateCategory(categoryId: number, payload: { name: string; slug?: string }) {
     const { data } = await api.put<ArticleCategory>(
       `/api/admin/categories/${categoryId}`,
@@ -146,25 +157,30 @@ export const articlesApi = {
     return data
   },
 
+  /** 删除分类；存在文章引用时 Backend 拒绝。 */
   async deleteCategory(categoryId: number) {
     await api.delete(`/api/admin/categories/${categoryId}`)
   },
 
+  /** 全部标签（不分页）。 */
   async listTags() {
     const { data } = await api.get<ArticleTag[]>('/api/admin/tags')
     return data
   },
 
+  /** 新建标签。 */
   async createTag(name: string) {
     const { data } = await api.post<ArticleTag>('/api/admin/tags', { name })
     return data
   },
 
+  /** 更新标签（name/slug）。 */
   async updateTag(tagId: number, payload: { name: string; slug?: string }) {
     const { data } = await api.put<ArticleTag>(`/api/admin/tags/${tagId}`, payload)
     return data
   },
 
+  /** 删除标签。 */
   async deleteTag(tagId: number) {
     await api.delete(`/api/admin/tags/${tagId}`)
   },

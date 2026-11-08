@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 双栏布局侧栏：锚点导航列表。Props: nav。 */
 import { ChevronsUpDownIcon } from '@lucide/vue'
 
 import { Button } from '@/components/ui/button'

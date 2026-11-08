@@ -10,6 +10,7 @@ use crate::state::AppState;
 use super::{CACHE_AGGREGATE, json_with_cache};
 use crate::http::error::ApiError;
 
+/// 注册公开站点信息路由（挂载在 `/api/public` 下）。
 pub fn router() -> Router<AppState> {
     Router::new().route("/site", get(get_public_site))
 }
@@ -47,6 +48,8 @@ struct PublicSiteResponse {
     created_at: time::OffsetDateTime,
 }
 
+/// 站点公开信息端点：site_settings 的白名单投影 + 社交链接（降级为空列表）。
+/// 匿名可访问，带聚合缓存头；新增内部配置默认不出现在此响应。
 #[utoipa::path(
     get,
     path = "/api/public/site",

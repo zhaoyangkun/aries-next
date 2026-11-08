@@ -1,3 +1,6 @@
+//! Admin 个人资料端点：Profile 读写与密码修改。
+//! 密码修改成功后撤销该用户全部 Session 并清除当前 Cookie。
+
 use aries_core::auth::{AuditEvent, Permission, ProfileUpdate, UserStatus, validate_password};
 use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
 use axum_extra::extract::cookie::CookieJar;
@@ -13,6 +16,7 @@ use super::{
     error::ApiError,
 };
 
+/// 注册个人资料路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/profile", get(get_profile).put(update_profile))
@@ -45,6 +49,7 @@ struct UpdatePasswordRequest {
     new_password: String,
 }
 
+/// 当前登录用户的 Profile（含 Role 与权限列表）；需要 `profile:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/profile",
@@ -64,6 +69,7 @@ async fn get_profile(current: CurrentUser) -> Result<Json<UserResponse>, ApiErro
     Ok(Json(UserResponse::from(&current.user)))
 }
 
+/// 更新当前用户 Profile（邮箱/显示名/头像）并写审计；邮箱冲突返回 409。
 #[utoipa::path(
     put,
     path = "/api/admin/profile",
@@ -114,6 +120,8 @@ async fn update_profile(
     Ok(Json(UserResponse::from(&user)))
 }
 
+/// 修改当前用户密码：校验当前密码 → 更新 Hash → 撤销全部 Session → 清 Cookie。
+/// 防御纵深：即便 Session 被盗，改密后旧 Session 全部失效。
 #[utoipa::path(
     put,
     path = "/api/admin/profile/password",
@@ -138,6 +146,7 @@ async fn update_password(
 ) -> Result<(CookieJar, StatusCode), ApiError> {
     current.require(Permission::ManageProfile)?;
     validate_password(&request.new_password)?;
+    // 重取凭据并确认仍是当前且 Active 的用户（收窄 Session 过期窗口内的状态变更）。
     let credentials = state
         .auth
         .find_credentials(&current.user.username)
@@ -172,6 +181,7 @@ async fn update_password(
     Ok((remove_session_cookie(jar, &state), StatusCode::NO_CONTENT))
 }
 
+/// 头像 URL 校验：缺省/空串视为清除；非空必须是 http/https 绝对 URL 且可解析。
 fn validate_avatar_url(value: Option<String>) -> Result<Option<String>, ApiError> {
     let Some(value) = value else {
         return Ok(None);

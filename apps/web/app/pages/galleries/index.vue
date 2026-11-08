@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 图库列表页：全部已发布图库。 */
 import type { PublicGalleryPage } from '~/composables/usePublicApi'
 
 const route = useRoute()

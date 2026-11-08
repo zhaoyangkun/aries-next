@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 错误页路由：按路由参数的错误码渲染对应文案。 */
 import Error from '@/components/custom-error.vue'
 
 import { resolveErrorPage } from './data/error-pages'

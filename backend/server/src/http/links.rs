@@ -26,6 +26,7 @@ use super::{
     taxonomy::{CategoryResponse, map_taxonomy_error},
 };
 
+/// 注册友链与友链分类管理路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/links", get(list_links).post(create_link))
@@ -99,6 +100,7 @@ pub(crate) struct LinkResponse {
 }
 
 impl From<Link> for LinkResponse {
+    /// 领域友链 → 响应 DTO。
     fn from(link: Link) -> Self {
         Self {
             id: link.id,
@@ -474,6 +476,7 @@ pub(crate) async fn delete_link_category(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 友链变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_link_audit(
     state: &AppState,
     current: &CurrentUser,

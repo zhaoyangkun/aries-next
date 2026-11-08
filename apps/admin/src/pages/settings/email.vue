@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 邮件设置页：SMTP 配置与测试发信。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'

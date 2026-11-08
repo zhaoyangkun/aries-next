@@ -22,6 +22,7 @@ use crate::state::AppState;
 
 use super::{CACHE_AGGREGATE, CACHE_ARTICLE, json_with_cache, reject_out_of_range_page};
 
+/// 注册扩展内容公开路由：Page / Journal / Gallery / Photos / Link / Navigation（挂载在 `/api/public` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/pages/{slug}", get(get_page))

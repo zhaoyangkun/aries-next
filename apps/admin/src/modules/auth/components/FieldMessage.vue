@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 表单字段下方的提示/错误文案。Props: id/message/error。 */
 import { CircleAlertIcon } from '@lucide/vue'
 
 withDefaults(

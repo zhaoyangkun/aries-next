@@ -1,3 +1,4 @@
+//! Admin 文章管理端点：CRUD、状态流转、修订历史、排序移动与 Markdown 导入预览。
 use std::str::FromStr;
 
 use aries_core::{
@@ -26,6 +27,7 @@ use super::{
 const MAX_MARKDOWN_LENGTH: usize = 1_000_000;
 const MIN_ACCESS_PASSWORD_LENGTH: usize = 6;
 
+/// 注册文章管理路由：CRUD、状态流转、修订、排序移动与 Markdown 导入（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/articles", get(list_articles).post(create_article))
@@ -258,6 +260,7 @@ struct ArticleResponse {
 }
 
 impl From<Article> for ArticleResponse {
+    /// 领域文章 → Admin 响应 DTO（不暴露访问密码 Hash，只给受保护标记）。
     fn from(article: Article) -> Self {
         Self {
             id: article.id,
@@ -327,6 +330,7 @@ struct RevisionResponse {
 }
 
 impl From<ArticleRevision> for RevisionResponse {
+    /// 领域修订 → 响应 DTO。
     fn from(revision: ArticleRevision) -> Self {
         Self {
             revision_no: revision.revision_no,
@@ -348,6 +352,7 @@ impl From<ArticleRevision> for RevisionResponse {
     }
 }
 
+/// 管理端文章分页列表：支持状态/分类/标签/关键词过滤与排序白名单。
 #[utoipa::path(
     get,
     path = "/api/admin/articles",
@@ -397,6 +402,7 @@ async fn list_articles(
     }))
 }
 
+/// 文章详情（Admin 端）：含访问密码保护标记，永不回传密码 Hash。
 #[utoipa::path(
     get,
     path = "/api/admin/articles/{id}",
@@ -427,6 +433,7 @@ async fn get_article(
     Ok(Json(article.into()))
 }
 
+/// 创建文章：服务端渲染 Markdown、归一 slug/关键词、同步标签与媒体引用，写审计。
 #[utoipa::path(
     post,
     path = "/api/admin/articles",
@@ -508,6 +515,7 @@ async fn create_article(
     Ok((StatusCode::CREATED, Json(article.into())))
 }
 
+/// 更新文章：乐观锁防并发覆盖；访问密码三态语义（不改动/清除/设置）。
 #[utoipa::path(
     put,
     path = "/api/admin/articles/{id}",
@@ -635,6 +643,7 @@ async fn enqueue_article_embed(state: &AppState, article_id: i64) {
         (status = 409, description = "版本冲突或非法状态迁移（ARTICLE_CONFLICT）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 状态流转命令：core 状态机校验转换合法性 + 乐观锁；发布前做完整性校验。
 async fn change_status(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -685,6 +694,7 @@ async fn change_status(
         (status = 403, description = "无 content:manage 权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 渲染预览：Markdown 实时渲染为 Sanitized HTML（不落库）。
 async fn preview_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -713,6 +723,7 @@ async fn preview_article(
         (status = 409, description = "文章非 recycled 状态（ARTICLE_NOT_RECYCLED）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 物理删除文章：仅 recycled 状态允许，删除不可恢复，写审计。
 async fn delete_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -750,6 +761,7 @@ async fn delete_article(
         (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 修订历史列表（按版本号倒序，不含正文之外的多余字段）。
 async fn list_revisions(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -786,6 +798,7 @@ async fn list_revisions(
         (status = 409, description = "版本冲突（ARTICLE_CONFLICT）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 恢复指定修订：回写正文与元数据并重新渲染，不回滚生命周期状态。
 async fn restore_revision(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -860,6 +873,7 @@ struct ReorderArticlesRequest {
         (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 原子批量重排：事务内按入参顺序重写 sort_order，写审计。
 async fn reorder_articles(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -873,6 +887,7 @@ async fn reorder_articles(
             "Reorder list must contain 1 to 500 article ids",
         ));
     }
+    // 整单校验前置：空、超上限或含重复 id 直接整体拒绝，避免部分写入。
     let mut unique = ids.clone();
     unique.sort_unstable();
     unique.dedup();
@@ -961,6 +976,7 @@ struct MoveArticleResponse {
         (status = 404, description = "文章不存在（ARTICLE_NOT_FOUND）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 分组内排序移动（Up/Down/Top/Bottom），写审计。
 async fn move_article(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -1004,6 +1020,7 @@ fn parse_sort(sort: Option<&str>, order: Option<&str>) -> (ArticleSort, SortOrde
     (sort, order)
 }
 
+/// 访问密码 Hash 计算（CPU 密集，blocking 线程池执行）。
 async fn hash_access_password(state: &AppState, password: String) -> Result<String, ApiError> {
     let password = password.trim().to_owned();
     // 空或过短密码直接报错，比静默当作“清除”更不容易误操作。
@@ -1016,6 +1033,7 @@ async fn hash_access_password(state: &AppState, password: String) -> Result<Stri
     hash_password(state, password).await
 }
 
+/// Markdown 渲染走 blocking 线程池（comrak CPU 密集，避免阻塞 async runtime）。
 pub(super) async fn render_markdown(state: &AppState, source: String) -> Result<String, ApiError> {
     let renderer = state.markdown.clone();
     tokio::task::spawn_blocking(move || renderer.render(&source))
@@ -1024,6 +1042,7 @@ pub(super) async fn render_markdown(state: &AppState, source: String) -> Result<
         .map_err(Into::into)
 }
 
+/// Markdown 正文长度校验（上限与数据库约束一致）。
 fn validate_markdown_length(source: &str) -> Result<(), ApiError> {
     if source.chars().count() > MAX_MARKDOWN_LENGTH {
         return Err(ApiError::bad_request(
@@ -1034,6 +1053,7 @@ fn validate_markdown_length(source: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// SEO 关键词归一：Trim、去空、去重、逐条限长与总数上限校验。
 fn normalize_keywords(keywords: Vec<String>) -> Result<Vec<String>, ApiError> {
     let mut keywords = keywords
         .into_iter()

@@ -20,6 +20,7 @@ export interface AuditPage {
 
 /** 时间范围参数为 RFC 3339 字符串（如 `2026-09-05T00:00:00Z`），左闭右开。 */
 export const auditApi = {
+  /** 分页查询审计日志，支持操作者/动作/对象/时间范围筛选（RFC 3339，左闭右开）。 */
   async list(params: {
     page: number
     page_size: number

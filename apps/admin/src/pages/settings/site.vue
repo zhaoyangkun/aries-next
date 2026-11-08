@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 站点设置页：站点名称/描述/地址/Logo、ICP 备案号与网安备号、评论策略与分页大小。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'

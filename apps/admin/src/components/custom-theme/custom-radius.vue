@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 圆角设置：预设档位写入 --radius。 */
 import { storeToRefs } from 'pinia'
 
 import { Button } from '@/components/ui/button'

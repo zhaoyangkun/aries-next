@@ -6,6 +6,7 @@ export interface GestureVector {
   y: number
 }
 
+/** 缩放系数夹取到 [min, max]。 */
 export function clampScale(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }

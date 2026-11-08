@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="TData">
+/** 数据表列显隐切换。Props: table。 */
 import type { Table } from '@tanstack/vue-table'
 import { Columns3Icon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'

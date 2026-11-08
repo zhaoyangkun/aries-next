@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 归档页：按月份分组的文章时间线。 */
 import type { PublicArchiveMonth } from '~/composables/usePublicApi'
 
 const { data: archives, status } = await usePublicApi<PublicArchiveMonth[]>(

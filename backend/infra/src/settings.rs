@@ -16,6 +16,7 @@ pub struct PostgresSettingRepository {
 }
 
 impl PostgresSettingRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -34,6 +35,7 @@ struct SettingGroupRow {
 impl TryFrom<SettingGroupRow> for SettingGroupRecord {
     type Error = SettingError;
 
+    /// 查询行 → 分组设置记录。
     fn try_from(row: SettingGroupRow) -> Result<Self, Self::Error> {
         Ok(Self {
             group: row.grp.parse().map_err(|_| SettingError::InvalidGroup)?,
@@ -47,6 +49,7 @@ impl TryFrom<SettingGroupRow> for SettingGroupRecord {
 
 const SETTING_COLUMNS: &str = "grp, payload, version, updated_by, updated_at";
 
+/// SQLx 错误到 SettingError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> SettingError {
     tracing::error!(error = %error, "setting repository operation failed");
     SettingError::StoreUnavailable
@@ -54,6 +57,7 @@ fn map_sqlx(error: sqlx::Error) -> SettingError {
 
 #[async_trait]
 impl SettingRepository for PostgresSettingRepository {
+    /// 读取分组设置：行缺失时自愈插入默认值（保证后续 UPDATE 有行可写）。
     async fn get_group(&self, group: SettingGroup) -> Result<SettingGroupRecord, SettingError> {
         let query = format!("SELECT {SETTING_COLUMNS} FROM setting_groups WHERE grp = $1");
         let row = logged_query_as::<SettingGroupRow>(&query)
@@ -82,6 +86,7 @@ impl SettingRepository for PostgresSettingRepository {
         row.try_into()
     }
 
+    /// 更新分组设置：行级 version 乐观锁（UPDATE ... WHERE version = $n，影响 0 行即 Conflict）。
     async fn update_group(
         &self,
         group: SettingGroup,

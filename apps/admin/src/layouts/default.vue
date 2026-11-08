@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 默认布局：侧边栏 + 页签栏 + 主内容区，认证后页面的骨架。 */
 import { useCookies } from '@vueuse/integrations/useCookies'
 import { ExternalLinkIcon } from '@lucide/vue'
 import { storeToRefs } from 'pinia'

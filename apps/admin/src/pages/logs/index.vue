@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 运行日志页：日志查询、实时 tail、级别覆盖与 SQL 日志开关。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import {

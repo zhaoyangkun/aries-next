@@ -16,6 +16,7 @@ pub struct PostgresChunkRepository {
 }
 
 impl PostgresChunkRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -40,6 +41,7 @@ fn cosine_distance(a: &[f32], b: &[f32]) -> Option<f32> {
     Some(1.0 - (dot / (norm_a.sqrt() * norm_b.sqrt())) as f32)
 }
 
+/// SQLx 错误到 RetrievalError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> RetrievalError {
     tracing::error!(error = %error, "chunk repository operation failed");
     RetrievalError::StoreUnavailable
@@ -56,6 +58,7 @@ struct RetrievedChunkRow {
 }
 
 impl RetrievedChunkRow {
+    /// 行 + 距离 → (距离, 检索块) 元组，供排序后剥离距离。
     fn into_retrieved(self, distance: f32) -> (f32, RetrievedChunk) {
         (
             distance,
@@ -81,6 +84,7 @@ struct RelatedArticleRow {
 
 #[async_trait]
 impl ChunkRepository for PostgresChunkRepository {
+    /// 全量替换文章分块：先校验块/向量数量一致，再事务内删旧插新。
     async fn replace_chunks(
         &self,
         article_id: i64,
@@ -102,6 +106,7 @@ impl ChunkRepository for PostgresChunkRepository {
             .execute(&mut *transaction)
             .await
             .map_err(map_sqlx)?;
+        // 逐块插入：embedding 维度由模型决定，列不做固定维度约束（兼容换模型）。
         for (index, (chunk, embedding)) in chunks.iter().zip(embeddings.iter()).enumerate() {
             let chunk_index = i32::try_from(index).map_err(|_| {
                 tracing::error!(article_id, chunks = chunks.len(), "chunk index overflow");
@@ -123,6 +128,7 @@ impl ChunkRepository for PostgresChunkRepository {
         transaction.commit().await.map_err(map_sqlx)
     }
 
+    /// 删除文章全部分块（文章删除或重新嵌入前调用）。
     async fn delete_chunks(&self, article_id: i64) -> Result<(), RetrievalError> {
         logged_query("DELETE FROM article_chunks WHERE article_id = $1")
             .bind(article_id)
@@ -132,6 +138,7 @@ impl ChunkRepository for PostgresChunkRepository {
         Ok(())
     }
 
+    /// 最相近分块：拉全部已发布文章分块在应用层算余弦距离排序（语料量小时足够快，见模块头）。
     async fn nearest_chunks(
         &self,
         embedding: &[f32],
@@ -158,6 +165,7 @@ impl ChunkRepository for PostgresChunkRepository {
         Ok(ranked.into_iter().map(|(_, chunk)| chunk).collect())
     }
 
+    /// 相关文章：每篇文章取最近块的余弦距离作为文章距离。
     async fn nearest_articles(
         &self,
         embedding: &[f32],

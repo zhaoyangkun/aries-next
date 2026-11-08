@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 邮件投递记录页：投递状态筛选与重试观察。 */
 import { onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { InboxIcon } from '@lucide/vue'

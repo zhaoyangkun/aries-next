@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 数据表分页条：页码/总条数与加载态。Props: total/loading/unit。 */
 import { computed, ref, watch } from 'vue'
 import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'

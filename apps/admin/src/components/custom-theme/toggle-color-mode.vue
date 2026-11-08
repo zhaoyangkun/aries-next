@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 明暗模式切换按钮。 */
 import type { BasicColorSchema } from '@vueuse/core'
 import type { Component } from 'vue'
 

@@ -21,6 +21,7 @@ pub struct PreflightReport {
 }
 
 impl PreflightReport {
+    /// hard_errors 与 violations 均为空即视为通过。
     pub fn is_clean(&self) -> bool {
         self.hard_errors.is_empty() && self.violations.is_empty()
     }
@@ -33,6 +34,7 @@ pub struct PreflightOptions<'a> {
     pub http_client: Option<&'a reqwest::Client>,
 }
 
+/// 依次执行全部 Preflight 检查项，最后汇总各源表行数统计（表名映射见 database-mapping）。
 pub async fn run(
     mysql: &MySqlPool,
     options: &PreflightOptions<'_>,
@@ -77,6 +79,7 @@ pub async fn run(
     Ok(report)
 }
 
+/// 将 ID 列表格式化为「前 N 个…（共 M 条）」摘要。
 fn format_listing(prefix: &str, ids: &[i64], total: i64) -> String {
     let shown: Vec<String> = ids
         .iter()
@@ -91,6 +94,7 @@ fn format_listing(prefix: &str, ids: &[i64], total: i64) -> String {
     format!("{prefix}: {}{suffix}", shown.join(", "))
 }
 
+/// 大小写不敏感冲突检查：PostgreSQL citext 唯一索引会拒绝 MySQL 里仅大小写不同的重复值。
 async fn check_citext_conflicts(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -131,6 +135,7 @@ async fn check_citext_conflicts(
     Ok(())
 }
 
+/// 孤儿行检查：关联目标不存在的数据（如文章引用了不存在的分类/作者）。
 async fn check_orphans(mysql: &MySqlPool, report: &mut PreflightReport) -> anyhow::Result<()> {
     // (label, sql, hard?)
     let checks: [(&str, &str, bool); 10] = [
@@ -217,6 +222,7 @@ async fn check_orphans(mysql: &MySqlPool, report: &mut PreflightReport) -> anyho
     Ok(())
 }
 
+/// 零值日期检查：MySQL 零日期（0000-00-00）无法写入 PostgreSQL timestamptz。
 async fn check_zero_dates(mysql: &MySqlPool, report: &mut PreflightReport) -> anyhow::Result<()> {
     let tables = [
         "users",
@@ -252,6 +258,7 @@ async fn check_zero_dates(mysql: &MySqlPool, report: &mut PreflightReport) -> an
     Ok(())
 }
 
+/// 布尔列取值检查：MySQL 布尔以 tinyint 存储，可能含 0/1 之外的值。
 async fn check_boolean_columns(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -293,6 +300,7 @@ async fn check_boolean_columns(
     Ok(())
 }
 
+/// 文章状态合法性检查：非法状态在转换时无处可映射。
 async fn check_article_states(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -339,6 +347,7 @@ async fn check_article_states(
     Ok(())
 }
 
+/// 文章-标签重复关联检查：目标表联合唯一约束会拒绝重复对。
 async fn check_tag_article_duplicates(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -358,6 +367,7 @@ async fn check_tag_article_duplicates(
     Ok(())
 }
 
+/// 评论目标类型检查：非法 target_type 无法映射。
 async fn check_comment_types(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -388,6 +398,7 @@ async fn check_comment_types(
     Ok(())
 }
 
+/// 长度违例检查：超出目标列长度的字段（可用 --truncate-violations 放行并截断）。
 async fn check_length_violations(
     mysql: &MySqlPool,
     report: &mut PreflightReport,
@@ -454,6 +465,7 @@ async fn check_length_violations(
     Ok(())
 }
 
+/// 设置键检查：未知/重复键的处置策略。
 async fn check_setting_keys(mysql: &MySqlPool, report: &mut PreflightReport) -> anyhow::Result<()> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT s.name, i.`key` FROM sys_setting_items i \
@@ -487,6 +499,7 @@ async fn check_setting_keys(mysql: &MySqlPool, report: &mut PreflightReport) -> 
     Ok(())
 }
 
+/// 媒体 URL 抽查：HEAD 请求探测旧站媒体可达性（可选，0 关闭）。
 async fn check_media_urls(
     mysql: &MySqlPool,
     report: &mut PreflightReport,

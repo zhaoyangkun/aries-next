@@ -1,3 +1,4 @@
+//! aries-infra：core 契约的 PostgreSQL / Storage / Markdown 渲染 / AI / 邮件实现层。
 use std::{env, str::FromStr};
 
 use anyhow::{Context, bail};
@@ -62,12 +63,14 @@ pub struct PostgresConfig {
 }
 
 impl PostgresConfig {
+    /// 结构化变量（HOST/USERNAME/PASSWORD/NAME）任一存在即走结构化配置，否则回退 DATABASE_URL。
     pub fn from_env() -> anyhow::Result<Self> {
         let schema = env::var("DATABASE_SCHEMA").unwrap_or_else(|_| "public".to_owned());
         validate_schema(&schema)?;
         let slow_query_ms =
             parse_slow_query_ms(env::var("DATABASE_SLOW_QUERY_MS").ok().as_deref())?;
 
+        // 结构化变量与 URL 二选一：结构化任一存在就要求齐全（避免半结构化配置的隐式回退）。
         let structured_names = [
             "DATABASE_HOST",
             "DATABASE_USERNAME",
@@ -107,6 +110,7 @@ impl PostgresConfig {
         })
     }
 
+    /// 业务 Schema 名。
     pub fn schema(&self) -> &str {
         &self.schema
     }
@@ -121,6 +125,7 @@ impl PostgresConfig {
         }
     }
 
+    /// 连接参数：注入 search_path（业务 Schema）；慢查询阈值 >0 时启用 sqlx 原生 WARN 日志。
     fn options(&self) -> PgConnectOptions {
         let options = self
             .options
@@ -137,6 +142,7 @@ impl PostgresConfig {
     }
 }
 
+/// 建池（max 10 连接），用定制 options 连接。
 pub async fn connect_postgres(config: &PostgresConfig) -> anyhow::Result<PgPool> {
     PgPoolOptions::new()
         .max_connections(10)
@@ -145,6 +151,7 @@ pub async fn connect_postgres(config: &PostgresConfig) -> anyhow::Result<PgPool>
         .context("failed to connect to PostgreSQL")
 }
 
+/// CREATE SCHEMA IF NOT EXISTS（Schema 名事先经 validate_schema 白名单校验）。
 pub async fn ensure_schema(pool: &PgPool, schema: &str) -> anyhow::Result<()> {
     let statement = format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"");
     sqlx::query(&statement)
@@ -171,6 +178,7 @@ pub async fn run_migrations(pool: &PgPool) -> anyhow::Result<()> {
         .context("failed to run PostgreSQL migrations")
 }
 
+/// 把 citext 扩展固定建到 search_path 末位 Schema（并发竞争重试），规避多事务并发 CREATE EXTENSION 竞争；细节见 run_migrations 文档。
 async fn ensure_citext_extension(pool: &PgPool) -> anyhow::Result<()> {
     let (search_path,): (String,) = sqlx::query_as("SHOW search_path")
         .fetch_one(pool)
@@ -203,6 +211,7 @@ async fn ensure_citext_extension(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 读取必填环境变量：未设置或空串时报错（错误信息带变量名）。
 fn required_env(name: &str) -> anyhow::Result<String> {
     env::var(name).with_context(|| format!("missing required environment variable {name}"))
 }
@@ -216,6 +225,7 @@ fn parse_slow_query_ms(value: Option<&str>) -> anyhow::Result<u64> {
             .context("DATABASE_SLOW_QUERY_MS must be a non-negative integer (milliseconds)"),
     }
 }
+/// 校验 Schema 名称为简单标识符（字母/数字/下划线），防 SQL 注入。
 fn validate_schema(schema: &str) -> anyhow::Result<()> {
     let mut chars = schema.chars();
     let valid_start = chars

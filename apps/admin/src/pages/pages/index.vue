@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 自定义页面管理页：页面的增删改与发布。 */
 import { computed, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import {

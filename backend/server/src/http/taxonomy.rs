@@ -1,3 +1,6 @@
+//! Admin 分类与标签（Taxonomy）管理：article 分类固定 kind，标签全局共享。
+//! slug 缺省时以 name 归一化生成；唯一冲突与引用检查映射为统一错误码。
+
 use aries_core::{
     auth::{AuditEvent, Permission},
     content::{
@@ -16,6 +19,8 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册分类与标签管理路由（挂载在 `/api/admin` 下）。
+/// 本模块的分类端点固定 `kind = article`；link / gallery 分类由各自模块管理。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/categories", get(list_categories).post(create_category))
@@ -58,6 +63,7 @@ pub(crate) struct CategoryResponse {
 }
 
 impl From<Category> for CategoryResponse {
+    /// 领域分类 → 响应 DTO。
     fn from(category: Category) -> Self {
         Self {
             id: category.id,
@@ -79,6 +85,7 @@ struct TagResponse {
 }
 
 impl From<Tag> for TagResponse {
+    /// 领域标签 → 响应 DTO。
     fn from(tag: Tag) -> Self {
         Self {
             id: tag.id,
@@ -88,6 +95,7 @@ impl From<Tag> for TagResponse {
     }
 }
 
+/// 文章分类列表；需要 `content:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/categories",
@@ -112,6 +120,7 @@ async fn list_categories(
     Ok(Json(categories.into_iter().map(Into::into).collect()))
 }
 
+/// 新建文章分类；slug 缺省时以 name 归一化，冲突返回 409。
 #[utoipa::path(
     post,
     path = "/api/admin/categories",
@@ -158,6 +167,7 @@ async fn create_category(
     Ok((StatusCode::CREATED, Json(category.into())))
 }
 
+/// 标签列表；需要 `content:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/tags",
@@ -181,6 +191,7 @@ async fn list_tags(
     Ok(Json(tags.into_iter().map(Into::into).collect()))
 }
 
+/// 新建标签；slug 缺省时以 name 归一化，冲突返回 409。
 #[utoipa::path(
     post,
     path = "/api/admin/tags",
@@ -217,6 +228,7 @@ async fn create_tag(
     Ok((StatusCode::CREATED, Json(tag.into())))
 }
 
+/// 更新文章分类 name/slug；需要 `content:manage` 权限。
 #[utoipa::path(
     put,
     path = "/api/admin/categories/{id}",
@@ -267,6 +279,7 @@ async fn update_category(
     Ok(Json(category.into()))
 }
 
+/// 删除文章分类；仍被引用时返回 409（携带引用数）。
 #[utoipa::path(
     delete,
     path = "/api/admin/categories/{id}",
@@ -306,6 +319,7 @@ async fn delete_category(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 更新标签 name/slug；需要 `content:manage` 权限。
 #[utoipa::path(
     put,
     path = "/api/admin/tags/{id}",
@@ -348,6 +362,7 @@ async fn update_tag(
     Ok(Json(tag.into()))
 }
 
+/// 删除标签；仍被引用时返回 409（携带引用数）。
 #[utoipa::path(
     delete,
     path = "/api/admin/tags/{id}",
@@ -380,6 +395,7 @@ async fn delete_tag(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Taxonomy 变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_taxonomy_audit(
     state: &AppState,
     current: &CurrentUser,
@@ -400,6 +416,7 @@ async fn write_taxonomy_audit(
     Ok(())
 }
 
+/// Taxonomy 领域错误到 API 错误的映射：冲突/不存在换成模块级错误码，其余透传统一转换。
 pub(super) fn map_taxonomy_error(error: ContentError) -> ApiError {
     match error {
         ContentError::Conflict => {

@@ -1,4 +1,5 @@
 <script setup lang='ts'>
+/** 双栏布局容器：左侧主内容 + 右侧锚点侧栏。 */
 import { cn } from '@/lib/utils'
 </script>
 

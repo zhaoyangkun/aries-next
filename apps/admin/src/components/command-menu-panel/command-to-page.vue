@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 命令面板「跳转到页面」分组：聚合可跳转页面。 */
 import { CommandGroup, CommandItem } from '@/components/ui/command'
 import { navData } from '@/constants/sidebar-data'
 import { useSessionStore } from '@/modules/auth/stores/session'

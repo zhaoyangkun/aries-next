@@ -19,6 +19,7 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册导航菜单管理路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route(
@@ -71,6 +72,7 @@ pub(crate) struct NavigationItemResponse {
 }
 
 impl From<NavigationItem> for NavigationItemResponse {
+    /// 领域导航项 → 响应 DTO。
     fn from(item: NavigationItem) -> Self {
         Self {
             id: item.id,
@@ -274,6 +276,7 @@ pub(crate) async fn reorder_navigation(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 导航变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_navigation_audit(
     state: &AppState,
     current: &CurrentUser,
@@ -293,6 +296,7 @@ async fn write_navigation_audit(
     Ok(())
 }
 
+/// 可见性字段缺省值：新节点默认展示。
 const fn default_visible() -> bool {
     true
 }

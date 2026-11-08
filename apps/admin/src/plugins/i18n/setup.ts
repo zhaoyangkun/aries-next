@@ -7,6 +7,7 @@ import type { Language } from '.'
 import { DEFAULT_LOCALE } from '.'
 import zh from './zh.json'
 
+/** 创建 vue-i18n 实例（仅简体中文，见包约定）并挂载到应用。 */
 export function setupI18n(app: App) {
   const i18n = createI18n({
     legacy: false,

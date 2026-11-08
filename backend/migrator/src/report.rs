@@ -30,6 +30,7 @@ pub struct TableReport {
 }
 
 impl TableReport {
+    /// 追加表级备注。
     pub fn note(&mut self, message: impl Into<String>) {
         self.notes.push(message.into());
     }
@@ -51,6 +52,7 @@ pub struct RunReport {
 }
 
 impl RunReport {
+    /// 创建运行报告并返回计时起点。
     pub fn start(command: &str) -> (Self, std::time::Instant) {
         (
             Self {
@@ -66,25 +68,30 @@ impl RunReport {
         )
     }
 
+    /// 取（或建）指定表的报告条目。
     pub fn table(&mut self, name: &str) -> &mut TableReport {
         self.tables.entry(name.to_owned()).or_default()
     }
 
+    /// 追加运行级备注。
     pub fn note(&mut self, message: impl Into<String>) {
         self.notes.push(message.into());
     }
 
+    /// 填充结束时间与耗时。
     pub fn finish(&mut self, started: std::time::Instant) {
         self.finished_at = OffsetDateTime::now_utc();
         self.duration_ms = started.elapsed().as_millis() as i64;
     }
 
+    /// 落盘为 JSON（不含密码 Hash/Secret/原始 UA）。
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
         let file = std::fs::File::create(path)?;
         serde_json::to_writer_pretty(file, self)?;
         Ok(())
     }
 
+    /// 从磁盘加载历史报告。
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let file = std::fs::File::open(path)?;
         Ok(serde_json::from_reader(file)?)

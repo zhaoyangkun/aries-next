@@ -1,3 +1,4 @@
+//! 站点设置存储实现：单行读写（PostgresSiteSettingsRepository）。
 use crate::logged::logged_query_as;
 use aries_core::media::{MediaError, SiteSettings, SiteSettingsRepository, SiteSettingsUpdate};
 use async_trait::async_trait;
@@ -10,6 +11,7 @@ pub struct PostgresSiteSettingsRepository {
 }
 
 impl PostgresSiteSettingsRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -36,6 +38,7 @@ struct SiteSettingsRow {
 impl TryFrom<SiteSettingsRow> for SiteSettings {
     type Error = MediaError;
 
+    /// 查询行 → 站点设置（单行表，id = 1）。
     fn try_from(row: SiteSettingsRow) -> Result<Self, Self::Error> {
         Ok(Self {
             site_name: row.site_name,
@@ -65,6 +68,7 @@ const SETTINGS_COLUMNS: &str = "site_name, site_description, site_url, logo_url,
 
 #[async_trait]
 impl SiteSettingsRepository for PostgresSiteSettingsRepository {
+    /// 读取站点设置；行缺失（内部错误）自愈插入默认值后返回。
     async fn get(&self) -> Result<SiteSettings, MediaError> {
         // 设置表由 Migration 保证恰好一行（id = 1），缺失属于部署问题而非客户端错误。
         let query = format!("SELECT {SETTINGS_COLUMNS} FROM site_settings WHERE id = 1");
@@ -76,6 +80,7 @@ impl SiteSettingsRepository for PostgresSiteSettingsRepository {
         row.try_into()
     }
 
+    /// 全量更新站点设置（单行 UPSERT 语义），返回更新后视图。
     async fn update(&self, update: SiteSettingsUpdate) -> Result<SiteSettings, MediaError> {
         let query = format!(
             "UPDATE site_settings SET site_name = $1, site_description = $2, site_url = $3, \
@@ -105,6 +110,7 @@ impl SiteSettingsRepository for PostgresSiteSettingsRepository {
     }
 }
 
+/// SQLx 错误到 MediaError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> MediaError {
     tracing::error!(error = %error, "site settings repository operation failed");
     MediaError::StoreUnavailable

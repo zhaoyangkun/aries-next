@@ -16,6 +16,7 @@ pub enum LinkStatus {
 }
 
 impl LinkStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -33,6 +34,7 @@ impl fmt::Display for LinkStatus {
 impl FromStr for LinkStatus {
     type Err = LinkError;
 
+    /// 解析状态字符串；未知取值返回 `LinkError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "active" => Ok(Self::Active),
@@ -100,6 +102,7 @@ pub struct LinkPage {
     pub page_size: u32,
 }
 
+/// 友链领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum LinkError {
     #[error("invalid link status")]

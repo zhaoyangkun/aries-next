@@ -15,6 +15,7 @@ const FALLBACK_SITE: PublicSite = {
   created_at: '',
 }
 
+/** 站点公开设置 Composable：全站共享一份（useState 缓存）；后端不可用时返回兜底值，避免整站渲染失败。 */
 export async function useSite(): Promise<Ref<PublicSite>> {
   const site = useState<PublicSite | null>('public-site', () => null)
   if (!site.value) {

@@ -17,6 +17,7 @@ pub struct PostgresLinkRepository {
 }
 
 impl PostgresLinkRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -40,6 +41,7 @@ struct LinkRow {
 impl TryFrom<LinkRow> for Link {
     type Error = LinkError;
 
+    /// 查询行 → 领域对象：status 字符串解析为枚举。
     fn try_from(row: LinkRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -59,6 +61,7 @@ impl TryFrom<LinkRow> for Link {
 const LINK_COLUMNS: &str = "id, category_id, title, url, icon_url, description, status, \
     sort_order, created_at, updated_at";
 
+/// SQLx 错误到 LinkError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> LinkError {
     if let sqlx::Error::Database(db) = &error {
         // 23503 = foreign_key_violation：分类不存在。
@@ -72,6 +75,7 @@ fn map_sqlx(error: sqlx::Error) -> LinkError {
 
 #[async_trait]
 impl LinkRepository for PostgresLinkRepository {
+    /// 新建友链。
     async fn create(&self, link: NewLink) -> Result<Link, LinkError> {
         aries_core::links::validate_title(&link.title)?;
         aries_core::links::validate_url(&link.url)?;
@@ -94,6 +98,7 @@ impl LinkRepository for PostgresLinkRepository {
         row.try_into()
     }
 
+    /// 按 id 查友链。
     async fn find(&self, link_id: i64) -> Result<Option<Link>, LinkError> {
         let query =
             format!("SELECT {LINK_COLUMNS} FROM links WHERE id = $1 AND deleted_at IS NULL");
@@ -108,6 +113,7 @@ impl LinkRepository for PostgresLinkRepository {
         }
     }
 
+    /// 管理端分页：可按状态/分类/关键字筛选。
     async fn list(&self, query: LinkListQuery) -> Result<LinkPage, LinkError> {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         let limit = i64::from(query.page_size);
@@ -163,6 +169,7 @@ impl LinkRepository for PostgresLinkRepository {
         })
     }
 
+    /// 公开友链：仅 active，按 sort_order 排序。
     async fn list_public(&self) -> Result<Vec<Link>, LinkError> {
         let query = format!(
             "SELECT {LINK_COLUMNS} FROM links \
@@ -178,6 +185,7 @@ impl LinkRepository for PostgresLinkRepository {
             .collect::<Result<_, _>>()
     }
 
+    /// 更新友链。
     async fn update(&self, link_id: i64, update: LinkUpdate) -> Result<Link, LinkError> {
         aries_core::links::validate_title(&update.title)?;
         aries_core::links::validate_url(&update.url)?;
@@ -203,6 +211,7 @@ impl LinkRepository for PostgresLinkRepository {
         row.try_into()
     }
 
+    /// 删除友链。
     async fn delete(&self, link_id: i64) -> Result<(), LinkError> {
         let result = logged_query(
             "UPDATE links SET deleted_at = now(), updated_at = now() \

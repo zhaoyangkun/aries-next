@@ -3,6 +3,7 @@
 import type { Ref } from 'vue'
 import type { PublicNavigationNode } from './usePublicApi'
 
+/** 站点导航 Composable：全站共享一份（useState 缓存）；请求失败兜底为空数组，不拖垮整站渲染。 */
 export async function useNavigation(): Promise<Ref<PublicNavigationNode[]>> {
   const nodes = useState<PublicNavigationNode[] | null>('public-navigation', () => null)
   if (!nodes.value) {

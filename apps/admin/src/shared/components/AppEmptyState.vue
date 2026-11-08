@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 空状态占位：图标 + 标题 + 描述。Props: title/description/icon。 */
 import type { Component, HTMLAttributes } from 'vue'
 import { cn } from '@/lib/utils'
 

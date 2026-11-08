@@ -1,3 +1,4 @@
+//! aries-server：HTTP 装配层（Router 组合、全局中间件、OpenAPI 导出、媒体文件服务）。
 use std::time::Duration;
 
 use axum::{
@@ -37,6 +38,7 @@ use aries_core::health::HealthResponse;
 use log_store::QUIET_INTERNAL_SPAN;
 use state::AppState;
 
+/// 装配完整 Router：Admin + Public + 媒体文件 + 健康检查与全局中间件。
 pub fn build_app(state: AppState) -> anyhow::Result<Router> {
     let admin_origins = state
         .config
@@ -198,6 +200,7 @@ pub fn build_app(state: AppState) -> anyhow::Result<Router> {
 /// 全局请求超时：单请求处理超过该时长返回 408，防止慢请求长期占用连接。
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// 请求体读取超时的统一处理：返回 408。
 async fn request_timeout(error: axum::BoxError) -> StatusCode {
     if error.is::<tower::timeout::error::Elapsed>() {
         StatusCode::REQUEST_TIMEOUT
@@ -264,6 +267,7 @@ fn redact_params(map: serde_json::Map<String, serde_json::Value>) -> serde_json:
     serde_json::Value::Object(redacted)
 }
 
+/// 请求体日志脱敏：敏感键（password/token 等）的值替换为 `***`。
 fn redact_value(value: serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => redact_params(map),
@@ -370,6 +374,7 @@ async fn log_request_params(request: axum::extract::Request, next: Next) -> Resp
     description = "进程存活即返回 200；不检查数据库等外部依赖。",
     responses((status = 200, description = "服务存活", body = crate::openapi::HealthView))
 )]
+/// Liveness 探针：进程存活即 200，不检查外部依赖。
 pub(crate) async fn live() -> Json<HealthResponse> {
     Json(HealthResponse::live())
 }
@@ -386,6 +391,7 @@ pub(crate) async fn live() -> Json<HealthResponse> {
         (status = 503, description = "数据库不可用")
     )
 )]
+/// Readiness 探针：SELECT 1 验证数据库连通性，失败 503。
 pub(crate) async fn ready(
     State(state): State<AppState>,
 ) -> Result<Json<HealthResponse>, StatusCode> {

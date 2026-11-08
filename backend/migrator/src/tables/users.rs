@@ -43,6 +43,7 @@ pub struct NewUser {
     pub password_updated_at: OffsetDateTime,
 }
 
+/// 抽取用户源行（bcrypt Hash 原样保留，首次登录后由后端升级 Argon2id）。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyUser>> {
     sqlx::query_as::<_, LegacyUser>(
         "SELECT CAST(id AS SIGNED) AS id, username, email, pwd, nickname, user_img, signature, \
@@ -124,6 +125,7 @@ pub fn transform(
     })
 }
 
+/// 空白串归一为 None（昵称/头像等可选字段）。
 fn non_empty(value: String) -> Option<String> {
     if value.trim().is_empty() {
         None
@@ -132,6 +134,7 @@ fn non_empty(value: String) -> Option<String> {
     }
 }
 
+/// ETL 主流程：零日期为 hard error，昵称/头像缺省修复。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

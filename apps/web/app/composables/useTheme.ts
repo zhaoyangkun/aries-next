@@ -4,6 +4,7 @@
 // 不经过 Vue 状态，避免 Hydration 前后不一致。
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('aries-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();`
 
+/** 主题切换 Composable：向 <head> 注入防首屏闪烁的同步 init script，返回 toggleTheme（明暗切换并持久化偏好）。 */
 export function useTheme() {
   useHead({
     script: [{ key: 'theme-init', innerHTML: THEME_INIT_SCRIPT }],

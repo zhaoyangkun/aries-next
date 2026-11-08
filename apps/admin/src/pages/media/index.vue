@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 媒体库页：本地上传/远程导入、引用查看与批量删除。 */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ColumnDef, RowSelectionState } from '@tanstack/vue-table'
 import {

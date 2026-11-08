@@ -98,6 +98,7 @@ pnpm build        # 递归构建 apps 与 packages
 - API Contract 由 utoipa 代码注解生成（`docs/openapi.yaml` 是机器生成物，禁止手改）：端点变化必须同步更新 `backend/server/src/http/` 下的注解、重新导出并更新前端 API Client；公开接口不得返回密码、Token、内部路径、未发布内容或供应商密钥。
 - 密钥只从环境变量读取；生产配置、密码、Token 不得提交 Git。
 - 文档遵循 `docs/README.md` 的写作与维护规范：中文为主、专有名词英文、中英文间空格、标识符用反引号、事实与代码一致。
+- 代码注释遵循 `PROJECT_RULES.md` §3 的注释规范：`pub` 项必须有 `///` 文档注释（职责 + 非自明时的入参/出参/错误说明），私有函数与复杂逻辑用 `//` 解释「为什么」，前端导出函数用 JSDoc；行为变化必须同步更新注释。
 - Git：English Conventional Commits，一个 Commit 一个逻辑主题；不使用 `git reset --hard` 或覆盖他人修改的命令。
 
 ## 安全要点

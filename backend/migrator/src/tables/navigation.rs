@@ -47,6 +47,7 @@ pub struct NewNavItem {
     pub updated_at: OffsetDateTime,
 }
 
+/// 抽取导航源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyNav>> {
     sqlx::query_as::<_, LegacyNav>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(parent_nav_id AS SIGNED) AS parent_nav_id, \
@@ -61,6 +62,7 @@ pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyNav>> {
     .context("failed to extract legacy navs")
 }
 
+/// 转换：目标类型映射（url 型带新窗口标记）、悬空 parent 修复为顶层、软删除归档。
 pub fn transform(
     row: &LegacyNav,
     params: &CommonParams,
@@ -165,6 +167,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

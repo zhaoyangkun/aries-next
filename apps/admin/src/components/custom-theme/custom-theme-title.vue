@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 主题设置区块标题。 */
 
 </script>
 

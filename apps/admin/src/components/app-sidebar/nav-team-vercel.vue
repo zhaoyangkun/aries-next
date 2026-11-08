@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 团队导航（Vercel 风格横向滚动版）。Props: navMain。 */
 import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue'
 
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarSeparator } from '@/components/ui/sidebar'

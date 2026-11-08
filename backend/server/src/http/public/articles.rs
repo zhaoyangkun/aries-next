@@ -36,6 +36,7 @@ const VIEW_DEDUP_WINDOW: Duration = Duration::from_secs(30 * 60);
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// 注册公开文章端点：列表/详情/解锁/浏览计数/搜索/AI 问答/相关文章/归档（挂载在 `/api/public` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/articles", get(list_public_articles))
@@ -87,6 +88,7 @@ pub struct PublicArticleListItem {
 }
 
 impl From<&Article> for PublicArticleListItem {
+    /// 领域文章 → 公开列表项（不含未发布字段与访问密码信息）。
     fn from(article: &Article) -> Self {
         Self {
             id: article.id,
@@ -211,6 +213,7 @@ struct ArchiveMonthResponse {
 }
 
 impl From<ArchiveMonth> for ArchiveMonthResponse {
+    /// 归档月份 → 响应 DTO。
     fn from(month: ArchiveMonth) -> Self {
         Self {
             year: month.year,
@@ -229,6 +232,7 @@ impl From<ArchiveMonth> for ArchiveMonthResponse {
     }
 }
 
+/// 公开文章分页列表：固定置顶排序，支持分类/标签/关键词过滤；分页大小缺省取站点设置。
 #[utoipa::path(
     get,
     path = "/api/public/articles",
@@ -277,6 +281,7 @@ async fn list_public_articles(
     ))
 }
 
+/// 公开文章详情：密码保护且未解锁时 `rendered_html` 为 null；Markdown 源与内部字段绝不外泄。
 #[utoipa::path(
     get,
     path = "/api/public/articles/{slug}",
@@ -399,6 +404,7 @@ struct RelatedArticleResponse {
 }
 
 impl From<aries_core::retrieval::RelatedArticle> for RelatedArticleResponse {
+    /// 相关文章 → 响应 DTO。
     fn from(article: aries_core::retrieval::RelatedArticle) -> Self {
         Self {
             slug: article.slug,
@@ -442,6 +448,7 @@ async fn smart_search_settings(state: &AppState) -> Result<aries_core::ai::AiSet
 
 /// 相关文章：以文章标题 + 摘要为查询向量，取相近的已发布文章。
 /// 文章无已发布状态或 AI 检索未开启时返回 404，空结果返回 200 空数组。
+/// 相关文章推荐：按 embedding 余弦最近邻取同站已发布文章；依赖 smart_search 开关与 embedding 配置。
 #[utoipa::path(
     get,
     path = "/api/public/articles/{slug}/related",
@@ -477,6 +484,7 @@ async fn related_articles(
         .ok_or_else(|| ApiError::not_found("ARTICLE_NOT_FOUND", "Article was not found"))?;
     let limit = params.limit.unwrap_or(6).clamp(1, 12);
 
+    // 以标题 + 摘要组成查询向量；Embedding 调用失败归 502（错误响应不缓存）。
     let query = format!("{}\n{}", article.title, article.summary);
     let vectors = state
         .ai
@@ -514,6 +522,7 @@ enum AskOut {
 }
 
 impl AskOut {
+    /// 领域事件 → SSE 事件；sources 事件在 done 之前发出，携带引用文章列表。
     fn into_event(self, model: &str) -> axum::response::sse::Event {
         use axum::response::sse::Event;
         match self {
@@ -542,6 +551,7 @@ impl AskOut {
     }
 }
 
+/// 对话式搜索：SSE 流式回答，附来源文章引用；依赖 smart_search 开关与 embedding 配置。
 #[utoipa::path(
     post,
     path = "/api/public/search/ask",
@@ -769,6 +779,7 @@ async fn run_ask_stream(
     }
 }
 
+/// 上一篇/下一篇的引用投影：取指定方向的邻居 slug/title。
 fn neighbor_ref(neighbors: &ArticleNeighbors, previous: bool) -> Option<NeighborRef> {
     let neighbor = if previous {
         neighbors.previous.as_ref()
@@ -781,6 +792,7 @@ fn neighbor_ref(neighbors: &ArticleNeighbors, previous: bool) -> Option<Neighbor
     })
 }
 
+/// 密码文章解锁：校验访问密码，成功签发 HMAC 凭据 Cookie（2 小时，限流防爆破）。
 #[utoipa::path(
     post,
     path = "/api/public/articles/{slug}/access",
@@ -872,6 +884,7 @@ struct ArticleViewResponse {
     visit_count: i64,
 }
 
+/// 浏览计数：30 分钟滑动窗口去重后 `visit_count` +1。
 #[utoipa::path(
     post,
     path = "/api/public/articles/{slug}/views",
@@ -918,6 +931,7 @@ async fn record_article_view(
     ))
 }
 
+/// 公开全文搜索：FTS 与 ILIKE 兜底取并集；摘要未覆盖命中时回正文纯文本片段。
 #[utoipa::path(
     get,
     path = "/api/public/search",
@@ -969,6 +983,7 @@ async fn search_public_articles(
     ))
 }
 
+/// 搜索建议：标题/摘要前缀优先匹配，供输入即搜下拉（不泄露其他字段）。
 #[utoipa::path(
     get,
     path = "/api/public/search/suggest",
@@ -1006,6 +1021,7 @@ async fn search_suggest(
     Ok(json_with_cache(&body, CACHE_NO_STORE))
 }
 
+/// 归档聚合：已发布文章按年/月分组，组内按发布时间倒序。
 #[utoipa::path(
     get,
     path = "/api/public/archives",
@@ -1023,6 +1039,7 @@ async fn list_public_archives(State(state): State<AppState>) -> Result<Response,
     Ok(json_with_cache(&body, CACHE_AGGREGATE))
 }
 
+/// 每篇文章独立的解锁 Cookie 名（含文章 ID，避免文章间互相解锁）。
 fn access_cookie_name(article_id: i64) -> String {
     format!("aries_article_access_{article_id}")
 }

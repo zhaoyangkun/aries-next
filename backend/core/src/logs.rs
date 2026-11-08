@@ -73,6 +73,7 @@ pub struct LogList {
     pub page_size: u32,
 }
 
+/// 运行日志领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum LogError {
     #[error("log entry not found")]
@@ -81,6 +82,8 @@ pub enum LogError {
     StoreUnavailable,
 }
 
+/// 运行日志查询契约；写入侧（批量落库、级别覆盖）由 `aries-server` 的
+/// `log_store` 模块直接持有连接处理，不经本 Repository。
 #[async_trait]
 pub trait LogRepository: Send + Sync {
     /// 分页列表：按 filter 过滤，`order_asc` 决定 ts/id 排序方向。

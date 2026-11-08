@@ -41,6 +41,7 @@ pub struct TransformOutcome<T> {
 }
 
 impl<T> TransformOutcome<T> {
+    /// 转换成功结果（无归档/修复）。
     pub fn ok(row: T) -> Self {
         Self {
             row: Some(row),
@@ -50,6 +51,7 @@ impl<T> TransformOutcome<T> {
         }
     }
 
+    /// 整行未迁入（落 archives 归档表）。
     pub fn archive_row(
         id: Option<i64>,
         fields: serde_json::Value,

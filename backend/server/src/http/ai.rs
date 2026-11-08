@@ -37,6 +37,7 @@ const AI_RATE_WINDOW: Duration = Duration::from_secs(60);
 const MAX_SNIPPET_LENGTH: usize = 8_000;
 const MAX_CONTENT_LENGTH: usize = 60_000;
 
+/// 注册 AI 端点：编辑器助手（SSE 流式）、模型列表、用量审计（挂载在 `/api/admin` 与 `/api/ai` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/ai/editor/rewrite", post(editor_rewrite))
@@ -87,6 +88,7 @@ enum SseOut {
 }
 
 impl SseOut {
+    /// 领域事件 → SSE 事件（事件名与前端协议约定：start/delta/usage/done/error）。
     fn into_event(self, feature: AiFeature, model: &str) -> Event {
         match self {
             Self::Start => Event::default().event("start").data(
@@ -274,6 +276,7 @@ fn build_ai_request(
     }
 }
 
+/// 记录 AI 请求审计；审计失败只记日志，不中断主流程。
 async fn record_ai_request(state: &AppState, request: NewAiRequest) {
     if let Err(error) = state.ai_requests.record(request).await {
         // 审计写入失败只记日志，不影响已完成的流式响应。
@@ -281,6 +284,7 @@ async fn record_ai_request(state: &AppState, request: NewAiRequest) {
     }
 }
 
+/// 写 AI 审计事件（best-effort：失败只记日志）。
 async fn write_ai_audit(
     state: &AppState,
     operator_id: i64,
@@ -330,6 +334,7 @@ struct SummaryRequest {
     content: String,
 }
 
+/// 构造 AI SSE 响应：包装流事件为标准 SSE 格式（delta/usage/error/done）。
 fn ai_sse_response(
     state: AppState,
     feature: AiFeature,
@@ -353,6 +358,7 @@ fn ai_sse_response(
     Sse::new(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx))).into_response()
 }
 
+/// 编辑器 AI 调用的公共准备：总开关/feature 开关/配置完整性校验与 Prompt 组装。
 async fn prepare_editor_call(
     state: &AppState,
     current: &CurrentUser,
@@ -394,6 +400,7 @@ async fn prepare_editor_call(
         (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 编辑器改写：SSE 流式返回改写片段；done 前记审计（latency/token）。
 async fn editor_rewrite(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -437,6 +444,7 @@ async fn editor_rewrite(
         (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 生成摘要草稿：SSE 流式返回 120 字以内摘要。
 async fn editor_summary(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -479,6 +487,7 @@ async fn editor_summary(
         (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
     )
 )]
+/// SEO 元数据建议：SSE 流式返回，done 前校验累积文本为合法 JSON（不合格按 invalid_output 处理）。
 async fn editor_metadata(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -523,6 +532,7 @@ async fn editor_metadata(
         (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 标签推荐：SSE 流式返回，JSON 输出校验同 editor_metadata。
 async fn editor_tags(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -566,6 +576,7 @@ async fn editor_tags(
         (status = 429, description = "触发每用户每分钟 10 次限流", body = crate::openapi::ErrorResponse),
     )
 )]
+/// AI 导读生成：SSE 流式返回面向读者的 TL;DR（150 字以内）。
 async fn editor_brief(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -628,6 +639,7 @@ pub(crate) struct AiModelsResponse {
         (status = 502, description = "Provider 请求失败或超时", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 拉取 Provider 可用模型列表：只依赖 base_url/api_key，不要求总开关已启用。
 pub(crate) async fn list_ai_models(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -720,6 +732,7 @@ struct AiUsagePageResponse {
         (status = 403, description = "无 settings:manage 权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// AI 请求审计分页查询（可按 feature 过滤，按创建时间倒序）。
 async fn list_ai_usage(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -916,6 +929,7 @@ pub(crate) async fn moderate_comment_with_ai(
     updated
 }
 
+/// 记录评论审核的 AI 请求审计（best-effort，失败只记日志）。
 async fn record_moderation_request(
     state: &AppState,
     started: Instant,

@@ -46,6 +46,7 @@ const TARGETS: [RenderTarget; 4] = [
     },
 ];
 
+/// 按 slug 列表筛选重渲染目标；空列表表示全量。
 fn select_targets(only: &[String]) -> anyhow::Result<Vec<RenderTarget>> {
     for name in only {
         if !TARGETS.iter().any(|target| target.name == name) {
@@ -59,6 +60,7 @@ fn select_targets(only: &[String]) -> anyhow::Result<Vec<RenderTarget>> {
         .collect())
 }
 
+/// re-render 子命令入口：用当前渲染器重算存量渲染 HTML 派生列（支持 dry-run）。
 pub async fn run(pg: &PgPool, only: &[String], dry_run: bool) -> anyhow::Result<()> {
     let targets = select_targets(only)?;
     let renderer = ComrakMarkdownRenderer;
@@ -68,6 +70,8 @@ pub async fn run(pg: &PgPool, only: &[String], dry_run: bool) -> anyhow::Result<
     Ok(())
 }
 
+/// 重渲染单表：分批读取、渲染器重算、事务内回写。
+// 重渲染单表：读出源列 → 当前渲染器重算 → 回写派生 HTML 列（articles/pages/journals/comments 四张表）。
 async fn re_render_table(
     pg: &PgPool,
     renderer: &ComrakMarkdownRenderer,

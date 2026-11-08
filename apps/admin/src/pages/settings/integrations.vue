@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 集成设置页：统计 ID 与站点验证 Token。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'

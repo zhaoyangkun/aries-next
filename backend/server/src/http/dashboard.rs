@@ -12,6 +12,7 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, comments::CommentResponse, error::ApiError};
 
+/// 注册 Dashboard 聚合端点（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new().route("/dashboard", get(get_dashboard))
 }
@@ -67,6 +68,7 @@ struct FailedJobResponse {
 }
 
 impl From<&BackgroundJob> for FailedJobResponse {
+    /// 后台任务 → 失败任务响应 DTO。
     fn from(job: &BackgroundJob) -> Self {
         debug_assert_eq!(job.status, JobStatus::Failed);
         Self {
@@ -80,6 +82,8 @@ impl From<&BackgroundJob> for FailedJobResponse {
     }
 }
 
+/// Dashboard 聚合统计：一次请求返回文章/评论计数、最近待审核评论与失败任务；
+/// 需要 `dashboard:view` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/dashboard",

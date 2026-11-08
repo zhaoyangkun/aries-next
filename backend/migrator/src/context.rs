@@ -61,6 +61,7 @@ impl MigrateCtx {
         Ok(())
     }
 
+    /// 记录目标库 Owner 用户 id（内容行的 author_id/created_by 回填用）。
     pub fn set_owner_id(&mut self, owner_id: i64) {
         self.owner_id = Some(owner_id);
     }

@@ -43,6 +43,7 @@ pub struct NewPage {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取自定义页面源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyPage>> {
     sqlx::query_as::<_, LegacyPage>(
         "SELECT CAST(id AS SIGNED) AS id, title, url, html, md_html, \
@@ -55,6 +56,7 @@ pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyPage>> {
     .context("failed to extract legacy pages")
 }
 
+/// 转换：默认 published、空标题报错（--placeholder 时占位）、长度强制、Markdown 重渲染。
 pub fn transform(
     row: &LegacyPage,
     params: &CommonParams,
@@ -130,6 +132,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

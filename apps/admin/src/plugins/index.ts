@@ -9,6 +9,7 @@ import { setupNProgress } from './nprogress/setup'
 import { setupPinia } from './pinia/setup'
 import { setupRouter } from './router/setup'
 
+/** 统一装配应用插件；顺序敏感：Pinia 必须先于 Router（守卫依赖 Store），全局 401 处理最后注册。 */
 export function setupPlugins(app: App) {
   setupDayjs()
   setupNProgress()

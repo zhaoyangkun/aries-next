@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 日志（日记）页：按时间倒序的公开日志列表。 */
 import type { PublicJournalPage } from '~/composables/usePublicApi'
 
 const route = useRoute()

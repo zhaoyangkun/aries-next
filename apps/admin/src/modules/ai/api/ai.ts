@@ -24,6 +24,7 @@ export interface AiUsagePage {
 }
 
 export const aiApi = {
+  /** 分页查询 AI 调用记录（功能/模型/状态/耗时/Token 用量）。 */
   async listUsage(params: { page: number, page_size: number, feature?: AiFeature }) {
     const { data } = await api.get<AiUsagePage>('/api/admin/ai/usage', { params })
     return data

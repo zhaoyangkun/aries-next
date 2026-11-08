@@ -34,16 +34,19 @@ export const navigationApi = {
     return data
   },
 
+  /** 新建导航项（Backend 限制导航最多两级）。 */
   async create(payload: UpsertNavigationPayload) {
     const { data } = await api.post<NavigationItem>('/api/admin/navigation', payload)
     return data
   },
 
+  /** 更新导航项。 */
   async update(itemId: number, payload: UpsertNavigationPayload) {
     const { data } = await api.put<NavigationItem>(`/api/admin/navigation/${itemId}`, payload)
     return data
   },
 
+  /** 删除导航项。 */
   async remove(itemId: number) {
     await api.delete(`/api/admin/navigation/${itemId}`)
   },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 认证页外壳：标题/描述与居中卡片容器。Props: title/description/wide。 */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 withDefaults(defineProps<{

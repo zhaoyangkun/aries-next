@@ -17,6 +17,7 @@ pub enum PageStatus {
 }
 
 impl PageStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -34,6 +35,7 @@ impl fmt::Display for PageStatus {
 impl FromStr for PageStatus {
     type Err = PageError;
 
+    /// 解析状态字符串；未知取值返回 `PageError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "draft" => Ok(Self::Draft),
@@ -99,6 +101,7 @@ pub struct PagePage {
     pub page_size: u32,
 }
 
+/// 页面领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum PageError {
     #[error("invalid page status")]

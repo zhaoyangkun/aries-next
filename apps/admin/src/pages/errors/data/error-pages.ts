@@ -36,6 +36,7 @@ function isErrorCode(code: string): code is ErrorCode {
   return Object.hasOwn(ERROR_PAGE_MAP, code)
 }
 
+/** 按错误码解析错误页文案（副标题 + 描述）；未知码回退到 404。 */
 export function resolveErrorPage(code: string): ErrorPage {
   const resolvedCode = isErrorCode(code) ? code : FALLBACK_ERROR_CODE
 

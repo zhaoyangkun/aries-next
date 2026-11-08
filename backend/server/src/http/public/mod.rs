@@ -36,6 +36,7 @@ pub const CACHE_ARTICLE: &str = "public, max-age=60";
 /// 密码文章与写端点（access/views）：禁止任何缓存。
 pub const CACHE_NO_STORE: &str = "no-store";
 
+/// 装配全部公开匿名路由（挂载在 `/api/public` 下；不经 `enforce_origin` 中间件）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .merge(articles::router())

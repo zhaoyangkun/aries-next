@@ -16,6 +16,7 @@ pub struct PostgresJournalRepository {
 }
 
 impl PostgresJournalRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -36,6 +37,7 @@ struct JournalRow {
 impl TryFrom<JournalRow> for Journal {
     type Error = JournalError;
 
+    /// 查询行 → 领域对象：visibility 字符串解析为枚举。
     fn try_from(row: JournalRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -55,6 +57,7 @@ impl TryFrom<JournalRow> for Journal {
 const JOURNAL_COLUMNS: &str =
     "id, content_markdown, content_html, visibility, created_by, created_at, updated_at";
 
+/// SQLx 错误到 JournalError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> JournalError {
     tracing::error!(error = %error, "journal repository operation failed");
     JournalError::StoreUnavailable
@@ -62,6 +65,7 @@ fn map_sqlx(error: sqlx::Error) -> JournalError {
 
 #[async_trait]
 impl JournalRepository for PostgresJournalRepository {
+    /// 新建日志（content_html 由 HTTP 层渲染传入）。
     async fn create(&self, journal: NewJournal) -> Result<Journal, JournalError> {
         aries_core::journals::validate_content(&journal.content_markdown)?;
         let query = format!(
@@ -80,6 +84,7 @@ impl JournalRepository for PostgresJournalRepository {
         row.try_into()
     }
 
+    /// 按 id 查日志。
     async fn find(&self, journal_id: i64) -> Result<Option<Journal>, JournalError> {
         let query =
             format!("SELECT {JOURNAL_COLUMNS} FROM journals WHERE id = $1 AND deleted_at IS NULL");
@@ -94,6 +99,7 @@ impl JournalRepository for PostgresJournalRepository {
         }
     }
 
+    /// 管理端分页：可按可见性筛选。
     async fn list(&self, query: JournalListQuery) -> Result<JournalPage, JournalError> {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         let limit = i64::from(query.page_size);
@@ -138,6 +144,7 @@ impl JournalRepository for PostgresJournalRepository {
         })
     }
 
+    /// 公开列表：复用管理端查询逻辑并固定 visibility = public。
     async fn list_public(&self, page: u32, page_size: u32) -> Result<JournalPage, JournalError> {
         // 复用 list 的过滤逻辑，固定 visibility = public，保证 Private 不外泄。
         self.list(JournalListQuery {
@@ -148,6 +155,7 @@ impl JournalRepository for PostgresJournalRepository {
         .await
     }
 
+    /// 更新日志。
     async fn update(
         &self,
         journal_id: i64,
@@ -172,6 +180,7 @@ impl JournalRepository for PostgresJournalRepository {
         row.try_into()
     }
 
+    /// 删除日志。
     async fn delete(&self, journal_id: i64) -> Result<(), JournalError> {
         let result = logged_query(
             "UPDATE journals SET deleted_at = now(), updated_at = now() \

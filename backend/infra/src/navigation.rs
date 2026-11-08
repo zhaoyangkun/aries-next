@@ -16,6 +16,7 @@ pub struct PostgresNavigationRepository {
 }
 
 impl PostgresNavigationRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -40,6 +41,7 @@ struct NavigationItemRow {
 impl TryFrom<NavigationItemRow> for NavigationItem {
     type Error = NavigationError;
 
+    /// 查询行 → 领域对象：target_type 字符串解析为枚举。
     fn try_from(row: NavigationItemRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -63,6 +65,7 @@ impl TryFrom<NavigationItemRow> for NavigationItem {
 const NAVIGATION_COLUMNS: &str = "id, parent_id, label, target_type, target_id, url, \
     open_in_new_tab, visible, sort_order, created_at, updated_at";
 
+/// SQLx 错误到 NavigationError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> NavigationError {
     if let sqlx::Error::Database(db) = &error {
         match db.code().as_deref() {
@@ -97,6 +100,7 @@ async fn validate_hierarchy(pool: &PgPool, parent_id: Option<i64>) -> Result<(),
 
 #[async_trait]
 impl NavigationRepository for PostgresNavigationRepository {
+    /// 新建导航项；先校验层级约束（最多两级）。
     async fn create(&self, item: NewNavigationItem) -> Result<NavigationItem, NavigationError> {
         aries_core::navigation::validate_label(&item.label)?;
         aries_core::navigation::validate_target(
@@ -127,6 +131,7 @@ impl NavigationRepository for PostgresNavigationRepository {
         row.try_into()
     }
 
+    /// 按 id 查导航项。
     async fn find(&self, item_id: i64) -> Result<Option<NavigationItem>, NavigationError> {
         let query = format!("SELECT {NAVIGATION_COLUMNS} FROM navigation_items WHERE id = $1");
         let row = logged_query_as::<NavigationItemRow>(&query)
@@ -140,6 +145,7 @@ impl NavigationRepository for PostgresNavigationRepository {
         }
     }
 
+    /// 全部导航项（平铺，前端按 parent_id 组装树）。
     async fn list(&self) -> Result<Vec<NavigationItem>, NavigationError> {
         let query = format!(
             "SELECT {NAVIGATION_COLUMNS} FROM navigation_items \
@@ -154,6 +160,7 @@ impl NavigationRepository for PostgresNavigationRepository {
             .collect::<Result<_, _>>()
     }
 
+    /// 公开端可见导航项。
     async fn list_visible(&self) -> Result<Vec<NavigationItem>, NavigationError> {
         let query = format!(
             "SELECT {NAVIGATION_COLUMNS} FROM navigation_items \
@@ -169,6 +176,7 @@ impl NavigationRepository for PostgresNavigationRepository {
             .collect::<Result<_, _>>()
     }
 
+    /// 更新导航项（同样先校验层级）。
     async fn update(
         &self,
         item_id: i64,
@@ -223,6 +231,7 @@ impl NavigationRepository for PostgresNavigationRepository {
         row.try_into()
     }
 
+    /// 删除导航项；带子节点时返回 Conflict（避免产生悬空子节点）。
     async fn delete(&self, item_id: i64) -> Result<(), NavigationError> {
         // 先检查子节点，给出可读的 Conflict 而非原始 FK 错误。
         let has_children = logged_query_scalar::<bool>(
@@ -246,6 +255,7 @@ impl NavigationRepository for PostgresNavigationRepository {
         Ok(())
     }
 
+    /// 事务内按入参顺序重写 sort_order，批量排序原子生效。
     async fn reorder(&self, ordered_item_ids: Vec<i64>) -> Result<(), NavigationError> {
         // 事务内按入参顺序重写 sort_order，客户端一次性提交全量顺序。
         let mut tx = self.pool.begin().await.map_err(map_sqlx)?;

@@ -54,6 +54,7 @@ const SENSITIVE_KEY_FRAGMENTS: [&str; 8] = [
     "cookie",
 ];
 
+/// 判断日志字段名是否敏感（password/secret/token 等，命中则脱敏）。
 pub(crate) fn is_sensitive_key(key: &str) -> bool {
     SENSITIVE_KEY_FRAGMENTS
         .iter()
@@ -142,6 +143,7 @@ struct EventVisitor {
 }
 
 impl Visit for EventVisitor {
+    /// message 字段单独成列，其余进 fields JSON；SQL 文本字段（db.statement/summary）先 trim。
     fn record_str(&mut self, field: &Field, value: &str) {
         if field.name() == "message" {
             self.message = value.to_owned();
@@ -152,6 +154,7 @@ impl Visit for EventVisitor {
         }
     }
 
+    /// Debug 渲染后按 record_str 的同样规则处理。
     fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
         let rendered = format!("{value:?}");
         if field.name() == "message" {
@@ -163,16 +166,19 @@ impl Visit for EventVisitor {
         }
     }
 
+    /// 数值字段原样进 fields。
     fn record_i64(&mut self, field: &Field, value: i64) {
         self.fields
             .insert(field.name().to_owned(), Value::from(value));
     }
 
+    /// 数值字段原样进 fields。
     fn record_u64(&mut self, field: &Field, value: u64) {
         self.fields
             .insert(field.name().to_owned(), Value::from(value));
     }
 
+    /// 非有限值（NaN/Inf）落为 Null。
     fn record_f64(&mut self, field: &Field, value: f64) {
         let number = serde_json::Number::from_f64(value);
         self.fields.insert(
@@ -181,6 +187,7 @@ impl Visit for EventVisitor {
         );
     }
 
+    /// 布尔字段进 fields。
     fn record_bool(&mut self, field: &Field, value: bool) {
         self.fields
             .insert(field.name().to_owned(), Value::from(value));
@@ -210,6 +217,7 @@ struct SpanVisitor {
 }
 
 impl Visit for SpanVisitor {
+    /// 提取 HTTP 上下文（request_id/method/path/query）与 db.parameters 两类 Span 字段。
     fn record_str(&mut self, field: &Field, value: &str) {
         match field.name() {
             "request_id" => self.context.request_id = Some(value.to_owned()),
@@ -221,6 +229,7 @@ impl Visit for SpanVisitor {
         }
     }
 
+    /// Debug 渲染后按 record_str 的同样规则处理。
     fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
         let rendered = format!("{value:?}");
         match field.name() {
@@ -245,6 +254,7 @@ pub struct DbLogLayer {
 }
 
 impl DbLogLayer {
+    /// 自建丢弃计数器。
     pub fn new(sender: mpsc::Sender<LogRecord>) -> Self {
         Self::with_counter(sender, std::sync::Arc::new(AtomicU64::new(0)))
     }
@@ -280,6 +290,7 @@ impl DbLogLayer {
         })
     }
 
+    /// try_send 非阻塞入队；channel 满即丢弃并计数，节流 warn（60 秒窗口；走 eprintln 防经 tracing 递归）。
     fn emit(&self, record: LogRecord) {
         if self.sender.try_send(record).is_err() {
             let dropped = self.dropped.fetch_add(1, Ordering::Relaxed) + 1;
@@ -300,6 +311,7 @@ impl<S> Layer<S> for DbLogLayer
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
+    /// 把 HTTP 上下文与 SQL 参数挂进 Span 扩展，供 on_event 沿作用域链向上读取。
     fn on_new_span(
         &self,
         attrs: &tracing::span::Attributes<'_>,
@@ -318,10 +330,12 @@ where
         }
     }
 
+    /// 事件入口：递归防护（日志落库自身的 sqlx 事件不入库）→ 沿 Span 栈收集上下文 → 注入 fields → 脱敏截断 → 入队。
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         let mut visitor = EventVisitor::default();
         event.record(&mut visitor);
         let metadata = event.metadata();
+        // 递归防护：批量 INSERT server_logs 自身的 sqlx 事件不再入库，否则日志风暴自我放大。
         if Self::is_self_insert(metadata.target(), &visitor.message, &visitor.fields) {
             return;
         }
@@ -352,6 +366,7 @@ where
             }
         }
 
+        // 沿 Span 栈向上收集：最近的 HTTP 上下文、SQL 参数与来源 Span 名（sql_params 辅助 Span 不算来源）。
         let mut fields = visitor.fields;
         let mut request_id = None;
         if let Some(context) = http_context {
@@ -376,6 +391,7 @@ where
                 .or_insert(Value::String(params));
         }
         // 落库前脱敏（敏感键 / query string / 密码哈希形态的值）并截断超长值。
+        // 敏感键 / 密码形态值脱敏 + 超长值截断后才允许落库。
         redact_fields(&mut fields);
         for value in fields.values_mut() {
             if let Some(text) = value.as_str() {
@@ -410,6 +426,7 @@ impl<S> Layer<S> for QuietInternalSpanLayer
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
+    /// 静默 Span（quiet_internal）打扩展标记，供输出层 Filter 消音例行噪音。
     fn on_new_span(
         &self,
         attrs: &tracing::span::Attributes<'_>,
@@ -462,6 +479,7 @@ async fn insert_batch(pool: &PgPool, batch: &[LogRecord]) -> bool {
         Vec<_>,
         Vec<_>,
         Vec<_>,
+        // 按列拆成 7 个数组，UNNEST 一次 INSERT 多行（绑定顺序与列序严格对齐）。
     ) = batch
         .iter()
         .map(|record| {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 外观设置页：Logo/Favicon/配色方案/列表密度。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import ContentLayout from '@/components/custom-theme/content-layout.vue'
 import CustomColor from '@/components/custom-theme/custom-color.vue'

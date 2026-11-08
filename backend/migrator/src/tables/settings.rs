@@ -209,22 +209,27 @@ pub fn map_setting_item(
 }
 
 impl SettingsPlan {
+    /// 收集站点文本类设置。
     fn set_site_text(&mut self, column: &'static str, value: &str) {
         self.site_text.insert(column, value.to_owned());
     }
 
+    /// 收集站点数值类设置。
     fn set_site_int(&mut self, column: &'static str, value: i32) {
         self.site_int.insert(column, value);
     }
 
+    /// 收集外观分组设置。
     fn set_appearance(&mut self, key: &str, value: Value) {
         self.appearance.insert(key.to_owned(), value);
     }
 
+    /// 收集邮件分组设置。
     fn set_email(&mut self, key: &str, value: Value) {
         self.email.insert(key.to_owned(), value);
     }
 
+    /// 未映射键/值归档（Secret 值不落报告）。
     fn archive_item(&mut self, id: i64, group: &str, key: &str, val: &str, reason: &str) {
         self.archives.push(ArchiveEntry {
             id: Some(id),
@@ -235,6 +240,7 @@ impl SettingsPlan {
     }
 }
 
+/// 抽取设置分组。
 async fn extract_groups(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacySettingGroup>> {
     sqlx::query_as::<_, LegacySettingGroup>(
         "SELECT CAST(id AS SIGNED) AS id, name FROM sys_settings ORDER BY id",
@@ -244,6 +250,7 @@ async fn extract_groups(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacySettingGr
     .context("failed to extract legacy sys_settings")
 }
 
+/// 抽取设置项（key-value 对）。
 async fn extract_items(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacySettingItem>> {
     sqlx::query_as::<_, LegacySettingItem>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(sys_id AS SIGNED) AS sys_id, `key`, val \
@@ -254,6 +261,7 @@ async fn extract_items(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacySettingIte
     .context("failed to extract legacy sys_setting_items")
 }
 
+/// ETL：分组与项抽取后按 key 映射到目标 settings/site_settings，未识别键归档。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let groups = extract_groups(&ctx.mysql).await?;
     let items = extract_items(&ctx.mysql).await?;

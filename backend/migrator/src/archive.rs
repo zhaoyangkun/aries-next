@@ -29,6 +29,7 @@ pub struct ArchiveWriter {
 }
 
 impl ArchiveWriter {
+    /// 创建归档 JSONL 写入器。
     pub fn create(path: &Path) -> std::io::Result<Self> {
         Ok(Self {
             writer: BufWriter::new(File::create(path)?),
@@ -36,6 +37,7 @@ impl ArchiveWriter {
         })
     }
 
+    /// 追加一条归档记录（整行未迁入或字段级条目）。
     pub fn record(
         &mut self,
         table: &str,
@@ -57,6 +59,7 @@ impl ArchiveWriter {
         Ok(())
     }
 
+    /// 刷盘并关闭。
     pub fn finish(mut self) -> std::io::Result<()> {
         self.writer.flush()
     }

@@ -15,11 +15,13 @@ pub struct PostgresLogRepository {
 }
 
 impl PostgresLogRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
 
+/// SQLx 错误到 LogError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> LogError {
     tracing::error!(error = %error, "log repository operation failed");
     LogError::StoreUnavailable
@@ -38,6 +40,7 @@ type LogRow = (
     serde_json::Value,
 );
 
+/// `server_logs` 行转领域日志条目（fields JSON 原样透传）。
 fn row_to_entry(
     (id, ts, level, target, message, span_name, request_id, fields): LogRow,
 ) -> LogEntry {
@@ -126,6 +129,7 @@ impl<'a> FilterSql<'a> {
         query
     }
 
+    /// 行查询的绑定：顺序与 where_clause 的条件顺序严格一致。
     fn bind_rows<'q>(
         &'q self,
         mut query: sqlx::query::QueryAs<'q, sqlx::Postgres, LogRow, sqlx::postgres::PgArguments>,
@@ -157,6 +161,7 @@ impl<'a> FilterSql<'a> {
 
 #[async_trait]
 impl LogRepository for PostgresLogRepository {
+    /// 分页查询：keyset 游标（ts, id）元组比较走复合索引，游标模式下忽略页码；total 始终是筛选全集计数。
     async fn list(
         &self,
         filter: &LogFilter,
@@ -220,6 +225,7 @@ impl LogRepository for PostgresLogRepository {
         })
     }
 
+    /// 上下文锚点查询：锚点行 + 前后各 context 条；忽略分页与时间筛选，正序返回。
     async fn list_around(
         &self,
         filter: &LogFilter,
@@ -286,6 +292,7 @@ impl LogRepository for PostgresLogRepository {
         })
     }
 
+    /// 最近 24h 各级别条数。
     async fn level_counts_24h(&self) -> Result<LogLevelCounts, LogError> {
         let count_rows = sqlx::query_as::<_, (String, i64)>(
             "SELECT level, COUNT(*) FROM server_logs \
@@ -301,6 +308,7 @@ impl LogRepository for PostgresLogRepository {
         Ok(counts)
     }
 
+    /// 级别趋势分桶（≤48h 按小时、>48h 按天，升序）。
     async fn stats(&self, hours: u32) -> Result<Vec<LogStatsBucket>, LogError> {
         // 分桶粒度白名单（非用户输入拼接）：≤48h 按小时，>48h 按天。
         let bucket_unit = if hours <= 48 { "hour" } else { "day" };
@@ -333,6 +341,7 @@ impl LogRepository for PostgresLogRepository {
         Ok(buckets)
     }
 
+    /// 日志来源模块列表（筛选下拉，LIMIT 200）。
     async fn list_targets(&self) -> Result<Vec<String>, LogError> {
         sqlx::query_scalar::<_, String>(
             "SELECT DISTINCT target FROM server_logs ORDER BY 1 LIMIT 200",
@@ -342,6 +351,7 @@ impl LogRepository for PostgresLogRepository {
         .map_err(map_sqlx)
     }
 
+    /// 实时 tail 的起始游标：当前最大 id。
     async fn tail_anchor(&self) -> Result<i64, LogError> {
         sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(id), 0) FROM server_logs")
             .fetch_one(&self.pool)
@@ -349,6 +359,7 @@ impl LogRepository for PostgresLogRepository {
             .map_err(map_sqlx)
     }
 
+    /// 实时 tail 轮询：取 id 大于游标的新行（正序）。
     async fn tail_poll(
         &self,
         filter: &LogFilter,
@@ -372,6 +383,7 @@ impl LogRepository for PostgresLogRepository {
         Ok(rows.into_iter().map(row_to_entry).collect())
     }
 
+    /// 指定时间点以来的 ERROR 计数（尖峰检测）。
     async fn count_errors_since(&self, since: OffsetDateTime) -> Result<i64, LogError> {
         sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM server_logs WHERE level = 'ERROR' AND ts > $1",

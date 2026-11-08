@@ -1,3 +1,7 @@
+//! 统一 API 错误类型：HTTP Status + 机器可读 Code + 用户可读 Message（+ 可选 details）。
+//! 各 core 域错误的 `From` 映射集中在此，保证同一类失败在全部端点上返回一致的错误码；
+//! 内部故障只落服务端日志（`internal_logged`），响应体不携带底层细节。
+
 use aries_core::ai::AiError;
 use aries_core::auth::AuthError;
 use aries_core::comments::CommentError;
@@ -18,6 +22,8 @@ use axum::{
 };
 use serde::Serialize;
 
+/// 统一 API 错误：所有 handler 的 Err 返回类型，经 `IntoResponse` 序列化为
+/// `{ "error": { "code", "message", "details?" } }`。
 #[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
@@ -29,11 +35,13 @@ pub struct ApiError {
     retry_after: Option<u64>,
 }
 
+/// 错误响应外层结构（与 `crate::openapi::ErrorResponse` 形状一致）。
 #[derive(Serialize)]
 struct ErrorResponse {
     error: ErrorBody,
 }
 
+/// 错误体：`details` 仅在提供时出现。
 #[derive(Serialize)]
 struct ErrorBody {
     code: &'static str,
@@ -43,6 +51,7 @@ struct ErrorBody {
 }
 
 impl ApiError {
+    /// 400：请求参数校验失败，code/message 由调用点给出具体语义。
     pub const fn bad_request(code: &'static str, message: &'static str) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -53,6 +62,7 @@ impl ApiError {
         }
     }
 
+    /// 401：未认证或 Session 失效的标准响应。
     pub const fn unauthorized() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
@@ -74,6 +84,7 @@ impl ApiError {
         }
     }
 
+    /// 401 登录专用：不区分「用户不存在」与「密码错误」，防用户枚举。
     pub const fn invalid_credentials() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
@@ -84,6 +95,7 @@ impl ApiError {
         }
     }
 
+    /// 403：已认证但权限不足，或 Origin/CSRF 校验失败。
     pub const fn forbidden(code: &'static str, message: &'static str) -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
@@ -94,6 +106,7 @@ impl ApiError {
         }
     }
 
+    /// 409：资源冲突（唯一约束、乐观锁、非法状态迁移）。
     pub const fn conflict(code: &'static str, message: &'static str) -> Self {
         Self {
             status: StatusCode::CONFLICT,
@@ -134,6 +147,7 @@ impl ApiError {
         }
     }
 
+    /// 404：资源不存在；公开端点也用它抹平「无权访问」与「不存在」的差异。
     pub const fn not_found(code: &'static str, message: &'static str) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,
@@ -179,6 +193,7 @@ impl ApiError {
         }
     }
 
+    /// 上游超时：与 bad_gateway 区分，便于客户端决定是否重试。
     pub const fn gateway_timeout(code: &'static str, message: &'static str) -> Self {
         Self {
             status: StatusCode::GATEWAY_TIMEOUT,
@@ -189,6 +204,7 @@ impl ApiError {
         }
     }
 
+    /// 500 通用内部错误（未记录日志；需要排障上下文时用 `internal_logged`）。
     pub const fn internal() -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -207,6 +223,7 @@ impl ApiError {
     }
 }
 
+/// 内容域错误映射：校验失败 → 400，冲突/未回收 → 409，不存在 → 404，存储/渲染故障 → 500（记日志）。
 impl From<ContentError> for ApiError {
     fn from(error: ContentError) -> Self {
         match error {
@@ -258,6 +275,7 @@ impl From<ContentError> for ApiError {
     }
 }
 
+/// 认证域错误映射：凭据/策略问题 → 400/401/409，角色与状态解析失败属内部数据问题 → 500。
 impl From<AuthError> for ApiError {
     fn from(error: AuthError) -> Self {
         match error {
@@ -278,6 +296,7 @@ impl From<AuthError> for ApiError {
     }
 }
 
+/// 媒体域错误映射：引用冲突携带引用数，供前端提示影响范围。
 impl From<MediaError> for ApiError {
     fn from(error: MediaError) -> Self {
         match error {
@@ -296,6 +315,7 @@ impl From<MediaError> for ApiError {
     }
 }
 
+/// 后台任务域错误映射。
 impl From<JobError> for ApiError {
     fn from(error: JobError) -> Self {
         match error {
@@ -307,6 +327,7 @@ impl From<JobError> for ApiError {
     }
 }
 
+/// 页面域错误映射：slug 冲突固定为 `SLUG_CONFLICT`（页面/文章共用语义）。
 impl From<PageError> for ApiError {
     fn from(error: PageError) -> Self {
         match error {
@@ -326,6 +347,7 @@ impl From<PageError> for ApiError {
     }
 }
 
+/// 日志（Journal）域错误映射。
 impl From<JournalError> for ApiError {
     fn from(error: JournalError) -> Self {
         match error {
@@ -344,6 +366,7 @@ impl From<JournalError> for ApiError {
     }
 }
 
+/// 图库域错误映射。
 impl From<GalleryError> for ApiError {
     fn from(error: GalleryError) -> Self {
         match error {
@@ -369,6 +392,7 @@ impl From<GalleryError> for ApiError {
     }
 }
 
+/// 友链域错误映射。
 impl From<LinkError> for ApiError {
     fn from(error: LinkError) -> Self {
         match error {
@@ -388,6 +412,7 @@ impl From<LinkError> for ApiError {
     }
 }
 
+/// 导航域错误映射。
 impl From<NavigationError> for ApiError {
     fn from(error: NavigationError) -> Self {
         match error {
@@ -421,6 +446,7 @@ impl From<NavigationError> for ApiError {
     }
 }
 
+/// AI 域错误映射：开关问题 → 403/400，上游问题 → 502/504/429。
 impl From<AiError> for ApiError {
     fn from(error: AiError) -> Self {
         match error {
@@ -449,6 +475,7 @@ impl From<AiError> for ApiError {
     }
 }
 
+/// 设置分组域错误映射：乐观锁冲突固定为 `SETTING_VERSION_CONFLICT`。
 impl From<SettingError> for ApiError {
     fn from(error: SettingError) -> Self {
         match error {
@@ -467,6 +494,7 @@ impl From<SettingError> for ApiError {
     }
 }
 
+/// 评论域错误映射：审核状态机违规 → 409，内容/作者校验 → 400，策略关闭 → 403。
 impl From<CommentError> for ApiError {
     fn from(error: CommentError) -> Self {
         match error {
@@ -516,6 +544,7 @@ impl From<CommentError> for ApiError {
     }
 }
 
+/// 运行日志域错误映射。
 impl From<LogError> for ApiError {
     fn from(error: LogError) -> Self {
         match error {
@@ -525,6 +554,8 @@ impl From<LogError> for ApiError {
     }
 }
 
+/// 序列化为统一错误响应；一律禁缓存（`Cache-Control: no-store`），
+/// 有窗口信息时附 `Retry-After` 头。
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let retry_after = self.retry_after;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** AI 设置页：Provider 配置、功能开关与 Embedding 设置。 */
 import { LoaderCircleIcon, RefreshCwIcon, SparklesIcon } from '@lucide/vue'
 import dayjs from 'dayjs'
 import { Badge } from '@/components/ui/badge'

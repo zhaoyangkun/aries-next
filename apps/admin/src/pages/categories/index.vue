@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 分类管理页：文章分类的增删改。 */
 import { onMounted, ref } from 'vue'
 import {
   EllipsisIcon,

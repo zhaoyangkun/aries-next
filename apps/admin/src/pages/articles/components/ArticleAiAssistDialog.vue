@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** AI 助手对话框：rewrite/summary/metadata/tags/brief 的 SSE 流式生成与结果回填。 */
 import { computed, ref, watch } from 'vue'
 import {
   CheckIcon,

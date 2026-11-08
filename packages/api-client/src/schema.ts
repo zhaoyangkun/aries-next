@@ -3780,6 +3780,7 @@ export interface components {
             /** @description 待上传图片文件（jpg/jpeg/png/gif/bmp/webp）。 */
             file: string[];
         };
+        /** @description 用户视图 DTO：附带由角色权限矩阵展开的前端权限标识列表。 */
         UserResponse: {
             /** @description 头像 URL，未设置时为 null。 */
             avatar_url?: string | null;

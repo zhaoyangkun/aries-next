@@ -32,6 +32,7 @@ pub struct LogConfig {
 }
 
 impl LogConfig {
+    /// 日志配置：目录/保留天数/控制台 JSON 形态；LOG_SQL 未设置时生产关、开发开（仅初始值，运行期可切）。
     pub fn from_env() -> anyhow::Result<Self> {
         let dir = env::var("LOG_DIR").unwrap_or_else(|_| "./logs".to_owned());
         let retention_days =
@@ -122,6 +123,7 @@ impl LogHandle {
         }
     }
 
+    /// SQL 语句日志的运行期开关。
     pub fn sql_enabled(&self) -> bool {
         self.sql_enabled.load(Ordering::Relaxed)
     }
@@ -144,6 +146,7 @@ impl LogHandle {
             .map(|instant| instant.saturating_duration_since(std::time::Instant::now()))
     }
 
+    /// 解析当前自定义覆盖 directives（空串 → 空 Vec）。
     fn parsed_custom(&self) -> anyhow::Result<Vec<Directive>> {
         let custom = self.custom_directives.lock().unwrap();
         Ok(custom
@@ -164,6 +167,7 @@ impl LogHandle {
         Ok(())
     }
 
+    /// 切换 SQL 日志开关并重载全局过滤器（立即生效，无需重启）。
     pub fn set_sql_logging(&self, enabled: bool) -> anyhow::Result<()> {
         self.sql_enabled.store(enabled, Ordering::Relaxed);
         self.reload()
@@ -270,6 +274,7 @@ pub fn init_tracing() -> anyhow::Result<LogGuard> {
     })
 }
 
+/// 解析日志保留天数（正整数）。
 fn parse_retention(value: &str) -> anyhow::Result<usize> {
     let days = value
         .parse::<usize>()
@@ -286,6 +291,7 @@ fn default_sql_enabled(console_json: bool) -> bool {
     !console_json
 }
 
+/// 解析日志布尔开关（LOG_SQL 等环境变量）。
 fn parse_flag(value: &str) -> anyhow::Result<bool> {
     match value {
         "true" | "1" => Ok(true),

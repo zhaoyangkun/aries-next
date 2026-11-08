@@ -31,6 +31,7 @@ export interface DashboardData {
 }
 
 export const dashboardApi = {
+  /** 聚合仪表盘数据：文章/评论统计、最近待审评论与最近失败任务。 */
   async get() {
     const { data } = await api.get<DashboardData>('/api/admin/dashboard')
     return data

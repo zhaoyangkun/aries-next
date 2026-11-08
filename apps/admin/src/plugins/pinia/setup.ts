@@ -10,6 +10,7 @@ const persistedState = createPersistedState({
 })
 pinia.use(persistedState)
 
+/** 创建 Pinia 实例并启用 sessionStorage 持久化插件（主题/布局偏好刷新不丢），同时导出实例供模块外使用。 */
 export function setupPinia(app: App) {
   app.use(pinia)
 }

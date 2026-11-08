@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 命令面板「切换主题」项：循环切换浅色/深色/跟随系统。 */
 import { MoonIcon, SunIcon, SunMoonIcon } from '@lucide/vue'
 import { useColorMode } from '@vueuse/core'
 

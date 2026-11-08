@@ -4,6 +4,10 @@ import { watch } from 'vue'
 import { THEMES } from '@/constants/themes'
 import { useThemeStore } from '@/stores/theme'
 
+/**
+ * 主题/圆角应用到 DOM 的 Composable：watch 变化并同步 <html> 的 theme-* class 与 --radius 变量，
+ * 返回响应式值与 setter 供主题切换面板使用。
+ */
 export function useSystemTheme() {
   const themeStore = useThemeStore()
   const { setTheme, setRadius } = themeStore

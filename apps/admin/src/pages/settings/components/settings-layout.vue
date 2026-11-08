@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 设置页布局：标题/描述 + 卡片容器。Props: title/description。 */
 import { BasicPage } from '@/components/global-layout'
 import { settingsNavItems } from '@/constants/sidebar-data'
 import { useSessionStore } from '@/modules/auth/stores/session'

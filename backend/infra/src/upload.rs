@@ -134,12 +134,14 @@ pub fn probe_dimensions(bytes: &[u8]) -> Option<(i32, i32)> {
     Some((i32::try_from(width).ok()?, i32::try_from(height).ok()?))
 }
 
+/// 字节内容的 SHA-256 十六进制摘要（上传内容寻址与去重依据）。
 pub fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// 完整校验一个上传文件：大小、扩展名白名单、Magic Bytes、声明 MIME 交叉验证。
+// 上传校验：扩展名白名单 + Magic Bytes 嗅探双重要求（防伪装扩展名的文本文件等）+ 尺寸/批量上限；具体阈值见常量定义。
 pub fn validate_upload(
     original_name: &str,
     declared_mime: Option<&str>,

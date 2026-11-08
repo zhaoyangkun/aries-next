@@ -19,6 +19,7 @@ use crate::state::AppState;
 
 use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册自定义页面管理路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/pages", get(list_pages).post(create_page))
@@ -79,6 +80,7 @@ pub(crate) struct PageResponse {
 }
 
 impl From<Page> for PageResponse {
+    /// 领域页面 → 响应 DTO。
     fn from(page: Page) -> Self {
         Self {
             id: page.id,
@@ -305,6 +307,7 @@ pub(crate) async fn delete_page(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 页面变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_page_audit(
     state: &AppState,
     current: &CurrentUser,

@@ -1,3 +1,4 @@
+//! aries-server 入口：日志初始化、数据库连接与 Migration、AppState 装配、Worker 启动与优雅停机。
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -112,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 加载 `.env`（不覆盖已设置的环境变量；系统环境变量优先）。
 fn load_dotenv() -> anyhow::Result<()> {
     match dotenvy::dotenv() {
         Ok(_) => Ok(()),
@@ -120,6 +122,7 @@ fn load_dotenv() -> anyhow::Result<()> {
     }
 }
 
+/// 等待 SIGTERM/SIGINT 后触发优雅停机（日志排空、连接回收）。
 async fn shutdown() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()

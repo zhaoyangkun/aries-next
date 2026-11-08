@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 重置密码页：凭邮件 Token 设置新密码。 */
 import { CheckCircle2Icon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'

@@ -138,6 +138,7 @@ pub async fn cleanup_expired_sessions(state: &AppState) {
     }
 }
 
+/// 任务分发：按 kind 路由到具体处理器；单任务 panic 由外层 catch_unwind 隔离。
 async fn execute(state: &AppState, job: &BackgroundJob) -> Result<(), String> {
     match job.kind {
         JobKind::MediaCleanup => media_cleanup(state).await,
@@ -364,6 +365,7 @@ async fn comment_notification(state: &AppState, job: &BackgroundJob) -> Result<(
         }
     }
 }
+/// 尺寸回填任务：探测缺少宽高信息的活跃图片并回写结果。
 async fn metadata_probe(state: &AppState) -> Result<(), String> {
     let missing = state
         .media

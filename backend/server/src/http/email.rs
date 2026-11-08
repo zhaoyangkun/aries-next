@@ -31,6 +31,7 @@ use crate::{
 const TEST_RATE_LIMIT: usize = 5;
 const TEST_RATE_WINDOW: Duration = Duration::from_secs(15 * 60);
 
+/// 注册邮件测试与投递审计查询路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/settings/email/test", post(send_test_email))
@@ -50,6 +51,8 @@ struct SendTestEmailResponse {
     status: &'static str,
 }
 
+/// 发送 SMTP 测试邮件；需要 `settings:manage` 权限与每用户限流。
+/// 先建投递审计再发送，失败路径也能在审计列表看到原因。
 #[utoipa::path(
     post,
     path = "/api/admin/settings/email/test",
@@ -185,6 +188,7 @@ struct EmailDeliveryPageResponse {
     page_size: u32,
 }
 
+/// 分页查询外发邮件投递审计；需要 `settings:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/email-deliveries",

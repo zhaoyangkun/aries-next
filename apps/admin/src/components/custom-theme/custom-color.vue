@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 主题色选择器：预设色板与自定义色值。 */
 import { storeToRefs } from 'pinia'
 
 import { Button } from '@/components/ui/button'

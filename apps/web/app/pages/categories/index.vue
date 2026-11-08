@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 分类列表页：全部分类及文章数。 */
 import type { PublicCategory } from '~/composables/usePublicApi'
 
 const { data: categories, status } = await usePublicApi<PublicCategory[]>(

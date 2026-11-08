@@ -100,6 +100,7 @@ pub fn legacy_datetime_to_utc(
         .to_offset(UtcOffset::UTC))
 }
 
+/// 解析数值成分（年/月/日/时/分/秒），非法格式返回 InvalidFormat。
 fn parse_number<T: std::str::FromStr>(raw: &str, whole: &str) -> Result<T, TimeConvError> {
     raw.parse::<T>()
         .map_err(|_| TimeConvError::InvalidFormat(whole.to_owned()))

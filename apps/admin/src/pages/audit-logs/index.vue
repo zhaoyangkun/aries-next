@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 审计日志页：操作记录的多条件筛选与分页查询。 */
 import { onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ScrollTextIcon, SearchIcon } from '@lucide/vue'

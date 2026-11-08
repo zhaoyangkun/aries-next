@@ -25,12 +25,17 @@ pub struct RelatedArticle {
     pub published_at: Option<OffsetDateTime>,
 }
 
+/// AI 检索领域错误。
 #[derive(Debug, Error)]
 pub enum RetrievalError {
     #[error("retrieval store unavailable")]
     StoreUnavailable,
 }
 
+/// 文章内容块（Embedding / RAG）存储契约；实现位于 `aries-infra`。
+///
+/// `embeddings` 与 `chunks` 参数约定等长且顺序一致，
+/// 由 `replace_chunks` 在事务内成对写入。
 #[async_trait]
 pub trait ChunkRepository: Send + Sync {
     /// 事务内删除文章旧块并插入新块；`embeddings` 与 `chunks` 等长且顺序一致。

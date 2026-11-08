@@ -1,3 +1,4 @@
+//! 进程内滑动窗口限流器（单实例足够；多实例部署需替换为共享存储实现）。
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
@@ -17,10 +18,12 @@ pub struct RateLimitDecision {
 }
 
 impl RateLimitDecision {
+    /// 是否放行。
     pub fn allowed(&self) -> bool {
         self.allowed
     }
 
+    /// 建议重试等待时长。
     pub fn retry_after(&self) -> Duration {
         self.retry_after
     }
@@ -32,6 +35,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    /// 内存固定窗口计数（Mutex + VecDeque）；Mutex 中毒保守拒绝；key 容量超上限先惰性清理已过期项，仍满则整体清空（各 key 窗口独立，清零安全）。
     pub fn check(&self, key: &str, limit: usize, window: Duration) -> RateLimitDecision {
         let now = Instant::now();
         let Ok(mut entries) = self.entries.lock() else {

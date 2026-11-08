@@ -27,6 +27,7 @@ pub enum AiFeature {
 }
 
 impl AiFeature {
+    /// 返回功能标识的小写字符串，与数据库 `feature` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::EditorRewrite => "editor_rewrite",
@@ -49,6 +50,7 @@ impl fmt::Display for AiFeature {
 impl FromStr for AiFeature {
     type Err = AiError;
 
+    /// 解析功能标识字符串；未知取值返回 `AiError::Validation`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "editor_rewrite" => Ok(Self::EditorRewrite),
@@ -88,6 +90,7 @@ pub enum AiProtocol {
 }
 
 impl AiProtocol {
+    /// 返回协议的小写字符串标识，与 jsonb payload 中的 `protocol` 字段一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::OpenAi => "openai",
@@ -148,6 +151,7 @@ pub struct AiMessage {
 }
 
 impl AiMessage {
+    /// 构造 system 消息（设定助手角色与规则）。
     pub fn system(content: impl Into<String>) -> Self {
         Self {
             role: "system".to_owned(),
@@ -155,6 +159,7 @@ impl AiMessage {
         }
     }
 
+    /// 构造 user 消息（用户输入或包裹后的不可信内容）。
     pub fn user(content: impl Into<String>) -> Self {
         Self {
             role: "user".to_owned(),
@@ -234,6 +239,7 @@ pub enum AiRequestStatus {
 }
 
 impl AiRequestStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Success => "success",
@@ -252,6 +258,7 @@ impl fmt::Display for AiRequestStatus {
 impl FromStr for AiRequestStatus {
     type Err = AiError;
 
+    /// 解析状态字符串；未知取值返回 `AiError::Validation`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "success" => Ok(Self::Success),
@@ -323,6 +330,7 @@ pub trait AiRequestRepository: Send + Sync {
 // Error
 // ============================================================
 
+/// AI 领域错误；`category` 把错误归并为落库用的粗粒度分类（防 Secret 经错误细节泄露）。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AiError {
     /// AI 总开关未启用。

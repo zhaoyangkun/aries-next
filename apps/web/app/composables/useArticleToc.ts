@@ -32,6 +32,10 @@ export function buildTocItems(headings: TocHeadingSnapshot[]): TocItem[] {
   })
 }
 
+/**
+ * 文章目录 Composable：从渲染后正文提取 h2/h3 生成目录、为缺失 id 的标题写回 toc-* 锚点，
+ * IntersectionObserver 跟踪阅读位置，正文变化时自动重建；返回目录项与当前激活 id。
+ */
 export function useArticleToc() {
   const items = ref<TocItem[]>([])
   const activeId = ref('')

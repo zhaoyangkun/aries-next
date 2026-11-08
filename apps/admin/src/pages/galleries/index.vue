@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 图库管理页：图库 CRUD 与条目管理。 */
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   ArrowDownIcon,

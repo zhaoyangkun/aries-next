@@ -31,11 +31,13 @@ export interface UpsertPagePayload {
 }
 
 export const pagesApi = {
+  /** 分页查询自定义页面，支持状态/关键字筛选。 */
   async list(params: { page: number, page_size: number, status?: PageStatus, keyword?: string }) {
     const { data } = await api.get<CustomPagePage>('/api/admin/pages', { params })
     return data
   },
 
+  /** 读取单个自定义页面详情。 */
   async get(pageId: number) {
     const { data } = await api.get<CustomPage>(`/api/admin/pages/${pageId}`)
     return data
@@ -47,11 +49,13 @@ export const pagesApi = {
     return data
   },
 
+  /** 更新自定义页面；content_html 由 Backend 渲染入库。 */
   async update(pageId: number, payload: UpsertPagePayload) {
     const { data } = await api.put<CustomPage>(`/api/admin/pages/${pageId}`, payload)
     return data
   },
 
+  /** 删除自定义页面。 */
   async remove(pageId: number) {
     await api.delete(`/api/admin/pages/${pageId}`)
   },

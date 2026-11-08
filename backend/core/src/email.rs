@@ -20,6 +20,7 @@ pub struct EmailMessage {
     pub html: Option<String>,
 }
 
+/// 邮件发送错误；按「终态 / 永久 / 瞬时」三分类驱动调用方的重试策略。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EmailError {
     /// 邮件功能未启用或配置不完整：配置变更前重试无意义，调用方按终态处理。
@@ -150,6 +151,7 @@ pub fn render_comment_notification(
     let text = format!(
         "{commenter_name} 在《{target_title}》{action}：\n\n{excerpt}\n\n查看完整评论：{target_url}"
     );
+    // 纯文本 + HTML 双版本；用户可控变量全部经 sanitize_header_value / escape_html 处理，防邮件头注入与 HTML 注入。
     let html = format!(
         "<p><strong>{}</strong> 在《<a href=\"{}\">{}</a>》{}：</p>\
          <blockquote style=\"margin:12px 0;padding:8px 12px;border-left:3px solid #cbd5e1;\
@@ -198,6 +200,7 @@ pub enum EmailDeliveryStatus {
 }
 
 impl EmailDeliveryStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -217,6 +220,7 @@ impl fmt::Display for EmailDeliveryStatus {
 impl FromStr for EmailDeliveryStatus {
     type Err = EmailDeliveryError;
 
+    /// 解析状态字符串；未知取值返回 `EmailDeliveryError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
@@ -228,6 +232,7 @@ impl FromStr for EmailDeliveryStatus {
     }
 }
 
+/// 一封邮件的投递审计记录：每次发送意图一行，重试不新建行。
 #[derive(Debug, Clone)]
 pub struct EmailDelivery {
     pub id: i64,
@@ -244,8 +249,10 @@ pub struct EmailDelivery {
     pub updated_at: OffsetDateTime,
 }
 
+/// 新建投递审计记录的输入。
 #[derive(Debug, Clone)]
 pub struct NewEmailDelivery {
+    /// 关联评论；系统邮件（密码重置、测试）为 None。
     pub comment_id: Option<i64>,
     pub recipient_email: String,
     pub subject: String,
@@ -271,6 +278,7 @@ impl NewEmailDelivery {
     }
 }
 
+/// 投递审计列表查询参数。
 #[derive(Debug, Clone, Default)]
 pub struct EmailDeliveryListQuery {
     pub page: u32,
@@ -278,6 +286,7 @@ pub struct EmailDeliveryListQuery {
     pub status: Option<EmailDeliveryStatus>,
 }
 
+/// 分页投递审计列表。
 #[derive(Debug, Clone)]
 pub struct EmailDeliveryPage {
     pub items: Vec<EmailDelivery>,
@@ -286,6 +295,7 @@ pub struct EmailDeliveryPage {
     pub page_size: u32,
 }
 
+/// 投递审计领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EmailDeliveryError {
     #[error("invalid email delivery status")]

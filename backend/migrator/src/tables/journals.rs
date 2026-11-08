@@ -38,6 +38,7 @@ pub struct NewJournal {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取日志源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyJournal>> {
     sqlx::query_as::<_, LegacyJournal>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(is_secret AS SIGNED) AS is_secret, content, \
@@ -50,10 +51,12 @@ pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyJournal>> {
     .context("failed to extract legacy journals")
 }
 
+/// is_secret → visibility 映射（secret 日志转为 private）。
 pub fn map_visibility(is_secret: bool) -> &'static str {
     if is_secret { "private" } else { "public" }
 }
 
+/// 转换：可见性映射、内容长度强制（默认报错，--truncate 时截断）、Markdown 重渲染。
 pub fn transform(
     row: &LegacyJournal,
     params: &CommonParams,
@@ -112,6 +115,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

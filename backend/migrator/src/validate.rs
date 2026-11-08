@@ -27,6 +27,7 @@ pub struct ValidateReport {
 }
 
 impl ValidateReport {
+    /// 记录一项对账结果。
     fn record(&mut self, check: impl Into<String>, ok: bool, detail: impl Into<String>) {
         self.results.push(CheckResult {
             check: check.into(),
@@ -35,6 +36,7 @@ impl ValidateReport {
         });
     }
 
+    /// 是否存在失败项。
     pub fn has_failures(&self) -> bool {
         self.results.iter().any(|result| !result.ok)
     }
@@ -56,6 +58,7 @@ const COUNT_PAIRS: [(&str, &str, bool); 12] = [
     ("navs", "navigation_items", true),
 ];
 
+/// validate 子命令入口：行数、主键范围、内容 Hash、关联数量与序列校准校验。
 pub async fn run(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -91,6 +94,7 @@ pub async fn run(
     Ok(report)
 }
 
+/// 统计 MySQL 源表行数。
 async fn mysql_count(mysql: &MySqlPool, table: &str) -> anyhow::Result<i64> {
     Ok(
         sqlx::query_scalar(&format!("SELECT COUNT(*) FROM `{table}`"))
@@ -99,12 +103,14 @@ async fn mysql_count(mysql: &MySqlPool, table: &str) -> anyhow::Result<i64> {
     )
 }
 
+/// 统计 PostgreSQL 目标表行数。
 async fn pg_count(pg: &PgPool, table: &str) -> anyhow::Result<i64> {
     Ok(sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
         .fetch_one(pg)
         .await?)
 }
 
+/// 校验源与目标表的行数一致（逐个表比对并记录差异）。
 async fn check_counts(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -137,6 +143,7 @@ async fn check_counts(
     Ok(())
 }
 
+/// 校验主键范围连续、无空洞（迁移行数与 max(id) 对齐）。
 async fn check_pk_ranges(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -188,6 +195,7 @@ async fn check_pk_ranges(
     Ok(())
 }
 
+/// 比对源正文与目标渲染 HTML 的内容 Hash（抽样或全量）。
 async fn check_content_hashes(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -269,6 +277,7 @@ async fn check_content_hashes(
     Ok(())
 }
 
+/// 校验关联数量（文章-标签、媒体引用等）在源与目标间一致。
 async fn check_associations(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -297,6 +306,7 @@ async fn check_associations(
     Ok(())
 }
 
+/// 读取源表有效 ID 集合（孤儿记录检测的基准）。
 async fn valid_ids(mysql: &MySqlPool, table: &str) -> anyhow::Result<HashSet<i64>> {
     let ids: Vec<i64> = sqlx::query_scalar(&format!("SELECT CAST(id AS SIGNED) FROM `{table}`"))
         .fetch_all(mysql)
@@ -304,6 +314,7 @@ async fn valid_ids(mysql: &MySqlPool, table: &str) -> anyhow::Result<HashSet<i64
     Ok(ids.into_iter().collect())
 }
 
+/// 图库专项校验：条目与相册归属的完整性。
 async fn check_galleries(
     mysql: &MySqlPool,
     pg: &PgPool,
@@ -324,6 +335,7 @@ async fn check_galleries(
     Ok(())
 }
 
+/// 校准 PostgreSQL 序列当前值，避免 identity 主键冲突。
 async fn check_sequences(pg: &PgPool, report: &mut ValidateReport) -> anyhow::Result<()> {
     for table in crate::tables::IDENTITY_TABLES {
         let sequence: Option<String> =

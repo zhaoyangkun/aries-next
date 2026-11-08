@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 主题设置「内容布局」选择。 */
 import { storeToRefs } from 'pinia'
 
 import { Button } from '@/components/ui/button'

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 命令面板条目（带图标包装）。Props: name/icon。 */
 import type { Component } from 'vue'
 
 import { MilestoneIcon } from '@lucide/vue'

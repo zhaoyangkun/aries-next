@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::OffsetDateTime;
 
+/// 媒体存储来源：本地磁盘、S3 兼容对象存储，或迁移遗留的外部 URL（只读引用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MediaProvider {
@@ -14,6 +15,7 @@ pub enum MediaProvider {
 }
 
 impl MediaProvider {
+    /// 返回来源的小写字符串标识，与数据库 `provider` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Local => "local",
@@ -32,6 +34,7 @@ impl fmt::Display for MediaProvider {
 impl FromStr for MediaProvider {
     type Err = MediaError;
 
+    /// 解析来源字符串；未知取值返回 `MediaError::InvalidProvider`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "local" => Ok(Self::Local),
@@ -42,6 +45,7 @@ impl FromStr for MediaProvider {
     }
 }
 
+/// 媒体资产状态；`Deleted` 为软删除标记，行与文件保留到清理任务物理清除。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaStatus {
     Active,
@@ -49,6 +53,7 @@ pub enum MediaStatus {
 }
 
 impl MediaStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -60,6 +65,7 @@ impl MediaStatus {
 impl FromStr for MediaStatus {
     type Err = MediaError;
 
+    /// 解析状态字符串；未知取值按存储故障处理（该列有 CHECK 约束，不应出现）。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "active" => Ok(Self::Active),
@@ -80,6 +86,7 @@ pub enum UsageTargetType {
 }
 
 impl UsageTargetType {
+    /// 返回目标类型的小写字符串标识，与数据库 `target_type` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ArticleCover => "article_cover",
@@ -92,6 +99,7 @@ impl UsageTargetType {
 impl FromStr for UsageTargetType {
     type Err = MediaError;
 
+    /// 解析目标类型字符串；未知取值返回 `MediaError::InvalidUsageTarget`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "article_cover" => Ok(Self::ArticleCover),
@@ -102,6 +110,7 @@ impl FromStr for UsageTargetType {
     }
 }
 
+/// 媒体资产实体；`sha256` 是内容寻址的去重依据。
 #[derive(Debug, Clone)]
 pub struct MediaAsset {
     pub id: i64,
@@ -123,6 +132,7 @@ pub struct MediaAsset {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 新建媒体资产入参。
 #[derive(Debug, Clone)]
 pub struct NewMediaAsset {
     pub provider: MediaProvider,
@@ -146,6 +156,7 @@ pub struct MediaUpdate {
     pub original_name: String,
 }
 
+/// 媒体列表查询参数。
 #[derive(Debug, Clone, Default)]
 pub struct MediaListQuery {
     pub page: u32,
@@ -155,6 +166,7 @@ pub struct MediaListQuery {
     pub mime: Option<String>,
 }
 
+/// 分页媒体列表。
 #[derive(Debug, Clone)]
 pub struct MediaPage {
     pub items: Vec<MediaAsset>,
@@ -163,6 +175,7 @@ pub struct MediaPage {
     pub page_size: u32,
 }
 
+/// 一条媒体引用关系（哪个内容引用了哪个资产）。
 #[derive(Debug, Clone)]
 pub struct MediaUsage {
     pub id: i64,
@@ -172,7 +185,6 @@ pub struct MediaUsage {
     pub created_at: OffsetDateTime,
 }
 
-/// 站点设置为单行配置，不存在列表语义，因此不需要独立 ID 之外的结构。
 /// 站点评论策略。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -183,6 +195,7 @@ pub enum CommentPolicy {
 }
 
 impl CommentPolicy {
+    /// 返回策略的小写字符串标识，与数据库 `comment_policy` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Closed => "closed",
@@ -201,6 +214,7 @@ impl fmt::Display for CommentPolicy {
 impl FromStr for CommentPolicy {
     type Err = MediaError;
 
+    /// 解析策略字符串；未知取值返回 `MediaError::InvalidCommentPolicy`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "closed" => Ok(Self::Closed),
@@ -211,6 +225,7 @@ impl FromStr for CommentPolicy {
     }
 }
 
+/// 站点设置实体：单行配置（无列表语义），同时承载 ICP/网安备号等备案文案。
 #[derive(Debug, Clone)]
 pub struct SiteSettings {
     pub site_name: String,
@@ -229,6 +244,7 @@ pub struct SiteSettings {
     pub updated_at: OffsetDateTime,
 }
 
+/// 站点设置更新入参（全量字段）。
 #[derive(Debug, Clone)]
 pub struct SiteSettingsUpdate {
     pub site_name: String,
@@ -245,6 +261,7 @@ pub struct SiteSettingsUpdate {
     pub comments_per_page: i32,
 }
 
+/// 媒体与站点设置领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MediaError {
     #[error("invalid media provider")]
@@ -276,12 +293,17 @@ pub struct MediaBatchDeleteResult {
     pub not_found: Vec<i64>,
 }
 
+/// 媒体资产与引用关系的存储契约；实现位于 `aries-infra`。
+/// 文件字节读写走 `MediaStorage`，本 trait 只管数据库行。
 #[async_trait]
 pub trait MediaRepository: Send + Sync {
+    /// 登记一个新资产。
     async fn create(&self, asset: NewMediaAsset) -> Result<MediaAsset, MediaError>;
+    /// 按 ID 查找（含已软删除）。
     async fn find(&self, asset_id: i64) -> Result<Option<MediaAsset>, MediaError>;
     /// Admin 列表只返回 `active` 资产；已删除资产由清理任务处理，不出现在列表中。
     async fn list(&self, query: MediaListQuery) -> Result<MediaPage, MediaError>;
+    /// 更新展示性字段（alt/original_name）。
     async fn update(&self, asset_id: i64, update: MediaUpdate) -> Result<MediaAsset, MediaError>;
     /// 软删除保留行与文件，物理删除交给后台清理任务，避免误删立即不可恢复。
     async fn soft_delete(&self, asset_id: i64) -> Result<MediaAsset, MediaError>;
@@ -292,6 +314,7 @@ pub trait MediaRepository: Send + Sync {
     async fn find_by_hash(&self, sha256: &str) -> Result<Option<MediaAsset>, MediaError>;
     /// 按 Object Key 批量反查活跃资产，供文章引用解析使用。
     async fn find_by_object_keys(&self, keys: &[String]) -> Result<Vec<MediaAsset>, MediaError>;
+    /// 资产的全部引用关系。
     async fn usages_of(&self, asset_id: i64) -> Result<Vec<MediaUsage>, MediaError>;
     /// 全量重建某文章的 Cover 与正文引用：先删后插，保证与最终内容一致。
     async fn replace_article_usages(
@@ -300,9 +323,11 @@ pub trait MediaRepository: Send + Sync {
         cover_asset_id: Option<i64>,
         content_asset_ids: &[i64],
     ) -> Result<(), MediaError>;
+    /// 资产被引用次数。
     async fn count_usages(&self, asset_id: i64) -> Result<i64, MediaError>;
     /// 供 metadata_probe 任务使用：找出缺少尺寸信息的活跃图片。
     async fn list_missing_dimensions(&self, limit: i64) -> Result<Vec<MediaAsset>, MediaError>;
+    /// 回写图片尺寸探测结果。
     async fn update_dimensions(
         &self,
         asset_id: i64,
@@ -311,6 +336,7 @@ pub trait MediaRepository: Send + Sync {
     ) -> Result<(), MediaError>;
     /// 供 media_cleanup 任务使用：已软删除且零引用的资产才允许物理清除。
     async fn list_purgeable(&self, limit: i64) -> Result<Vec<MediaAsset>, MediaError>;
+    /// 物理删除行（文件清除由调用方先/后走 `MediaStorage`）。
     async fn purge(&self, asset_id: i64) -> Result<(), MediaError>;
 }
 
@@ -319,17 +345,22 @@ pub trait MediaRepository: Send + Sync {
 pub trait MediaStorage: Send + Sync {
     /// 写入成功返回公开 URL；`object_key` 由调用方生成并保证唯一。
     async fn put(&self, object_key: &str, bytes: &[u8], mime: &str) -> Result<String, MediaError>;
+    /// 读取字节；不存在返回 `Ok(None)`。
     async fn get(&self, object_key: &str) -> Result<Option<Vec<u8>>, MediaError>;
     /// 删除不存在的 Key 视为成功，清理任务因此可以安全重试。
     async fn delete(&self, object_key: &str) -> Result<(), MediaError>;
+    /// 由 Object Key 映射公开访问 URL。
     fn url_for(&self, object_key: &str) -> String;
     /// 本地存储由本站静态路由直接发文件；S3 等远端存储需要 Redirect 到公开 URL。
     fn serves_files_locally(&self) -> bool;
 }
 
+/// 站点设置存储契约；单行进出，由 Migration 预插默认行。
 #[async_trait]
 pub trait SiteSettingsRepository: Send + Sync {
+    /// 读取站点设置（行必然存在，缺失视为存储故障）。
     async fn get(&self) -> Result<SiteSettings, MediaError>;
+    /// 全量更新站点设置，返回更新后的实体。
     async fn update(&self, update: SiteSettingsUpdate) -> Result<SiteSettings, MediaError>;
 }
 

@@ -112,6 +112,7 @@ pub fn get_or_create(
     })
 }
 
+/// 输入图片 MIME 对应的缩略图输出 MIME。
 fn output_mime(input: &str) -> &'static str {
     match input {
         "image/png" => "image/png",

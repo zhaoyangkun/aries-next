@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 页头布局：标题/面包屑区与右侧操作区插槽。Props 见 LayoutHeaderProps。 */
 import { cn } from '@/lib/utils'
 
 import type { LayoutHeaderProps } from './types'

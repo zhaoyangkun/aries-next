@@ -22,11 +22,13 @@ export type UpdateSiteSettingsPayload = Omit<SiteSettings, 'updated_at'>
 
 // 站点基础信息沿用独立的 /api/admin/site-settings 端点（不在 setting_groups 三组之内）。
 export const siteSettingsApi = {
+  /** 读取站点基础信息（独立于 setting_groups 的端点）。 */
   async get() {
     const { data } = await api.get<SiteSettings>('/api/admin/site-settings')
     return data
   },
 
+  /** 全量更新站点基础信息（ICP 备案号、网安备号、评论策略、分页大小等）。 */
   async update(payload: UpdateSiteSettingsPayload) {
     const { data } = await api.put<SiteSettings>('/api/admin/site-settings', payload)
     return data
@@ -177,11 +179,13 @@ export interface EmailTestResponse {
 
 // 邮件投递（测试发信 + 投递记录查询，仅 owner 可用）。
 export const emailDeliveryApi = {
+  /** 发送测试邮件；失败时错误结构走统一 ApiErrorResponse。 */
   async sendTest(recipient: string) {
     const { data } = await api.post<EmailTestResponse>('/api/admin/settings/email/test', { recipient })
     return data
   },
 
+  /** 分页查询邮件投递记录（测试发信 + 评论通知的投递审计，仅 owner 可用）。 */
   async list(params: EmailDeliveryListParams) {
     const { data } = await api.get<EmailDeliveryListResponse>('/api/admin/email-deliveries', { params })
     return data
@@ -191,11 +195,13 @@ export const emailDeliveryApi = {
 // 分组设置（appearance/email/integrations/ai，仅 owner 可写）：
 // 更新必须携带 expected_version 做乐观锁，过期提交 Backend 返回 409。
 export const settingsGroupApi = {
+  /** 读取外观分组设置（含乐观锁 version）。 */
   async getAppearance() {
     const { data } = await api.get<SettingGroupResponse<AppearanceSettings>>('/api/admin/settings/appearance')
     return data
   },
 
+  /** 更新外观分组设置，携带 expected_version 乐观锁，过期提交 Backend 返回 409。 */
   async updateAppearance(expectedVersion: number, settings: AppearanceSettings) {
     const { data } = await api.put<SettingGroupResponse<AppearanceSettings>>('/api/admin/settings/appearance', {
       expected_version: expectedVersion,
@@ -204,11 +210,13 @@ export const settingsGroupApi = {
     return data
   },
 
+  /** 读取邮件分组设置（smtp_password 永不回读，只回是否已设置）。 */
   async getEmail() {
     const { data } = await api.get<SettingGroupResponse<EmailSettingsView>>('/api/admin/settings/email')
     return data
   },
 
+  /** 更新邮件分组设置（smtp_password 三态语义见 EmailSettingsUpdate），携带 expected_version 乐观锁。 */
   async updateEmail(expectedVersion: number, settings: EmailSettingsUpdate) {
     const { data } = await api.put<SettingGroupResponse<EmailSettingsView>>('/api/admin/settings/email', {
       expected_version: expectedVersion,
@@ -217,11 +225,13 @@ export const settingsGroupApi = {
     return data
   },
 
+  /** 读取集成分组设置（统计 ID / 站点验证 Token）。 */
   async getIntegrations() {
     const { data } = await api.get<SettingGroupResponse<IntegrationSettings>>('/api/admin/settings/integrations')
     return data
   },
 
+  /** 更新集成分组设置，携带 expected_version 乐观锁。 */
   async updateIntegrations(expectedVersion: number, settings: IntegrationSettings) {
     const { data } = await api.put<SettingGroupResponse<IntegrationSettings>>('/api/admin/settings/integrations', {
       expected_version: expectedVersion,
@@ -230,11 +240,13 @@ export const settingsGroupApi = {
     return data
   },
 
+  /** 读取社交链接分组设置（公开端 footer 展示的外部站点链接）。 */
   async getSocial() {
     const { data } = await api.get<SettingGroupResponse<SocialSettings>>('/api/admin/settings/social')
     return data
   },
 
+  /** 全量覆盖更新社交链接（展示顺序即数组顺序），携带 expected_version 乐观锁。 */
   async updateSocial(expectedVersion: number, settings: SocialSettings) {
     const { data } = await api.put<SettingGroupResponse<SocialSettings>>('/api/admin/settings/social', {
       expected_version: expectedVersion,
@@ -243,11 +255,13 @@ export const settingsGroupApi = {
     return data
   },
 
+  /** 读取 AI 分组设置（api_key 永不回读，只回是否已设置）。 */
   async getAi() {
     const { data } = await api.get<SettingGroupResponse<AiSettingsView>>('/api/admin/settings/ai')
     return data
   },
 
+  /** 更新 AI 分组设置（api_key / embedding 字段三态语义见 AiSettingsUpdate），携带 expected_version 乐观锁。 */
   async updateAi(expectedVersion: number, settings: AiSettingsUpdate) {
     const { data } = await api.put<SettingGroupResponse<AiSettingsView>>('/api/admin/settings/ai', {
       expected_version: expectedVersion,

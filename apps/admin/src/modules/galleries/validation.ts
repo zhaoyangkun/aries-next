@@ -3,6 +3,7 @@
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+/** 图库 Slug：小写字母/数字/连字符，1–160 字符，与 Backend slug 约束一致。 */
 export function validateGallerySlug(slug: string): string {
   const value = slug.trim()
   if (!value) return '请输入 Slug'
@@ -12,11 +13,13 @@ export function validateGallerySlug(slug: string): string {
   return ''
 }
 
+/** 图库标题必填。 */
 export function validateGalleryTitle(title: string): string {
   if (!title.trim()) return '请输入图库标题'
   return ''
 }
 
+/** 图库分类必选。 */
 export function validateGalleryCategoryId(categoryId: number | null): string {
   if (categoryId === null) return '请选择所属分类'
   return ''

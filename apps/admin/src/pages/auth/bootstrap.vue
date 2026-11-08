@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 初始化引导页：凭 BOOTSTRAP_SECRET 创建首个 Owner。 */
 import { CheckCircle2Icon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

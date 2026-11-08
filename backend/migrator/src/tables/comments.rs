@@ -69,6 +69,7 @@ pub struct NewComment {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取评论源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyComment>> {
     sqlx::query_as::<_, LegacyComment>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(admin_user_id AS SIGNED) AS admin_user_id, \
@@ -146,6 +147,7 @@ pub struct CommentRefs<'a> {
     pub renderer: &'a ComrakMarkdownRenderer,
 }
 
+/// 转换：目标类型/状态映射、层级解析（root/parent 悬空与环修复）、访客 UA 哈希、旧字段归档；Markdown 经当前渲染器重算 HTML。
 pub fn transform(
     row: &LegacyComment,
     params: &CommonParams,
@@ -330,6 +332,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程：目标集合（文章/页面）先取 id 集合，逐行转换写入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

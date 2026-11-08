@@ -1,3 +1,4 @@
+//! 内容存储实现：PostgresContentRepository（SQLx 参数化查询），Database Entity 与 Domain Object 的映射在此完成。
 use std::str::FromStr;
 
 use crate::like::{like_pattern, prefix_pattern};
@@ -21,6 +22,7 @@ pub struct PostgresContentRepository {
 }
 
 impl PostgresContentRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -90,6 +92,7 @@ struct ArticleRow {
 impl TryFrom<ArticleRow> for Article {
     type Error = ContentError;
 
+    /// 查询行 → 领域对象：status 字符串解析为枚举，失败映射 InvalidData。
     fn try_from(row: ArticleRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -140,6 +143,7 @@ struct CategoryRow {
 impl TryFrom<CategoryRow> for Category {
     type Error = ContentError;
 
+    /// 查询行 → 领域对象：kind 字符串解析为 CategoryKind。
     fn try_from(row: CategoryRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -160,6 +164,7 @@ struct TagRow {
 }
 
 impl From<TagRow> for Tag {
+    /// 查询行 → 领域对象（Tag 字段无失败转换）。
     fn from(row: TagRow) -> Self {
         Self {
             id: row.id,
@@ -182,6 +187,7 @@ struct RevisionRow {
 impl TryFrom<RevisionRow> for ArticleRevision {
     type Error = ContentError;
 
+    /// 查询行 → 领域对象：metadata_snapshot 反序列化失败映射 InvalidRevisionSnapshot。
     fn try_from(row: RevisionRow) -> Result<Self, Self::Error> {
         let metadata: RevisionMetadata = serde_json::from_value(row.metadata_snapshot)
             .map_err(|_| ContentError::InvalidRevisionSnapshot)?;
@@ -198,11 +204,13 @@ impl TryFrom<RevisionRow> for ArticleRevision {
 
 #[async_trait]
 impl ContentRepository for PostgresContentRepository {
+    /// 事务内完成「校验分类 → INSERT → 同步标签 → 锁行回读」，返回带标签的完整文章。
     async fn create_article(&self, mut article: NewArticle) -> Result<Article, ContentError> {
         article.slug = normalize_slug(&article.slug)?;
         validate_draft(&article.title, &article.summary, &article.slug)?;
         normalize_tag_ids(&mut article.tag_ids);
 
+        // INSERT、标签同步与回读必须在同一事务内完成，任一步失败整体回滚。
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
         validate_category(&mut transaction, article.category_id).await?;
         let query = format!(
@@ -234,6 +242,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(article)
     }
 
+    /// 按 id 查询未软删除文章。
     async fn find_article(&self, article_id: i64) -> Result<Option<Article>, ContentError> {
         let query =
             format!("SELECT {ARTICLE_COLUMNS} FROM articles WHERE id = $1 AND deleted_at IS NULL");
@@ -245,6 +254,7 @@ impl ContentRepository for PostgresContentRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 按 slug 查已发布文章（citext 大小写不敏感，命中索引）。
     async fn find_published_article_by_slug(
         &self,
         slug: &str,
@@ -262,6 +272,7 @@ impl ContentRepository for PostgresContentRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 按 slug 查文章（不限状态；管理端与导入冲突检测用）。
     async fn find_article_by_slug(&self, slug: &str) -> Result<Option<Article>, ContentError> {
         // 与 find_published_article_by_slug 的 cast 一致，保留 citext 大小写不敏感语义。
         let query = format!(
@@ -276,6 +287,7 @@ impl ContentRepository for PostgresContentRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 管理端分页列表：count + 列表两条语句；排序字段白名单映射，sort_order 模式置顶恒在前。
     async fn list_articles(&self, query: ArticleListQuery) -> Result<ArticlePage, ContentError> {
         let page = query.page.max(1);
         let page_size = query.page_size.clamp(1, 100);
@@ -370,6 +382,7 @@ impl ContentRepository for PostgresContentRepository {
             .filter(|value| !value.is_empty())
             .map(|value| like_pattern(&value));
 
+        // count 与列表查询复用同一 FILTERS 片段，保证两次查询条件一致；Slug 形态走 citext 子查询保持大小写不敏感。
         const FILTERS: &str = "FROM articles WHERE status = 'published' AND deleted_at IS NULL \
              AND ($1::bigint IS NULL OR category_id = $1) \
              AND ($2::bigint IS NULL OR EXISTS (SELECT 1 FROM article_tags \
@@ -389,6 +402,7 @@ impl ContentRepository for PostgresContentRepository {
             .fetch_one(&self.pool)
             .await
             .map_err(map_sqlx)?;
+        // 排序与公开列表语义一致：置顶优先，手工排序值其次，id DESC 兜底分页稳定。
         let rows = logged_query_as::<ArticleRow>(&format!(
             "SELECT {ARTICLE_COLUMNS} {FILTERS} \
              ORDER BY is_pinned DESC, sort_order ASC, published_at DESC, id DESC \
@@ -416,6 +430,7 @@ impl ContentRepository for PostgresContentRepository {
         })
     }
 
+    /// 公开搜索：FTS（simple 分词）与 ILIKE 兜底中文场景，标题命中优先，摘要在应用层截取。
     async fn search_public_articles(
         &self,
         keyword: &str,
@@ -470,6 +485,7 @@ impl ContentRepository for PostgresContentRepository {
         })
     }
 
+    /// 搜索建议（slug + 标题）：前缀命中排在包含命中之前。
     async fn search_suggest(
         &self,
         keyword: &str,
@@ -496,6 +512,7 @@ impl ContentRepository for PostgresContentRepository {
             .collect())
     }
 
+    /// 用窗口函数在与公开列表完全一致的排序上取前后邻居。
     async fn public_article_neighbors(
         &self,
         article_id: i64,
@@ -535,6 +552,7 @@ impl ContentRepository for PostgresContentRepository {
         })
     }
 
+    /// 取文章访问密码 hash（未设置为 NULL）；文章不存在视为 NotFound。
     async fn article_password_hash(&self, article_id: i64) -> Result<Option<String>, ContentError> {
         let hash = logged_query_scalar::<Option<String>>(
             "SELECT access_password_hash FROM articles WHERE id = $1 AND deleted_at IS NULL",
@@ -547,6 +565,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(hash)
     }
 
+    /// visit_count 原子 +1 并返回新值；仅限已发布文章，避免探测草稿存在性。
     async fn increment_visit_count(&self, article_id: i64) -> Result<i64, ContentError> {
         // 只允许给已发布文章计数，避免通过 ID 探测草稿存在性。
         let count = logged_query_scalar::<i64>(
@@ -561,6 +580,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(count)
     }
 
+    /// 分类摘要：文章数实时 count（不维护冗余计数字段）。
     async fn list_public_categories(&self) -> Result<Vec<CategorySummary>, ContentError> {
         #[derive(FromRow)]
         struct SummaryRow {
@@ -593,6 +613,7 @@ impl ContentRepository for PostgresContentRepository {
             .collect())
     }
 
+    /// 标签摘要：文章数实时 count。
     async fn list_public_tags(&self) -> Result<Vec<TagSummary>, ContentError> {
         #[derive(FromRow)]
         struct SummaryRow {
@@ -622,6 +643,7 @@ impl ContentRepository for PostgresContentRepository {
             .collect())
     }
 
+    /// 按 slug + kind 查分类（citext）。
     async fn find_category_by_slug(
         &self,
         kind: CategoryKind,
@@ -642,6 +664,7 @@ impl ContentRepository for PostgresContentRepository {
         }
     }
 
+    /// 按 slug 查标签（citext）。
     async fn find_tag_by_slug(&self, slug: &str) -> Result<Option<Tag>, ContentError> {
         let row = logged_query_as::<TagRow>(
             "SELECT id, name::text AS name, slug::text AS slug FROM tags WHERE slug = $1::citext",
@@ -653,6 +676,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(row.map(Into::into))
     }
 
+    /// 按 id 查分类；不按 kind 过滤，links/galleries 模块复用此方法解析各自分类。
     async fn find_category(&self, category_id: i64) -> Result<Option<Category>, ContentError> {
         // id 全局唯一，不按 kind 过滤，links/galleries 模块复用此方法解析各自分类。
         let row = logged_query_as::<CategoryRow>(
@@ -669,6 +693,7 @@ impl ContentRepository for PostgresContentRepository {
         }
     }
 
+    /// 文章关联的标签列表（按名称排序）。
     async fn list_tags_of_article(&self, article_id: i64) -> Result<Vec<Tag>, ContentError> {
         let rows = logged_query_as::<TagRow>(
             "SELECT t.id, t.name::text AS name, t.slug::text AS slug FROM tags t \
@@ -682,6 +707,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
+    /// 归档：SQL 已按年月排序，应用层顺序扫描分组。
     async fn list_public_archives(&self) -> Result<Vec<ArchiveMonth>, ContentError> {
         #[derive(FromRow)]
         struct ArchiveRow {
@@ -725,6 +751,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(months)
     }
 
+    /// 乐观锁更新：锁行比对 version；已发布文章先用新值跑发布校验；密码列三态（None 不改动），省略子句时占位符前移。
     async fn update_article(
         &self,
         article_id: i64,
@@ -794,6 +821,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(article)
     }
 
+    /// 状态机流转：锁行 → 校验 version 与转换合法性 → 已发布状态跑发布校验；published_at 随状态联动。
     async fn transition_article(
         &self,
         article_id: i64,
@@ -814,6 +842,7 @@ impl ContentRepository for PostgresContentRepository {
         }
         record_revision(&mut transaction, article_id, operator_id).await?;
 
+        // published_at 随状态联动：首次发布补当前时间，转草稿清空，其余状态保留。
         let query = format!(
             "UPDATE articles SET status = $2, \
              published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, now()) \
@@ -831,6 +860,7 @@ impl ContentRepository for PostgresContentRepository {
         row.try_into()
     }
 
+    /// 物理删除（仅限 recycled）：显式删除关联表再删主行，删除范围清晰可查。
     async fn delete_article(&self, article_id: i64) -> Result<(), ContentError> {
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
         let current = lock_article(&mut transaction, article_id).await?;
@@ -1006,6 +1036,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(true)
     }
 
+    /// 版本列表，新→旧。
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError> {
         let rows = logged_query_as::<RevisionRow>(
             "SELECT article_id, revision_no, markdown_source, metadata_snapshot, operator_id, \
@@ -1018,6 +1049,7 @@ impl ContentRepository for PostgresContentRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    /// 按版本号取单个历史版本。
     async fn find_revision(
         &self,
         article_id: i64,
@@ -1035,6 +1067,7 @@ impl ContentRepository for PostgresContentRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 恢复历史版本：锁行校验 → 已发布文章先用恢复值跑发布校验 → 为当前版留档 → 全字段覆盖。
     async fn restore_revision(
         &self,
         article_id: i64,
@@ -1103,6 +1136,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(article)
     }
 
+    /// 按 kind 列分类（排序：sort_order, name, id）。
     async fn list_categories(&self, kind: CategoryKind) -> Result<Vec<Category>, ContentError> {
         let rows = logged_query_as::<CategoryRow>(
             "SELECT id, parent_id, kind, name, slug::text AS slug, description FROM categories \
@@ -1118,6 +1152,7 @@ impl ContentRepository for PostgresContentRepository {
             .collect::<Result<Vec<_>, _>>()
     }
 
+    /// 新建分类（name/slug 规范化）。
     async fn create_category(&self, mut category: NewCategory) -> Result<Category, ContentError> {
         category.name = validate_taxonomy_name(&category.name)?;
         category.slug = normalize_slug(&category.slug)?;
@@ -1137,6 +1172,7 @@ impl ContentRepository for PostgresContentRepository {
         row.try_into()
     }
 
+    /// 更新分类；WHERE 带 kind 防止跨 kind 误改。
     async fn update_category(
         &self,
         category_id: i64,
@@ -1161,6 +1197,7 @@ impl ContentRepository for PostgresContentRepository {
         row.try_into()
     }
 
+    /// 引用保护：仍被内容使用时返回引用数拒绝删除；物理删除以释放 (kind, slug) 唯一槽位（软删会挡住同名重建）。
     async fn delete_category(
         &self,
         category_id: i64,
@@ -1202,6 +1239,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(())
     }
 
+    /// 全部标签（按名称排序）。
     async fn list_tags(&self) -> Result<Vec<Tag>, ContentError> {
         let rows = logged_query_as::<TagRow>(
             "SELECT id, name::text AS name, slug::text AS slug FROM tags ORDER BY name, id",
@@ -1212,6 +1250,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(rows.into_iter().map(Into::into).collect())
     }
 
+    /// 新建标签（name/slug 规范化）。
     async fn create_tag(&self, mut tag: NewTag) -> Result<Tag, ContentError> {
         tag.name = validate_taxonomy_name(&tag.name)?;
         tag.slug = normalize_slug(&tag.slug)?;
@@ -1227,6 +1266,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(row.into())
     }
 
+    /// 更新标签。
     async fn update_tag(&self, tag_id: i64, mut update: TagUpdate) -> Result<Tag, ContentError> {
         update.name = validate_taxonomy_name(&update.name)?;
         update.slug = normalize_slug(&update.slug)?;
@@ -1244,6 +1284,7 @@ impl ContentRepository for PostgresContentRepository {
         Ok(row.into())
     }
 
+    /// 引用保护：仍被文章关联时返回引用数拒绝删除。
     async fn delete_tag(&self, tag_id: i64) -> Result<(), ContentError> {
         // 引用保护：仍被文章关联时拒绝删除并返回引用数。
         let references = logged_query_scalar::<i64>(
@@ -1270,6 +1311,7 @@ impl ContentRepository for PostgresContentRepository {
     }
 }
 
+/// 写入前校验分类存在且 kind = article；None 表示不分类，直接通过。
 async fn validate_category(
     transaction: &mut Transaction<'_, Postgres>,
     category_id: Option<i64>,
@@ -1291,6 +1333,7 @@ async fn validate_category(
     Ok(())
 }
 
+/// SELECT ... FOR UPDATE 锁行返回当前版本：乐观锁比对与状态校验的并发基础。
 async fn lock_article(
     transaction: &mut Transaction<'_, Postgres>,
     article_id: i64,
@@ -1308,6 +1351,7 @@ async fn lock_article(
     row.try_into()
 }
 
+/// 把文章当前版本留档到 article_revisions（INSERT ... SELECT，版本号取当前 version）。
 async fn record_revision(
     transaction: &mut Transaction<'_, Postgres>,
     article_id: i64,
@@ -1334,11 +1378,13 @@ async fn record_revision(
     Ok(())
 }
 
+/// 全量同步文章-标签关联：先校验标签全部存在，再删旧插新。
 async fn sync_tags(
     transaction: &mut Transaction<'_, Postgres>,
     article_id: i64,
     tag_ids: &[i64],
 ) -> Result<(), ContentError> {
+    // 先校验标签全部存在，避免部分写入产生悬挂引用。
     if !tag_ids.is_empty() {
         let found = logged_query_scalar::<i64>("SELECT count(*) FROM tags WHERE id = ANY($1)")
             .bind(tag_ids)
@@ -1350,6 +1396,7 @@ async fn sync_tags(
         }
     }
 
+    // 全量替换语义：删旧再插新。
     logged_query("DELETE FROM article_tags WHERE article_id = $1")
         .bind(article_id)
         .execute(&mut **transaction)
@@ -1369,11 +1416,13 @@ async fn sync_tags(
     Ok(())
 }
 
+/// 标签 ID 归一：排序 + 去重，与数据库数组比较语义保持一致。
 fn normalize_tag_ids(tag_ids: &mut Vec<i64>) {
     tag_ids.sort_unstable();
     tag_ids.dedup();
 }
 
+/// SQLx 错误到 ContentError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> ContentError {
     if error
         .as_database_error()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 侧边栏底部用户区：展示当前用户，弹出退出登录菜单。Props: user。 */
 import { ChevronsUpDownIcon, LogOutIcon, UserRoundCogIcon } from '@lucide/vue'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'

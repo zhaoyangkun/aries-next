@@ -39,6 +39,7 @@ pub struct NewCategory {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取分类源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyCategory>> {
     sqlx::query_as::<_, LegacyCategory>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(parent_id AS SIGNED) AS parent_id, \
@@ -52,6 +53,7 @@ pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyCategory>> {
     .context("failed to extract legacy categories")
 }
 
+/// 旧版 type/count 组合 → 目标 kind（article/link/gallery）。
 pub fn map_kind(legacy_type: i64, id: i64) -> anyhow::Result<&'static str> {
     match legacy_type {
         0 => Ok("article"),
@@ -61,6 +63,7 @@ pub fn map_kind(legacy_type: i64, id: i64) -> anyhow::Result<&'static str> {
     }
 }
 
+/// 转换：空 slug 生成占位值、悬空/自引用 parent 修复为 NULL、冗余计数字段归档。
 pub fn transform(
     row: &LegacyCategory,
     params: &CommonParams,
@@ -138,6 +141,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程：父引用先收集 id 集合再逐行转换写入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

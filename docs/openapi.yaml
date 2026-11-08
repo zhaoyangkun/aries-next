@@ -9055,6 +9055,7 @@ components:
           description: 待上传图片文件（jpg/jpeg/png/gif/bmp/webp）。
     UserResponse:
       type: object
+      description: 用户视图 DTO：附带由角色权限矩阵展开的前端权限标识列表。
       required:
       - id
       - username

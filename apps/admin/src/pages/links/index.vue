@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 友链管理页：链接与友链分类维护。 */
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   FolderIcon,

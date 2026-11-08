@@ -18,6 +18,7 @@ pub struct PostgresCommentRepository {
 }
 
 impl PostgresCommentRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -53,6 +54,7 @@ struct CommentRow {
 impl TryFrom<CommentRow> for Comment {
     type Error = CommentError;
 
+    /// 查询行 → 领域对象：target_type/status/ai_risk 字符串解析为枚举。
     fn try_from(row: CommentRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -75,6 +77,7 @@ impl TryFrom<CommentRow> for Comment {
             moderator_id: row.moderator_id,
             moderated_at: row.moderated_at,
             moderation_reason: row.moderation_reason,
+            // ip_hash 与 user_agent_digest 只存摘要，不落原始 IP/UA（隐私设计）。
             ip_hash: row.ip_hash,
             user_agent_digest: row.user_agent_digest,
             is_admin_reply: row.is_admin_reply,
@@ -96,6 +99,7 @@ const COMMENT_COLUMNS: &str = "id, target_type, target_id, root_id, parent_id, \
     moderator_id, moderated_at, moderation_reason, ip_hash, user_agent_digest, \
     is_admin_reply, ai_risk, ai_reason, ai_confidence, created_at, updated_at";
 
+/// SQLx 错误到 CommentError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> CommentError {
     tracing::error!(error = %error, "comment repository operation failed");
     CommentError::StoreUnavailable
@@ -130,6 +134,7 @@ async fn sync_article_comment_count(
 
 #[async_trait]
 impl CommentRepository for PostgresCommentRepository {
+    /// 创建评论：咨询锁（目标+作者+内容派生锁键，防 TOCTOU）→ 5 分钟窗口查重 → 插入 → 回填 root_id → 重建文章评论数，全程同事务。
     async fn create(&self, new_comment: NewComment) -> Result<Comment, CommentError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
 
@@ -229,6 +234,7 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(comment)
     }
 
+    /// 管理员回复：直接以 approved 落库（恒过审），署名取操作管理员展示名；root_id 回填规则同 create。
     async fn create_admin_reply(&self, reply: AdminReply) -> Result<Comment, CommentError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
 
@@ -283,6 +289,7 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(comment)
     }
 
+    /// 按 id 查未软删评论。
     async fn find(&self, comment_id: i64) -> Result<Option<Comment>, CommentError> {
         let query =
             format!("SELECT {COMMENT_COLUMNS} FROM comments WHERE id = $1 AND deleted_at IS NULL");
@@ -297,6 +304,7 @@ impl CommentRepository for PostgresCommentRepository {
         }
     }
 
+    /// 管理端分页：WhereBuilder 构建条件，count 与列表共享同一份条件与绑定序列。
     async fn list(&self, query: CommentListQuery) -> Result<CommentPage, CommentError> {
         let offset = (query.page.saturating_sub(1)) * query.page_size;
         let limit = i64::from(query.page_size);
@@ -357,6 +365,7 @@ impl CommentRepository for PostgresCommentRepository {
         })
     }
 
+    /// 公开端评论树：CTE 取根评论与直接回复（最多 2 层），包一层子查询绕过「UNION 结果不能按表达式排序」的 PostgreSQL 限制。
     async fn list_approved_by_target(
         &self,
         target_type: CommentTargetType,
@@ -399,6 +408,7 @@ impl CommentRepository for PostgresCommentRepository {
             .collect::<Result<_, _>>()
     }
 
+    /// 审核状态变更；状态变化可能影响 approved 计数，同事务重建文章评论数。
     async fn change_status(&self, change: CommentStatusChange) -> Result<Comment, CommentError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
 
@@ -426,6 +436,7 @@ impl CommentRepository for PostgresCommentRepository {
         row.try_into()
     }
 
+    /// 物理删除仅限 recycled；recycled 不计入 approved 计数，无需重建。
     async fn delete(&self, comment_id: i64) -> Result<(), CommentError> {
         // 仅允许物理删除 recycled 评论；recycled 不计入 approved 计数，
         // 因此本操作不会改变 articles.comment_count，无需同步。
@@ -444,6 +455,7 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(())
     }
 
+    /// 写入 AI 审核结论：spam 结论同时把状态置为 spam；同事务重建文章评论数。
     async fn apply_ai_assessment(&self, assessment: AiAssessment) -> Result<Comment, CommentError> {
         // spam 结论同时把状态置为 spam；其余结论只记录风险字段，不改变原状态。
         let mut tx = self.pool.begin().await.map_err(map_sqlx)?;
@@ -471,6 +483,7 @@ impl CommentRepository for PostgresCommentRepository {
         row.try_into()
     }
 
+    /// 目标的 approved 评论计数。
     async fn count_approved(
         &self,
         target_type: CommentTargetType,
@@ -488,6 +501,7 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(count.0)
     }
 
+    /// 仪表盘聚合：文章按状态分组统计 + 评论多组计数。
     async fn dashboard_stats(&self) -> Result<DashboardStats, CommentError> {
         // 文章按状态分组统计。
         let article_stats = logged_query_as::<(String, i64)>(

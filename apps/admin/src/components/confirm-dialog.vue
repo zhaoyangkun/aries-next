@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 确认对话框：基于 AlertDialog 的危险操作二次确认。Props 见 ConfirmDialogProps。 */
 import {
   AlertDialog,
   AlertDialogCancel,

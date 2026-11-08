@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 主题设置弹层：颜色/圆角/布局/菜单风格的设置入口容器。 */
 import { PaintbrushIcon } from '@lucide/vue'
 
 import { Button } from '@/components/ui/button'

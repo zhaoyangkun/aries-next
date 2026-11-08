@@ -52,6 +52,7 @@ pub async fn serve(Path(path): Path<String>) -> Response {
     serve_index()
 }
 
+/// 回退响应：SPA 路由未命中真实文件时返回 index.html（本地未构建时为占位空文档）。
 fn serve_index() -> Response {
     let contents = ADMIN_DIST
         .get_file(INDEX_HTML)
@@ -60,6 +61,7 @@ fn serve_index() -> Response {
     file_response(contents, "text/html; charset=utf-8", CACHE_NO_CACHE)
 }
 
+/// 静态文件响应：Content-Type + Cache-Control + nosniff，字节直出（编译期内嵌）。
 fn file_response(
     contents: &'static [u8],
     content_type: &'static str,

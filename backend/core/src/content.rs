@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::OffsetDateTime;
 
+/// 文章生命周期状态；迁移必须走 `transition_article` 命令并满足
+/// `can_transition_to`，不允许客户端直接写入任意状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArticleStatus {
@@ -14,6 +16,7 @@ pub enum ArticleStatus {
 }
 
 impl ArticleStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -42,6 +45,7 @@ impl fmt::Display for ArticleStatus {
 impl FromStr for ArticleStatus {
     type Err = ContentError;
 
+    /// 解析状态字符串；未知取值与大小写差异一律拒绝（数据库 CHECK 之外的第一道防线）。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "draft" => Ok(Self::Draft),
@@ -63,6 +67,7 @@ pub enum CategoryKind {
 }
 
 impl CategoryKind {
+    /// 返回用途的小写字符串标识，与数据库 `kind` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Article => "article",
@@ -81,6 +86,7 @@ impl fmt::Display for CategoryKind {
 impl FromStr for CategoryKind {
     type Err = ContentError;
 
+    /// 解析用途字符串；未知取值返回 `ContentError::InvalidCategoryKind`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "article" => Ok(Self::Article),
@@ -91,6 +97,7 @@ impl FromStr for CategoryKind {
     }
 }
 
+/// 文章领域实体；`rendered_html` 是 Markdown 的派生列，随保存/发布由渲染器重算。
 #[derive(Debug, Clone)]
 pub struct Article {
     pub id: i64,
@@ -111,6 +118,7 @@ pub struct Article {
     pub is_pinned: bool,
     /// 手动排序值；公开列表按 `is_pinned DESC, sort_order ASC, published_at DESC, id DESC`。
     pub sort_order: i32,
+    /// 乐观锁版本号：每次内容变更递增，过期提交返回 `Conflict`。
     pub version: i64,
     pub visit_count: i64,
     pub comment_count: i64,
@@ -119,6 +127,7 @@ pub struct Article {
     pub updated_at: OffsetDateTime,
 }
 
+/// 新建文章入参；`rendered_html` 由 HTTP 层渲染后传入。
 #[derive(Debug, Clone)]
 pub struct NewArticle {
     pub author_id: i64,
@@ -137,6 +146,7 @@ pub struct NewArticle {
     pub tag_ids: Vec<i64>,
 }
 
+/// 文章更新入参（全量字段）；`expected_version` 用于乐观锁。
 #[derive(Debug, Clone)]
 pub struct ArticleUpdate {
     pub category_id: Option<i64>,
@@ -169,6 +179,7 @@ pub enum ArticleSort {
     SortOrder,
 }
 
+/// 排序方向白名单，与 `ArticleSort` 配套。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortOrder {
     Asc,
@@ -186,6 +197,7 @@ pub enum MoveDirection {
     Bottom,
 }
 
+/// 管理端文章列表查询参数。
 #[derive(Debug, Clone, Default)]
 pub struct ArticleListQuery {
     pub page: u32,
@@ -198,6 +210,7 @@ pub struct ArticleListQuery {
     pub order: SortOrder,
 }
 
+/// 分页文章列表。
 #[derive(Debug, Clone)]
 pub struct ArticlePage {
     pub items: Vec<Article>,
@@ -215,6 +228,7 @@ pub struct SearchHit {
     pub snippet: Option<String>,
 }
 
+/// 分页搜索结果。
 #[derive(Debug, Clone)]
 pub struct SearchPage {
     pub items: Vec<SearchHit>,
@@ -251,6 +265,7 @@ pub struct ArticleNeighbor {
     pub title: String,
 }
 
+/// 上一篇/下一篇导航对。
 #[derive(Debug, Clone, Default)]
 pub struct ArticleNeighbors {
     /// 排序中靠前（更新）的一篇。
@@ -269,6 +284,7 @@ pub struct CategorySummary {
     pub article_count: i64,
 }
 
+/// 公开标签摘要：文章数为实时 Count。
 #[derive(Debug, Clone)]
 pub struct TagSummary {
     pub id: i64,
@@ -277,6 +293,7 @@ pub struct TagSummary {
     pub article_count: i64,
 }
 
+/// 归档页内的文章条目（最小字段集）。
 #[derive(Debug, Clone)]
 pub struct ArchiveArticle {
     pub slug: String,
@@ -284,6 +301,7 @@ pub struct ArchiveArticle {
     pub published_at: OffsetDateTime,
 }
 
+/// 归档的一个月：文章按发布时间倒序内联。
 #[derive(Debug, Clone)]
 pub struct ArchiveMonth {
     pub year: i32,
@@ -292,6 +310,7 @@ pub struct ArchiveMonth {
     pub articles: Vec<ArchiveArticle>,
 }
 
+/// 分类实体；`parent_id` 预留层级，当前各端按单层展示。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Category {
     pub id: i64,
@@ -303,6 +322,7 @@ pub struct Category {
     pub description: String,
 }
 
+/// 新建分类入参。
 #[derive(Debug, Clone)]
 pub struct NewCategory {
     pub parent_id: Option<i64>,
@@ -312,6 +332,7 @@ pub struct NewCategory {
     pub description: String,
 }
 
+/// 标签实体。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tag {
     pub id: i64,
@@ -319,18 +340,21 @@ pub struct Tag {
     pub slug: String,
 }
 
+/// 新建标签入参。
 #[derive(Debug, Clone)]
 pub struct NewTag {
     pub name: String,
     pub slug: String,
 }
 
+/// 分类更新入参（name/slug 可变，kind 不可变——跨体系迁移等于新建）。
 #[derive(Debug, Clone)]
 pub struct CategoryUpdate {
     pub name: String,
     pub slug: String,
 }
 
+/// 标签更新入参。
 #[derive(Debug, Clone)]
 pub struct TagUpdate {
     pub name: String,
@@ -358,6 +382,7 @@ pub struct RevisionMetadata {
     pub tag_ids: Vec<i64>,
 }
 
+/// 文章修订快照：正文与元数据的不可变历史版本。
 #[derive(Debug, Clone)]
 pub struct ArticleRevision {
     pub article_id: i64,
@@ -378,6 +403,7 @@ pub struct RevisionRestore {
     pub operator_id: i64,
 }
 
+/// 内容领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ContentError {
     #[error("invalid article status")]
@@ -416,6 +442,8 @@ pub enum ContentError {
     RenderFailed,
 }
 
+/// Slug 归一化：Trim 后把空白/`-`/`_` 折叠为单个连字符，字母转小写，
+/// 按字符数校验 1–160；保留 Unicode 字母（中文标题可生成可读 slug）。
 pub fn normalize_slug(value: &str) -> Result<String, ContentError> {
     let mut normalized = String::with_capacity(value.len());
     let mut pending_separator = false;
@@ -440,6 +468,7 @@ pub fn normalize_slug(value: &str) -> Result<String, ContentError> {
     Ok(normalized)
 }
 
+/// 草稿级校验：标题 ≤200、摘要 ≤500、slug 可归一化（按字符计）。
 pub fn validate_draft(title: &str, summary: &str, slug: &str) -> Result<(), ContentError> {
     if title.chars().count() > 200 {
         return Err(ContentError::InvalidTitle);
@@ -451,6 +480,7 @@ pub fn validate_draft(title: &str, summary: &str, slug: &str) -> Result<(), Cont
     Ok(())
 }
 
+/// 分类/标签名校验：Trim 后 1–100 字符，返回裁剪后的值。
 pub fn validate_taxonomy_name(value: &str) -> Result<String, ContentError> {
     let value = value.trim();
     if !(1..=100).contains(&value.chars().count()) {
@@ -459,6 +489,7 @@ pub fn validate_taxonomy_name(value: &str) -> Result<String, ContentError> {
     Ok(value.to_owned())
 }
 
+/// 发布前完整性校验：在草稿校验之上要求标题/正文/渲染结果非空白。
 pub fn validate_publish(article: &Article) -> Result<(), ContentError> {
     validate_draft(&article.title, &article.summary, &article.slug)?;
     if article.title.trim().is_empty()
@@ -470,13 +501,20 @@ pub fn validate_publish(article: &Article) -> Result<(), ContentError> {
     Ok(())
 }
 
+/// Markdown 渲染抽象；实现位于 `aries-infra`（comrak + ammonia Sanitization）。
+/// 渲染失败统一映射为 `ContentError::RenderFailed`。
 pub trait MarkdownRenderer: Send + Sync {
+    /// 把 Markdown 源渲染为已 Sanitize 的 HTML。
     fn render(&self, source: &str) -> Result<String, ContentError>;
 }
 
+/// 内容存储契约；实现位于 `aries-infra`（`PostgresContentRepository`）。
+/// Admin 端方法不过滤状态，Public 段方法只返回已发布内容。
 #[async_trait]
 pub trait ContentRepository: Send + Sync {
+    /// 创建文章（含初始标签关联），返回完整实体。
     async fn create_article(&self, article: NewArticle) -> Result<Article, ContentError>;
+    /// 按 ID 查找未删除文章（Admin 端）。
     async fn find_article(&self, article_id: i64) -> Result<Option<Article>, ContentError>;
     /// Public 站按 Slug 读取已发布文章；草稿与回收站内容对外不可见。
     async fn find_published_article_by_slug(
@@ -486,12 +524,16 @@ pub trait ContentRepository: Send + Sync {
     /// 管理端按 Slug 查找任意状态文章（排除已物理删除），
     /// 用于导入预览的 Slug 冲突检测；Slug 唯一约束覆盖所有未删除行。
     async fn find_article_by_slug(&self, slug: &str) -> Result<Option<Article>, ContentError>;
+    /// 管理端分页列表，排序由 `ArticleSort`/`SortOrder` 白名单决定。
     async fn list_articles(&self, query: ArticleListQuery) -> Result<ArticlePage, ContentError>;
+    /// 更新文章内容与标签（乐观锁），过期版本返回 `Conflict`。
     async fn update_article(
         &self,
         article_id: i64,
         update: ArticleUpdate,
     ) -> Result<Article, ContentError>;
+    /// 状态迁移命令：`target` 必须满足 `can_transition_to`，
+    /// `expected_version` 乐观锁校验；返回迁移后的实体。
     async fn transition_article(
         &self,
         article_id: i64,
@@ -519,12 +561,16 @@ pub trait ContentRepository: Send + Sync {
         article_id: i64,
         direction: MoveDirection,
     ) -> Result<bool, ContentError>;
+    /// 文章的全部修订快照（按 revision_no 倒序）。
     async fn list_revisions(&self, article_id: i64) -> Result<Vec<ArticleRevision>, ContentError>;
+    /// 按版本号查找单个修订快照。
     async fn find_revision(
         &self,
         article_id: i64,
         revision_no: i64,
     ) -> Result<Option<ArticleRevision>, ContentError>;
+    /// 恢复指定修订：回写正文与元数据并渲染 `restore.rendered_html`；
+    /// 不回滚生命周期状态（`status`/`published_at`）。
     async fn restore_revision(
         &self,
         article_id: i64,
@@ -579,22 +625,30 @@ pub trait ContentRepository: Send + Sync {
     /// 归档聚合：Published 文章按 year/month 分组，组内按发布时间倒序。
     async fn list_public_archives(&self) -> Result<Vec<ArchiveMonth>, ContentError>;
 
+    /// 管理端分类列表（按 kind 过滤）。
     async fn list_categories(&self, kind: CategoryKind) -> Result<Vec<Category>, ContentError>;
+    /// 创建分类；同 kind 内 slug 冲突返回 `Conflict`。
     async fn create_category(&self, category: NewCategory) -> Result<Category, ContentError>;
+    /// 更新分类 name/slug。
     async fn update_category(
         &self,
         category_id: i64,
         kind: CategoryKind,
         update: CategoryUpdate,
     ) -> Result<Category, ContentError>;
+    /// 删除分类；仍有引用时返回 `Referenced`。
     async fn delete_category(
         &self,
         category_id: i64,
         kind: CategoryKind,
     ) -> Result<(), ContentError>;
+    /// 管理端标签列表。
     async fn list_tags(&self) -> Result<Vec<Tag>, ContentError>;
+    /// 创建标签；slug 冲突返回 `Conflict`。
     async fn create_tag(&self, tag: NewTag) -> Result<Tag, ContentError>;
+    /// 更新标签 name/slug。
     async fn update_tag(&self, tag_id: i64, update: TagUpdate) -> Result<Tag, ContentError>;
+    /// 删除标签；仍有引用时返回 `Referenced`。
     async fn delete_tag(&self, tag_id: i64) -> Result<(), ContentError>;
 }
 

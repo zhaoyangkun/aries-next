@@ -68,6 +68,7 @@ pub struct NewArticle {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取文章源行（含发布/回收状态与关键词原文）。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyArticle>> {
     sqlx::query_as::<_, LegacyArticle>(
         "SELECT CAST(id AS SIGNED) AS id, CAST(user_id AS SIGNED) AS user_id, \
@@ -112,6 +113,7 @@ pub struct ArticleRefs<'a> {
     pub renderer: &'a ComrakMarkdownRenderer,
 }
 
+/// 字段级转换：状态映射（recycled 优先）、关键词拆分、时间转 UTC、长度/非空强制；发布文章补 published_at 并用当前渲染器重算 HTML。
 pub fn transform(
     row: &LegacyArticle,
     params: &CommonParams,
@@ -266,6 +268,7 @@ pub fn transform(
     })
 }
 
+/// ETL 主流程：抽取 → 校验引用（作者/分类悬空分别修复或报错）→ 分批写入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

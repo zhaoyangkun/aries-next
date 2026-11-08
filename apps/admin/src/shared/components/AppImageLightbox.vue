@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 图片灯箱：大图查看、缩放与触摸手势。Props: open/src/alt。 */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Maximize2Icon, MinusIcon, PlusIcon, XIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'

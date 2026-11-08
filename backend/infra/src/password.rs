@@ -1,3 +1,4 @@
+//! Password Hash 实现：Argon2id 生产路径 + Legacy bcrypt 前缀兼容验证与首次登录自动升级。
 use argon2::{
     Argon2, PasswordHash, PasswordHasher as _, PasswordVerifier as _, password_hash::SaltString,
 };
@@ -7,6 +8,7 @@ use aries_core::auth::{AuthError, PasswordHasher};
 pub struct Argon2PasswordHasher;
 
 impl PasswordHasher for Argon2PasswordHasher {
+    /// Argon2id 哈希（参数为 OWASP 推荐档）。
     fn hash(&self, password: &str) -> Result<String, AuthError> {
         let mut salt_bytes = [0_u8; 16];
         getrandom::fill(&mut salt_bytes).map_err(|_| AuthError::StoreUnavailable)?;
@@ -18,6 +20,7 @@ impl PasswordHasher for Argon2PasswordHasher {
             .map_err(|_| AuthError::StoreUnavailable)
     }
 
+    /// 校验密码：legacy bcrypt（$2a$/$2y$ 前缀）按前缀兼容验证，支撑迁移用户首次登录。
     fn verify(&self, password: &str, password_hash: &str) -> Result<bool, AuthError> {
         // Legacy Aries（Go bcrypt）迁移来的 Hash 前缀为 `$2a$`/`$2y$`，
         // 归一为 `$2b$` 后用 bcrypt 验证；其余按 Argon2id 处理。
@@ -37,6 +40,7 @@ impl PasswordHasher for Argon2PasswordHasher {
             .is_ok())
     }
 
+    /// 非 Argon2id 的 Hash（legacy bcrypt）判为需要升级，登录成功后重写。
     fn needs_rehash(&self, password_hash: &str) -> bool {
         password_hash.starts_with("$2")
     }

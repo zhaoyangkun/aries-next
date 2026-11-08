@@ -12,6 +12,7 @@ pub struct LocalMediaStorage {
 }
 
 impl LocalMediaStorage {
+    /// 本地磁盘存储：root 为文件根目录，public_base_url 用于拼对外 URL。
     pub fn new(root: impl Into<PathBuf>, public_base_url: impl Into<String>) -> Self {
         Self {
             root: root.into(),
@@ -19,6 +20,7 @@ impl LocalMediaStorage {
         }
     }
 
+    /// object_key → 磁盘路径（key 由 generate_object_key 生成，不含用户输入的目录穿越成分）。
     fn resolve(&self, object_key: &str) -> Result<PathBuf, MediaError> {
         validate_object_key(object_key)?;
         Ok(self.root.join(object_key))
@@ -27,6 +29,7 @@ impl LocalMediaStorage {
 
 #[async_trait]
 impl MediaStorage for LocalMediaStorage {
+    /// 写入文件（父目录自动创建），返回对外 URL。
     async fn put(&self, object_key: &str, bytes: &[u8], _mime: &str) -> Result<String, MediaError> {
         let path = self.resolve(object_key)?;
         if let Some(parent) = path.parent() {
@@ -42,6 +45,7 @@ impl MediaStorage for LocalMediaStorage {
         Ok(self.url_for(object_key))
     }
 
+    /// 读取文件；不存在返回 None。
     async fn get(&self, object_key: &str) -> Result<Option<Vec<u8>>, MediaError> {
         let path = self.resolve(object_key)?;
         match tokio::fs::read(&path).await {
@@ -54,6 +58,7 @@ impl MediaStorage for LocalMediaStorage {
         }
     }
 
+    /// 删除文件（不存在不报错）。
     async fn delete(&self, object_key: &str) -> Result<(), MediaError> {
         let path = self.resolve(object_key)?;
         match tokio::fs::remove_file(&path).await {
@@ -67,6 +72,7 @@ impl MediaStorage for LocalMediaStorage {
         }
     }
 
+    /// 对外 URL：public_base_url + object_key。
     fn url_for(&self, object_key: &str) -> String {
         format!(
             "{}/{}",
@@ -75,6 +81,7 @@ impl MediaStorage for LocalMediaStorage {
         )
     }
 
+    /// 本地存储由 Server 直接提供文件服务（区别于 S3 的外部 URL）。
     fn serves_files_locally(&self) -> bool {
         true
     }

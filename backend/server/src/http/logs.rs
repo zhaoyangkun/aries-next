@@ -22,6 +22,7 @@ use super::auth::CurrentUser;
 use super::error::ApiError;
 use super::extract::ApiJson;
 
+/// 注册运行日志查询、统计与运行时开关路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/logs", get(list_logs))
@@ -96,6 +97,7 @@ pub(crate) struct LogLevelCountsResponse {
 }
 
 impl From<LogLevelCounts> for LogLevelCountsResponse {
+    /// 级别计数 → 响应 DTO。
     fn from(counts: LogLevelCounts) -> Self {
         Self {
             error: counts.error,
@@ -168,10 +170,12 @@ fn parse_cursor(value: &str) -> Result<(OffsetDateTime, i64), ApiError> {
     Ok((ts, id))
 }
 
+/// keyset 游标编码：ts 取 unix 纳秒整数，与 `parse_cursor` 互逆。
 fn encode_cursor(ts: OffsetDateTime, id: i64) -> String {
     format!("{}_{id}", ts.unix_timestamp_nanos())
 }
 
+/// 领域日志行转 DTO：ts 显式格式化为 RFC 3339 字符串（serde 默认数组形式不可读）。
 fn entry_to_item(entry: LogEntry) -> LogItem {
     LogItem {
         id: entry.id,
@@ -188,6 +192,8 @@ fn entry_to_item(entry: LogEntry) -> LogItem {
     }
 }
 
+/// 组装查询过滤条件：keyword 转义并包裹 ILIKE 通配，空白值忽略；
+/// target 与 exclude_target 互斥校验在此统一拦截。
 fn build_filter(
     level: Option<String>,
     target: Option<String>,
@@ -220,6 +226,8 @@ fn build_filter(
     Ok(filter)
 }
 
+/// 运行日志查询：默认 OFFSET 分页，`cursor` 进入 keyset 分页（仅 desc），
+/// `around_id` 进入上下文模式；附带最近 24h 级别计数。仅 Owner 可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/logs",
@@ -330,6 +338,7 @@ pub(crate) struct LogStatsResponse {
     channel_dropped: u64,
 }
 
+/// 级别趋势图数据：按小时/天分桶聚合，附 channel 丢弃计数。仅 Owner 可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/logs/stats",
@@ -370,6 +379,7 @@ pub(crate) async fn list_log_stats(
     }))
 }
 
+/// 已出现过的 tracing target 去重列表（筛选下拉用）。仅 Owner 可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/logs/targets",
@@ -402,6 +412,7 @@ pub(crate) struct SqlLoggingRequest {
     enabled: bool,
 }
 
+/// 查询 SQL 语句日志（`sqlx::query` DEBUG 级）运行时开关状态。仅 Owner 可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/logs/sql",
@@ -426,6 +437,7 @@ pub(crate) async fn get_sql_logging(
     })))
 }
 
+/// 运行时切换 SQL 日志开关（reload tracing filter，无需重启）。仅 Owner 可访问。
 #[utoipa::path(
     put,
     path = "/api/admin/logs/sql",
@@ -478,6 +490,7 @@ pub(crate) struct SetFilterOverrideRequest {
     restore_minutes: Option<u32>,
 }
 
+/// LogHandle 当前覆盖状态的响应投影。
 fn override_response(handle: &crate::logging::LogHandle) -> FilterOverrideResponse {
     FilterOverrideResponse {
         directives: handle.custom_directives(),
@@ -485,6 +498,7 @@ fn override_response(handle: &crate::logging::LogHandle) -> FilterOverrideRespon
     }
 }
 
+/// 查询运行时日志级别覆盖状态（directives + 自动复位剩余时间）。仅 Owner 可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/logs/filter",
@@ -507,6 +521,7 @@ pub(crate) async fn get_filter_override(
     Ok(Json(override_response(&state.log_handle)))
 }
 
+/// 运行时设置日志级别覆盖（reload EnvFilter），用于临时排障；可配自动复位。
 #[utoipa::path(
     put,
     path = "/api/admin/logs/filter",
@@ -568,6 +583,8 @@ const TAIL_BATCH_LIMIT: i64 = 500;
 /// 该间隔仅防御理论上的唤醒丢失（如 broadcast 缓冲溢出与订阅窗口叠加）。
 const TAIL_FALLBACK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// 实时日志 SSE：以连接时刻的最大日志 id 为锚点推送新日志，
+/// EventSource 重连经 `Last-Event-ID` 续传补齐断开窗口；唤醒驱动 + 30 秒兜底轮询。
 #[utoipa::path(
     get,
     path = "/api/admin/logs/tail",

@@ -23,11 +23,13 @@ export function validateLinkIconUrl(iconUrl: string): string {
   return validateLinkUrl(value)
 }
 
+/** 友链名称必填。 */
 export function validateLinkTitle(title: string): string {
   if (!title.trim()) return '请输入友链名称'
   return ''
 }
 
+/** 友链分类名称必填。 */
 export function validateCategoryName(name: string): string {
   if (!name.trim()) return '请输入分类名称'
   return ''

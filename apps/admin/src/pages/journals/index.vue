@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 日志（日记）管理页：列表与可见性管理。 */
 import { onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import {

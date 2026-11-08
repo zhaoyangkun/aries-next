@@ -29,6 +29,7 @@ use super::{
     taxonomy::{CategoryResponse, map_taxonomy_error},
 };
 
+/// 注册图库、图库条目与图库分类路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/galleries", get(list_galleries).post(create_gallery))
@@ -111,6 +112,7 @@ pub(crate) struct GalleryResponse {
 }
 
 impl From<Gallery> for GalleryResponse {
+    /// 领域图库 → 响应 DTO。
     fn from(gallery: Gallery) -> Self {
         Self {
             id: gallery.id,
@@ -158,6 +160,7 @@ pub(crate) struct GalleryItemResponse {
 }
 
 impl From<GalleryItemDetail> for GalleryItemResponse {
+    /// 条目详情（含内联媒体摘要）→ 响应 DTO；媒体为 NULL（软删除资产）时字段缺省。
     fn from(detail: GalleryItemDetail) -> Self {
         let item = detail.item;
         Self {
@@ -758,6 +761,7 @@ pub(crate) async fn delete_gallery_category(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 图库变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_gallery_audit(
     state: &AppState,
     current: &CurrentUser,

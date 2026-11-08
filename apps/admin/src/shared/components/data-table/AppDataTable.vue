@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="TData">
+/** 数据表：列定义渲染、排序与空态（泛型 TData）。 */
 import { computed, h, ref } from 'vue'
 import {
   FlexRender,

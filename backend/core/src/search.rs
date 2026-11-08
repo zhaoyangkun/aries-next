@@ -73,14 +73,19 @@ pub fn build_snippet(keyword: &str, summary: &str, markdown_source: &str) -> Opt
     Some(snippet)
 }
 
+/// 转小写并按字符展开为 Vec：支持多字符 lower 映射（如 İ → i̇），
+/// 使后续的按字符窗口切片不会切在多字节字符中间。
 fn lower_chars(s: &str) -> Vec<char> {
     s.chars().flat_map(char::to_lowercase).collect()
 }
 
+/// 判断 haystack 是否包含 needle（基于 `find_sub` 的便捷包装）。
 fn contains_sub(haystack: &[char], needle: &[char]) -> bool {
     find_sub(haystack, needle).is_some()
 }
 
+/// 在字符切片中查找子串首次出现的位置（大小写已由调用方归一）。
+/// 用 `windows` 滑窗做朴素匹配：文本长度有限，无需引入专门搜索算法。
 fn find_sub(haystack: &[char], needle: &[char]) -> Option<usize> {
     if needle.is_empty() || needle.len() > haystack.len() {
         return None;
@@ -140,6 +145,7 @@ fn emit_bracket_text(chars: &[char], open: usize, out: &mut String) -> usize {
     i
 }
 
+/// 折叠连续空白为单个空格：Markdown 源文本换行/缩进在纯文本片段里没有意义。
 fn collapse_whitespace(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }

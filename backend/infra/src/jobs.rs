@@ -1,3 +1,4 @@
+//! 后台任务队列实现：PostgresJobRepository，领取用 FOR UPDATE SKIP LOCKED 保证多 Worker 不重复执行。
 use std::str::FromStr;
 
 use crate::logged::{logged_query, logged_query_as, logged_query_scalar};
@@ -15,6 +16,7 @@ pub struct PostgresJobRepository {
 }
 
 impl PostgresJobRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -37,6 +39,7 @@ struct JobRow {
 impl TryFrom<JobRow> for BackgroundJob {
     type Error = JobError;
 
+    /// 查询行 → 领域对象：kind/status 字符串解析为枚举。
     fn try_from(row: JobRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -58,6 +61,7 @@ const JOB_COLUMNS: &str = "id, kind, payload, status, attempts, max_attempts, ru
 
 #[async_trait]
 impl JobRepository for PostgresJobRepository {
+    /// 入队新任务（status 取列默认值 pending，payload 为 JSON）。
     async fn enqueue(&self, job: NewBackgroundJob) -> Result<BackgroundJob, JobError> {
         let query = format!(
             "INSERT INTO background_jobs (kind, payload, max_attempts) \
@@ -73,6 +77,7 @@ impl JobRepository for PostgresJobRepository {
         row.try_into()
     }
 
+    /// 按 id 查任务。
     async fn find(&self, job_id: i64) -> Result<Option<BackgroundJob>, JobError> {
         let query = format!("SELECT {JOB_COLUMNS} FROM background_jobs WHERE id = $1");
         let row = logged_query_as::<JobRow>(&query)
@@ -83,6 +88,7 @@ impl JobRepository for PostgresJobRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 领取下一个待执行任务：FOR UPDATE SKIP LOCKED 保证多 Worker 不重复执行；领取即置 running。
     async fn claim_next(&self) -> Result<Option<BackgroundJob>, JobError> {
         // FOR UPDATE SKIP LOCKED：并发 Worker 各自领取不同任务，不互相阻塞也不重复执行。
         let query = format!(
@@ -99,6 +105,7 @@ impl JobRepository for PostgresJobRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 标记完成；仅限 pending/running 行，异常状态返回 NotFound。
     async fn complete(&self, job_id: i64) -> Result<(), JobError> {
         let result = logged_query(
             "UPDATE background_jobs SET status = 'done', last_error = NULL, updated_at = now() \
@@ -114,6 +121,7 @@ impl JobRepository for PostgresJobRepository {
         Ok(())
     }
 
+    /// 失败处理：attempts+1 超限转 failed，否则回 pending 并延迟 30 秒重试。
     async fn fail(&self, job_id: i64, error: &str) -> Result<BackgroundJob, JobError> {
         // attempts 递增后与 max_attempts 比较：超限转 Failed，否则回到 Pending 延迟重试。
         let query = format!(
@@ -134,6 +142,7 @@ impl JobRepository for PostgresJobRepository {
         row.try_into()
     }
 
+    /// 管理端分页：可按 kind/status 筛选。
     async fn list(&self, query: JobListQuery) -> Result<JobPage, JobError> {
         let page = query.page.max(1);
         let page_size = query.page_size.clamp(1, 100);
@@ -178,6 +187,7 @@ impl JobRepository for PostgresJobRepository {
     }
 }
 
+/// SQLx 错误到 JobError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> JobError {
     tracing::error!(error = %error, "job repository operation failed");
     JobError::StoreUnavailable

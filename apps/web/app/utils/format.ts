@@ -6,6 +6,7 @@ export function formatDate(iso: string | null | undefined): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
 }
 
+/** 短日期格式（YYYY-MM-DD）；手写格式化避免 SSR（Node）与浏览器 ICU 差异导致 Hydration 不一致。 */
 export function formatDateShort(iso: string | null | undefined): string {
   if (!iso) return ''
   const date = new Date(iso)

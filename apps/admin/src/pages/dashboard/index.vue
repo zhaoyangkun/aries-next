@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 仪表盘页：内容/评论统计、待审评论与失败任务聚合。 */
 import axios from 'axios'
 import dayjs from 'dayjs'
 import {

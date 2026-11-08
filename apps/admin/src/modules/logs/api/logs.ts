@@ -51,6 +51,10 @@ export interface LogFilterOverride {
 
 /** level 语义为「最低级别」（选 WARN 返回 WARN+ERROR）；时间范围为 RFC 3339，可空。 */
 export const logsApi = {
+  /**
+   * 分页查询运行日志：支持级别/时间范围/target/关键字/链路追踪/上下文锚点等组合筛选；
+   * level 为「最低级别」，时间范围 RFC 3339；desc 分页用 keyset 游标，asc 与上下文模式禁用游标。
+   */
   async list(params: {
     page: number
     page_size: number
@@ -97,6 +101,7 @@ export const logsApi = {
     return data
   },
 
+  /** 设置运行时级别覆盖（tracing directives；空串表示清除），可带自动复位时间；返回覆盖状态。 */
   async setFilterOverride(input: { directives: string, restore_minutes?: number }): Promise<LogFilterOverride> {
     const { data } = await api.put<LogFilterOverride>('/api/admin/logs/filter', input)
     return data
@@ -119,6 +124,7 @@ export const logsApi = {
     return `/api/admin/logs/tail${search ? `?${search}` : ''}`
   },
 
+  /** 查询 SQL 语句日志的运行时开关状态。 */
   async getSqlLog() {
     const { data } = await api.get<{ enabled: boolean }>('/api/admin/logs/sql')
     return data

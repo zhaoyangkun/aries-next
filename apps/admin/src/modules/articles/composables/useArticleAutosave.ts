@@ -22,10 +22,12 @@ export interface ArticleBackup {
   payload: CreateArticlePayload
 }
 
+/** localStorage 备份键：按文章 ID 命名空间，新文章用 'new'。 */
 export function backupStorageKey(articleId: number | null) {
   return `aries:article-autosave:${articleId ?? 'new'}`
 }
 
+/** 读取并结构校验备份；损坏或缺失返回 null，绝不阻塞编辑器打开。 */
 export function readBackup(storage: Storage, articleId: number | null): ArticleBackup | null {
   try {
     const raw = storage.getItem(backupStorageKey(articleId))
@@ -45,6 +47,7 @@ export function readBackup(storage: Storage, articleId: number | null): ArticleB
   }
 }
 
+/** 写入备份；localStorage 已满或被禁用时静默失败，不打断编辑。 */
 export function writeBackup(storage: Storage, articleId: number | null, backup: ArticleBackup) {
   try {
     storage.setItem(backupStorageKey(articleId), JSON.stringify(backup))
@@ -53,6 +56,7 @@ export function writeBackup(storage: Storage, articleId: number | null, backup: 
   }
 }
 
+/** 清除文章备份；清理失败静默忽略。 */
 export function clearBackup(storage: Storage, articleId: number | null) {
   try {
     storage.removeItem(backupStorageKey(articleId))
@@ -108,6 +112,10 @@ export interface ArticleAutosave {
   dispose: () => void
 }
 
+/**
+ * 文章编辑器自动保存 Composable：既有文章防抖后 PUT（expected_version 乐观锁），新文章防抖写
+ * localStorage 应急备份；409 冲突进入 conflict 交给用户决策，网络错误进入 offline 并写本地备份。
+ */
 export function useArticleAutosave(options: UseArticleAutosaveOptions): ArticleAutosave {
   const debounceMs = options.debounceMs ?? 30_000
   const backupDebounceMs = options.backupDebounceMs ?? 1_000

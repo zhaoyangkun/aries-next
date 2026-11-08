@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 图库详情页：相册条目浏览与灯箱查看。 */
 import type { PublicGalleryDetail } from '~/composables/usePublicApi'
 
 const route = useRoute()

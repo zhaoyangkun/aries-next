@@ -17,6 +17,7 @@ pub enum JobKind {
 }
 
 impl JobKind {
+    /// 返回任务类型的小写字符串标识，与数据库 `kind` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::MediaCleanup => "media_cleanup",
@@ -37,6 +38,7 @@ impl fmt::Display for JobKind {
 impl FromStr for JobKind {
     type Err = JobError;
 
+    /// 解析任务类型字符串；未知取值返回 `JobError::InvalidKind`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "media_cleanup" => Ok(Self::MediaCleanup),
@@ -49,6 +51,8 @@ impl FromStr for JobKind {
     }
 }
 
+/// 任务状态机：`pending` → `running` → `done`/`failed`；
+/// 未超限的失败会回到 `pending` 等待重试（见 `JobRepository::fail`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
@@ -59,6 +63,7 @@ pub enum JobStatus {
 }
 
 impl JobStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -72,6 +77,7 @@ impl JobStatus {
 impl FromStr for JobStatus {
     type Err = JobError;
 
+    /// 解析状态字符串；未知取值返回 `JobError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
@@ -83,6 +89,7 @@ impl FromStr for JobStatus {
     }
 }
 
+/// 后台任务实体；`payload` 为任务自定义的 JSON 参数，`attempts` 记录已执行次数。
 #[derive(Debug, Clone)]
 pub struct BackgroundJob {
     pub id: i64,
@@ -97,6 +104,7 @@ pub struct BackgroundJob {
     pub updated_at: OffsetDateTime,
 }
 
+/// 入队新任务的输入。
 #[derive(Debug, Clone)]
 pub struct NewBackgroundJob {
     pub kind: JobKind,
@@ -115,6 +123,7 @@ impl NewBackgroundJob {
     }
 }
 
+/// 任务列表查询参数；`kind`/`status` 可选过滤，未提供时全量。
 #[derive(Debug, Clone, Default)]
 pub struct JobListQuery {
     pub page: u32,
@@ -123,6 +132,7 @@ pub struct JobListQuery {
     pub status: Option<JobStatus>,
 }
 
+/// 分页任务列表。
 #[derive(Debug, Clone)]
 pub struct JobPage {
     pub items: Vec<BackgroundJob>,
@@ -131,6 +141,7 @@ pub struct JobPage {
     pub page_size: u32,
 }
 
+/// 后台任务领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum JobError {
     #[error("invalid background job kind")]
@@ -143,15 +154,21 @@ pub enum JobError {
     StoreUnavailable,
 }
 
+/// 后台任务队列契约；实现位于 `aries-infra`（`PostgresJobRepository`），
+/// 由 `aries-server` 的 Worker 轮询驱动。
 #[async_trait]
 pub trait JobRepository: Send + Sync {
+    /// 入队一个新任务。
     async fn enqueue(&self, job: NewBackgroundJob) -> Result<BackgroundJob, JobError>;
+    /// 按 ID 查找任务。
     async fn find(&self, job_id: i64) -> Result<Option<BackgroundJob>, JobError>;
     /// 领取下一个到期的 Pending 任务并标记 Running；
     /// 实现必须使用 `FOR UPDATE SKIP LOCKED`，保证多个 Worker 不会重复执行同一任务。
     async fn claim_next(&self) -> Result<Option<BackgroundJob>, JobError>;
+    /// 标记任务完成。
     async fn complete(&self, job_id: i64) -> Result<(), JobError>;
     /// 记录失败并递增 attempts；未超限时回到 Pending 等待重试，超限转为 Failed。
     async fn fail(&self, job_id: i64, error: &str) -> Result<BackgroundJob, JobError>;
+    /// 分页查询任务列表（Admin 端）。
     async fn list(&self, query: JobListQuery) -> Result<JobPage, JobError>;
 }

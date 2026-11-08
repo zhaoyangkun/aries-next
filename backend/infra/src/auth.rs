@@ -1,3 +1,4 @@
+//! Authentication 存储实现：PostgresAuthRepository（SQLx），Session/Reset Token 只存 SHA-256。
 use std::str::FromStr;
 
 use crate::logged::{logged_query, logged_query_as, logged_query_scalar};
@@ -17,6 +18,7 @@ pub struct PostgresAuthRepository {
 }
 
 impl PostgresAuthRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -36,6 +38,7 @@ struct UserRow {
 impl TryFrom<UserRow> for User {
     type Error = AuthError;
 
+    /// 查询行 → 领域对象：role/status 字符串解析为枚举。
     fn try_from(row: UserRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -64,6 +67,7 @@ struct CredentialRow {
 impl TryFrom<CredentialRow> for CredentialUser {
     type Error = AuthError;
 
+    /// 查询行 → 登录凭据视图（用户字段 + 密码 hash）。
     fn try_from(row: CredentialRow) -> Result<Self, Self::Error> {
         Ok(Self {
             user: User {
@@ -96,6 +100,7 @@ struct SessionRow {
 impl TryFrom<SessionRow> for AuthenticatedSession {
     type Error = AuthError;
 
+    /// 查询行 → 已认证会话（会话 id + 过期时间 + 用户）。
     fn try_from(row: SessionRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.session_id,
@@ -118,6 +123,7 @@ const USER_COLUMNS: &str =
 
 #[async_trait]
 impl AuthRepository for PostgresAuthRepository {
+    /// users 表非空即视为已完成初始化。
     async fn is_bootstrapped(&self) -> Result<bool, AuthError> {
         logged_query_scalar::<bool>("SELECT EXISTS(SELECT 1 FROM users)")
             .fetch_one(&self.pool)
@@ -125,6 +131,7 @@ impl AuthRepository for PostgresAuthRepository {
             .map_err(map_sqlx)
     }
 
+    /// 事务 + Advisory Lock（固定键）保证并发 Bootstrap 最多成功一次；已有用户返回 Conflict。
     async fn create_owner(&self, owner: NewOwner) -> Result<User, AuthError> {
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
 
@@ -159,6 +166,7 @@ impl AuthRepository for PostgresAuthRepository {
         row.try_into()
     }
 
+    /// 用户名或邮箱任一匹配（citext，大小写不敏感）。
     async fn find_credentials(&self, login: &str) -> Result<Option<CredentialUser>, AuthError> {
         let row = logged_query_as::<CredentialRow>(
             "SELECT id, username::text AS username, email::text AS email, display_name, avatar_url, \
@@ -172,6 +180,7 @@ impl AuthRepository for PostgresAuthRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 按邮箱查未软删用户。
     async fn find_user_by_email(&self, email: &str) -> Result<Option<User>, AuthError> {
         let query =
             format!("SELECT {USER_COLUMNS} FROM users WHERE deleted_at IS NULL AND email = $1");
@@ -183,6 +192,7 @@ impl AuthRepository for PostgresAuthRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 全部 Active 管理员的 Email（评论新评论通知的收件人列表）。
     async fn list_active_admin_emails(&self) -> Result<Vec<String>, AuthError> {
         // citext 列直接解码为 String；只取 Active 且未软删的账号。
         let emails: Vec<String> = logged_query_as::<(String,)>(
@@ -197,6 +207,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(emails)
     }
 
+    /// 只落 Token 的 SHA-256 Hash，库内永不出现明文 Token。
     async fn create_session(&self, session: NewSession) -> Result<(), AuthError> {
         logged_query(
             "INSERT INTO admin_sessions (id, token_hash, user_id, expires_at, user_agent) \
@@ -213,6 +224,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 按 Token Hash 查未撤销、未过期且用户仍 Active 的会话。
     async fn find_session(
         &self,
         token_hash: &[u8],
@@ -231,6 +243,7 @@ impl AuthRepository for PostgresAuthRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 节流更新 last_seen_at（5 分钟窗口），高频请求不产生写放大。
     async fn touch_session(&self, session_id: Uuid) -> Result<(), AuthError> {
         logged_query(
             "UPDATE admin_sessions SET last_seen_at = now() \
@@ -243,6 +256,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 幂等撤销：已撤销的保留原 revoked_at 时间戳。
     async fn revoke_session(&self, session_id: Uuid) -> Result<(), AuthError> {
         logged_query(
             "UPDATE admin_sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE id = $1",
@@ -254,6 +268,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 撤销某用户全部未撤销会话（改密/禁用后调用）。
     async fn revoke_user_sessions(&self, user_id: i64) -> Result<(), AuthError> {
         logged_query(
             "UPDATE admin_sessions SET revoked_at = COALESCE(revoked_at, now()) \
@@ -266,6 +281,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 物理清理过期与已撤销会话：两类均已不参与的逻辑查询，删除安全；撤销动作由 audit log 留痕。
     async fn delete_expired_sessions(&self) -> Result<u64, AuthError> {
         // 过期与已撤销的 Session 不再参与任何查询（find_session 均排除），可安全物理删除；
         // 撤销动作本身由 audit log 留痕，不依赖本表。
@@ -278,6 +294,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(result.rows_affected())
     }
 
+    /// 更新最近登录时间戳。
     async fn update_last_login(&self, user_id: i64) -> Result<(), AuthError> {
         logged_query("UPDATE users SET last_login_at = now(), updated_at = now() WHERE id = $1")
             .bind(user_id)
@@ -287,6 +304,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 更新资料；软删用户视为 NotFound。
     async fn update_profile(
         &self,
         user_id: i64,
@@ -308,6 +326,7 @@ impl AuthRepository for PostgresAuthRepository {
         row.try_into()
     }
 
+    /// 更新密码 hash；行不存在返回 NotFound。
     async fn update_password(&self, user_id: i64, password_hash: &str) -> Result<(), AuthError> {
         let result = logged_query(
             "UPDATE users SET password_hash = $2, password_updated_at = now(), updated_at = now() \
@@ -324,6 +343,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 同事务先作废该用户未消费的重置 Token 再发新 Token，同一时间只生效一个。
     async fn create_password_reset(&self, reset: NewPasswordReset) -> Result<(), AuthError> {
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
         logged_query(
@@ -349,6 +369,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 原子消费：UPDATE ... RETURNING 保证 Token 只被消费一次；成功后同事务改密并撤销该用户全部会话。
     async fn consume_password_reset(
         &self,
         token_hash: &[u8],
@@ -375,6 +396,7 @@ impl AuthRepository for PostgresAuthRepository {
         }
     }
 
+    /// 写入审计事件。
     async fn write_audit(&self, event: AuditEvent) -> Result<(), AuthError> {
         logged_query(
             "INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, metadata) \
@@ -391,6 +413,7 @@ impl AuthRepository for PostgresAuthRepository {
         Ok(())
     }
 
+    /// 动态 WHERE 拼接（条件顺序即占位符编号）；count 与列表两次查询按同一顺序绑定。
     async fn list_audit(&self, query: AuditListQuery) -> Result<AuditPage, AuthError> {
         let offset =
             i64::from(query.page.saturating_sub(1)).saturating_mul(i64::from(query.page_size));
@@ -505,6 +528,7 @@ struct AuditLogRow {
 }
 
 impl From<AuditLogRow> for AuditLogEntry {
+    /// 查询行 → 审计条目（actor_username 为 LEFT JOIN 结果，可空）。
     fn from(row: AuditLogRow) -> Self {
         Self {
             id: row.id,
@@ -519,6 +543,7 @@ impl From<AuditLogRow> for AuditLogEntry {
     }
 }
 
+/// 同事务更新密码 hash 并撤销该用户全部会话。
 async fn update_password_and_revoke(
     transaction: &mut Transaction<'_, Postgres>,
     user_id: i64,
@@ -544,6 +569,7 @@ async fn update_password_and_revoke(
     Ok(())
 }
 
+/// SQLx 错误到 AuthError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> AuthError {
     if error
         .as_database_error()

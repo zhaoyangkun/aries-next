@@ -1,7 +1,7 @@
 import { safeInternalPath } from '@/shared/api/client'
 import { useSessionStore } from '@/modules/auth/stores/session'
 
-// 真实登录/登出：代理到 Session Store；登录成功后按 redirect 参数回跳。
+/** 登录/登出 Composable：代理到 Session Store；登录成功后按 redirect 参数回跳（仅站内路径，防开放重定向）。 */
 export function useAuth() {
   const router = useRouter()
   const session = useSessionStore()

@@ -34,6 +34,7 @@ use super::{
 const SUBMIT_RATE_LIMIT: usize = 3;
 const SUBMIT_RATE_WINDOW: Duration = Duration::from_secs(60);
 
+/// 注册公开评论读写路由（挂载在 `/api/public` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/articles/{slug}/comments", get(list_article_comments))
@@ -85,6 +86,7 @@ fn visitor_avatar(email: &str) -> String {
     )
 }
 
+/// 字节数组的十六进制摘要。
 fn hex_digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -92,6 +94,7 @@ fn hex_digest(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// 领域评论转公开 DTO：头像/website 按是否管理员回复取不同来源。
 fn to_public_comment(
     comment: &Comment,
     site_logo: &str,
@@ -147,6 +150,7 @@ struct PublicCommentPageResponse {
     page_size: u32,
 }
 
+/// 文章已批准评论树（两级结构，分页只作用于根评论）。
 #[utoipa::path(
     get,
     path = "/api/public/articles/{slug}/comments",
@@ -171,6 +175,7 @@ async fn list_article_comments(
     list_approved_comments(state, slug, params, CommentTargetType::Article).await
 }
 
+/// 页面已批准评论树：语义同文章端点，目标为已发布页面。
 #[utoipa::path(
     get,
     path = "/api/public/pages/{slug}/comments",
@@ -405,6 +410,7 @@ async fn prepare_submission(
     })
 }
 
+/// 访客发表评论：策略定初始状态，AI 审核挂钩，落库后异步通知管理员。
 #[utoipa::path(
     post,
     path = "/api/public/comments",
@@ -471,6 +477,7 @@ async fn create_comment(
     Ok(json_with_cache(&body, CACHE_NO_STORE))
 }
 
+/// 访客回复评论：只允许回复 approved 评论（其余按不存在处理），回复的回复挂到同一根下。
 #[utoipa::path(
     post,
     path = "/api/public/comments/{id}/replies",

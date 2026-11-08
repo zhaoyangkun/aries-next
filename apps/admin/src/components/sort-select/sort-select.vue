@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 排序选择器：排序字段 + 升降序组合下拉，文章/媒体等列表复用。 */
 import { ArrowDownAZIcon, ArrowDownZAIcon, SlidersHorizontalIcon } from '@lucide/vue'
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'

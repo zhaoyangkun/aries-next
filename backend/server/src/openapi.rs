@@ -185,6 +185,7 @@ pub struct ApiDoc;
 struct SecurityAddon;
 
 impl Modify for SecurityAddon {
+    /// 向 OpenAPI 注册 cookieAuth 安全方案（Admin Session Cookie，Path 限定 /api/admin）。
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi
             .components

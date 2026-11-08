@@ -1,3 +1,8 @@
+//! aries-core：领域模型与 Repository/Service 契约层。
+//!
+//! 本 crate 只定义 Domain Object 和 trait，不依赖 Axum、SQLx、PostgreSQL
+//! 或具体 AI Vendor；实现位于 `aries-infra`，HTTP 装配位于 `aries-server`。
+
 // async_trait 生成的 `Pin<Box<dyn Future>>` 返回值自带 #[must_use]，clippy 1.99 新增的
 // double_must_use 会对所有 trait 方法误报；这些 Future 本来就应当被 await，此处整 crate 豁免。
 #![allow(clippy::double_must_use)]

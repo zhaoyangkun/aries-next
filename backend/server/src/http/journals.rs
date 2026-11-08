@@ -22,6 +22,7 @@ use crate::state::AppState;
 
 use super::{articles::render_markdown, auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册日志管理路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/journals", get(list_journals).post(create_journal))
@@ -69,6 +70,7 @@ struct JournalResponse {
 }
 
 impl From<Journal> for JournalResponse {
+    /// 领域日志 → 响应 DTO。
     fn from(journal: Journal) -> Self {
         Self {
             id: journal.id,
@@ -94,6 +96,7 @@ struct JournalPageResponse {
     page_size: u32,
 }
 
+/// 日志分页列表；需要 `content:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/journals",
@@ -137,6 +140,7 @@ async fn list_journals(
     }))
 }
 
+/// 创建日志：服务端渲染 Markdown 并写审计；需要 `content:manage` 权限。
 #[utoipa::path(
     post,
     path = "/api/admin/journals",
@@ -179,6 +183,7 @@ async fn create_journal(
     Ok((StatusCode::CREATED, Json(journal.into())))
 }
 
+/// 日志详情；需要 `content:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/journals/{id}",
@@ -208,6 +213,7 @@ async fn get_journal(
     Ok(Json(journal.into()))
 }
 
+/// 全量更新日志：重新渲染 Markdown 并写审计；需要 `content:manage` 权限。
 #[utoipa::path(
     put,
     path = "/api/admin/journals/{id}",
@@ -255,6 +261,7 @@ async fn update_journal(
     Ok(Json(journal.into()))
 }
 
+/// 软删除日志并写审计；需要 `content:manage` 权限。
 #[utoipa::path(
     delete,
     path = "/api/admin/journals/{id}",
@@ -281,6 +288,7 @@ async fn delete_journal(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 日志变更的统一审计写入；审计失败会中断请求（不留未记录的管理行为）。
 async fn write_journal_audit(
     state: &AppState,
     current: &CurrentUser,

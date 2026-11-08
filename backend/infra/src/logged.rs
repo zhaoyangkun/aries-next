@@ -22,6 +22,7 @@ pub const REDACTED: &str = "***REDACTED***";
 /// 命中即视为敏感语句的 SQL 关键字（大小写不敏感的子串匹配）。
 const SENSITIVE_KEYWORDS: [&str; 4] = ["password_hash", "password", "token", "secret"];
 
+/// 判断 SQL 文本是否含敏感关键字（决定是否跳过日志输出）。
 fn is_sensitive_sql(sql: &str) -> bool {
     let lower = sql.to_lowercase();
     SENSITIVE_KEYWORDS
@@ -78,6 +79,7 @@ pub struct LoggedQuery<'q> {
 }
 
 impl<'q> LoggedQuery<'q> {
+    /// 透传绑定，同时记录参数的 Debug 表示供 SQL 日志展示。
     pub fn bind<T>(mut self, value: T) -> Self
     where
         T: 'q + Debug + sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
@@ -87,6 +89,7 @@ impl<'q> LoggedQuery<'q> {
         self
     }
 
+    /// 执行前打开参数 Span（SQL 文本与参数经 tracing 管道落 server_logs）。
     pub async fn execute<'e, 'c: 'e, E>(self, executor: E) -> Result<PgQueryResult, Error>
     where
         'q: 'e,
@@ -96,6 +99,7 @@ impl<'q> LoggedQuery<'q> {
         self.inner.execute(executor).instrument(span).await
     }
 
+    /// 执行并取第一行。
     pub async fn fetch_one<'e, 'c: 'e, E>(self, executor: E) -> Result<PgRow, Error>
     where
         'q: 'e,
@@ -105,6 +109,7 @@ impl<'q> LoggedQuery<'q> {
         self.inner.fetch_one(executor).instrument(span).await
     }
 
+    /// 执行并取全部行。
     pub async fn fetch_all<'e, 'c: 'e, E>(self, executor: E) -> Result<Vec<PgRow>, Error>
     where
         'q: 'e,
@@ -114,6 +119,7 @@ impl<'q> LoggedQuery<'q> {
         self.inner.fetch_all(executor).instrument(span).await
     }
 
+    /// 执行并取可选行。
     pub async fn fetch_optional<'e, 'c: 'e, E>(self, executor: E) -> Result<Option<PgRow>, Error>
     where
         'q: 'e,
@@ -150,6 +156,7 @@ impl<'q, O> LoggedQueryAs<'q, O>
 where
     O: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
 {
+    /// 透传绑定，同时记录参数的 Debug 表示供 SQL 日志展示。
     pub fn bind<T>(mut self, value: T) -> Self
     where
         T: 'q + Debug + sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
@@ -159,6 +166,7 @@ where
         self
     }
 
+    /// 执行并取第一行。
     pub async fn fetch_one<'e, 'c: 'e, E>(self, executor: E) -> Result<O, Error>
     where
         'q: 'e,
@@ -168,6 +176,7 @@ where
         self.inner.fetch_one(executor).instrument(span).await
     }
 
+    /// 执行并取全部行。
     pub async fn fetch_all<'e, 'c: 'e, E>(self, executor: E) -> Result<Vec<O>, Error>
     where
         'q: 'e,
@@ -177,6 +186,7 @@ where
         self.inner.fetch_all(executor).instrument(span).await
     }
 
+    /// 执行并取可选行。
     pub async fn fetch_optional<'e, 'c: 'e, E>(self, executor: E) -> Result<Option<O>, Error>
     where
         'q: 'e,
@@ -213,6 +223,7 @@ impl<'q, O> LoggedQueryScalar<'q, O>
 where
     O: for<'r> sqlx::Decode<'r, Postgres> + sqlx::Type<Postgres> + Send + Unpin,
 {
+    /// 透传绑定，同时记录参数的 Debug 表示供 SQL 日志展示。
     pub fn bind<T>(mut self, value: T) -> Self
     where
         T: 'q + Debug + sqlx::Encode<'q, Postgres> + sqlx::Type<Postgres>,
@@ -222,6 +233,7 @@ where
         self
     }
 
+    /// 执行并取第一行。
     pub async fn fetch_one<'e, 'c: 'e, E>(self, executor: E) -> Result<O, Error>
     where
         'q: 'e,
@@ -231,6 +243,7 @@ where
         self.inner.fetch_one(executor).instrument(span).await
     }
 
+    /// 执行并取全部行。
     pub async fn fetch_all<'e, 'c: 'e, E>(self, executor: E) -> Result<Vec<O>, Error>
     where
         'q: 'e,
@@ -240,6 +253,7 @@ where
         self.inner.fetch_all(executor).instrument(span).await
     }
 
+    /// 执行并取可选行。
     pub async fn fetch_optional<'e, 'c: 'e, E>(self, executor: E) -> Result<Option<O>, Error>
     where
         'q: 'e,

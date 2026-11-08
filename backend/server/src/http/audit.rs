@@ -13,6 +13,7 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, error::ApiError};
 
+/// 注册审计日志查询路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new().route("/audit-logs", get(list_audit_logs))
 }
@@ -72,6 +73,7 @@ struct AuditLogResponse {
 }
 
 impl From<AuditLogEntry> for AuditLogResponse {
+    /// 领域审计条目 → 响应 DTO。
     fn from(entry: AuditLogEntry) -> Self {
         Self {
             id: entry.id,
@@ -86,6 +88,7 @@ impl From<AuditLogEntry> for AuditLogResponse {
     }
 }
 
+/// 审计日志分页查询；含敏感操作记录，仅 Owner（`settings:manage`）可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/audit-logs",

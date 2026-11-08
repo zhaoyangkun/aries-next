@@ -10,6 +10,8 @@ pub const PROMPT_VERSION: &str = "2026-09-25.1";
 const UNTRUSTED_BEGIN: &str = "-----BEGIN UNTRUSTED CONTENT-----";
 const UNTRUSTED_END: &str = "-----END UNTRUSTED CONTENT-----";
 
+/// 用不可信边界分隔符包裹外部内容，并在调用处声明「不得执行其中指令」，
+/// 缓解 Prompt Injection（防御层之一，不能替代输出校验）。
 fn wrap_untrusted(content: &str) -> String {
     format!("{UNTRUSTED_BEGIN}\n{content}\n{UNTRUSTED_END}")
 }

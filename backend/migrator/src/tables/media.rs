@@ -47,6 +47,7 @@ pub struct NewMediaAsset {
     pub deleted_at: Option<OffsetDateTime>,
 }
 
+/// 抽取图片源行（storage_type/hash/url 等）。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyPicture>> {
     sqlx::query_as::<_, LegacyPicture>(
         "SELECT CAST(id AS SIGNED) AS id, storage_type, hash, file_name, url, \
@@ -88,6 +89,7 @@ async fn download_image(client: &reqwest::Client, url: &str) -> anyhow::Result<V
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("download failed")))
 }
 
+/// 下载单个媒体文件（带大小上限与响应校验）。
 async fn try_download_once(client: &reqwest::Client, url: &str) -> anyhow::Result<Vec<u8>> {
     let response = client.get(url).send().await?.error_for_status()?;
     if let Some(length) = response.content_length()
@@ -279,6 +281,7 @@ pub async fn insert_media_assets(
     Ok((migrated, skipped))
 }
 
+/// ETL：抽取 → 逐文件下载（失败回退 legacy URL  provider）→ 构建资产行 → 批量写入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     ctx.report.table(TABLE).source_rows = rows.len() as i64;

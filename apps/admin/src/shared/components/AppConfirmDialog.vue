@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 业务通用确认对话框：Promise 风格的二次确认封装。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {

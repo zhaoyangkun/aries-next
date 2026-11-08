@@ -24,6 +24,7 @@ const LIST_MODELS_TIMEOUT: Duration = Duration::from_secs(15);
 /// 模型列表上限：防止异常 Provider 返回超长列表撑爆响应。
 const LIST_MODELS_MAX: usize = 500;
 
+/// 构造 AI Provider 共用的 HTTP Client（超时等连接配置集中在此）。
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(CHAT_TIMEOUT)
@@ -56,6 +57,7 @@ async fn send_with_retry(builder: reqwest::RequestBuilder) -> Result<reqwest::Re
     }
 }
 
+/// 校验 Provider HTTP 响应状态码，非成功响应归类为对应领域错误。
 fn ensure_success(response: &reqwest::Response) -> Result<(), AiError> {
     let status = response.status();
     if status.is_success() {
@@ -93,6 +95,7 @@ async fn pump_sse(
     let mut event_name: Option<String> = None;
     let mut first_byte_deadline = Some(tokio::time::Instant::now() + STREAM_FIRST_BYTE_TIMEOUT);
     loop {
+        // 首字节单独限时：Provider 建连后迟迟不出数据视为不可用；收到首字节后转普通读取。
         let next = match first_byte_deadline {
             Some(deadline) => match tokio::time::timeout_at(deadline, stream.next()).await {
                 Ok(item) => item,
@@ -104,6 +107,7 @@ async fn pump_sse(
         first_byte_deadline = None;
         let bytes = item.map_err(map_reqwest)?;
         buffer.push_str(&String::from_utf8_lossy(&bytes));
+        // 按行解析：event: 记录事件名，data: 交给协议解析器（OpenAI/Anthropic 行格式不同）。
         while let Some(line_end) = buffer.find('\n') {
             let line = buffer[..line_end].trim().to_owned();
             buffer.drain(..=line_end);
@@ -132,9 +136,11 @@ async fn pump_sse(
             }
         }
     }
+    // 流结束仍未收到 Done：响应被 Provider 截断，按失败处理（调用方落 failed 审计）。
     Err(AiError::ProviderFailed)
 }
 
+/// 从 Provider 返回的 JSON 数值字段安全取 i32（缺失或非法返回 None）。
 fn token_count(value: Option<&serde_json::Value>) -> Option<i32> {
     value
         .and_then(serde_json::Value::as_i64)
@@ -151,6 +157,7 @@ pub struct OpenAiCompatibleProvider {
 }
 
 impl OpenAiCompatibleProvider {
+    /// 组装共用 HTTP Client（超时配置集中在 build_http_client）。
     pub fn new() -> Self {
         Self {
             client: build_http_client(),
@@ -184,11 +191,13 @@ impl OpenAiCompatibleProvider {
 }
 
 impl Default for OpenAiCompatibleProvider {
+    /// 默认即 new()。
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// 解析 OpenAI 兼容协议的 usage 字段为 AiUsage（两个字段均可空）。
 fn parse_openai_usage(value: &serde_json::Value) -> Option<AiUsage> {
     let usage = value.get("usage")?;
     Some(AiUsage {
@@ -218,6 +227,7 @@ fn parse_openai_line(_event: Option<&str>, data: &str) -> Option<SseLineAction> 
 
 #[async_trait]
 impl AiProvider for OpenAiCompatibleProvider {
+    /// 非流式对话：取首个 choice 的 message.content，usage 可空。
     async fn chat(
         &self,
         settings: &AiSettings,
@@ -238,6 +248,7 @@ impl AiProvider for OpenAiCompatibleProvider {
         Ok((text, parse_openai_usage(&body)))
     }
 
+    /// 流式对话：SSE 行交给 parse_openai_line 解析。
     async fn chat_stream(
         &self,
         settings: &AiSettings,
@@ -249,6 +260,7 @@ impl AiProvider for OpenAiCompatibleProvider {
         pump_sse(response, &sender, parse_openai_line).await
     }
 
+    /// Embedding 走独立的 embedding_base_url/embedding_model 配置（与 chat 端点无关）。
     async fn embed(
         &self,
         settings: &AiSettings,
@@ -275,6 +287,7 @@ impl AiProvider for OpenAiCompatibleProvider {
         parse_embedding_response(&body, texts.len())
     }
 
+    /// OpenAI 兼容协议没有默认端点，base_url 必填。
     async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
         // OpenAI 兼容协议没有默认端点，base_url 必填。
         let base_url = settings
@@ -356,12 +369,14 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
+    /// 组装共用 HTTP Client。
     pub fn new() -> Self {
         Self {
             client: build_http_client(),
         }
     }
 
+    /// 组装请求；base_url 缺省回退 Anthropic 官方端点，api_key 只进 x-api-key Header。
     fn build_request(
         &self,
         settings: &AiSettings,
@@ -384,6 +399,7 @@ impl AnthropicProvider {
 }
 
 impl Default for AnthropicProvider {
+    /// 默认即 new()。
     fn default() -> Self {
         Self::new()
     }
@@ -449,6 +465,7 @@ struct AnthropicStreamParser {
 }
 
 impl AnthropicStreamParser {
+    /// 解析 Anthropic SSE 行：input_tokens 在 message_start 记录，message_delta 合并为单个 Usage 事件（与 OpenAI 适配器语义一致）。
     fn parse_line(&mut self, event: Option<&str>, data: &str) -> Option<SseLineAction> {
         let payload = serde_json::from_str::<serde_json::Value>(data).ok()?;
         match event? {
@@ -485,6 +502,7 @@ impl AnthropicStreamParser {
 
 #[async_trait]
 impl AiProvider for AnthropicProvider {
+    /// 非流式对话：解析 content 首个 text block 与 usage。
     async fn chat(
         &self,
         settings: &AiSettings,
@@ -496,6 +514,7 @@ impl AiProvider for AnthropicProvider {
         parse_anthropic_response(&body)
     }
 
+    /// 流式对话：有状态解析器（input_tokens 先达、跨事件合并 usage）。
     async fn chat_stream(
         &self,
         settings: &AiSettings,
@@ -511,6 +530,7 @@ impl AiProvider for AnthropicProvider {
         .await
     }
 
+    /// Anthropic 适配器不支持 embed；分发器始终把 embed 路由到 OpenAI 适配器，这里仅作契约兜底。
     async fn embed(
         &self,
         _settings: &AiSettings,
@@ -522,6 +542,7 @@ impl AiProvider for AnthropicProvider {
         Err(AiError::ProviderFailed)
     }
 
+    /// 模型列表；base_url 缺省回退官方端点，短超时 + 截断上限。
     async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
         let base_url = settings
             .base_url
@@ -556,6 +577,7 @@ pub struct DispatchingAiProvider {
 }
 
 impl DispatchingAiProvider {
+    /// 无状态：两个适配器都是 HTTP Client，配置随请求传入。
     pub fn new() -> Self {
         Self::default()
     }
@@ -563,6 +585,7 @@ impl DispatchingAiProvider {
 
 #[async_trait]
 impl AiProvider for DispatchingAiProvider {
+    /// 按 settings.protocol 分发到对应适配器。
     async fn chat(
         &self,
         settings: &AiSettings,
@@ -574,6 +597,7 @@ impl AiProvider for DispatchingAiProvider {
         }
     }
 
+    /// 按 settings.protocol 分发到对应适配器。
     async fn chat_stream(
         &self,
         settings: &AiSettings,
@@ -590,6 +614,7 @@ impl AiProvider for DispatchingAiProvider {
         }
     }
 
+    /// embed 始终路由 OpenAI 适配器（embedding_base_url 固定为 OpenAI 兼容协议，与 chat 的 protocol 无关）。
     async fn embed(
         &self,
         settings: &AiSettings,
@@ -600,6 +625,7 @@ impl AiProvider for DispatchingAiProvider {
         self.openai.embed(settings, texts).await
     }
 
+    /// 按 settings.protocol 分发到对应适配器。
     async fn list_models(&self, settings: &AiSettings) -> Result<Vec<String>, AiError> {
         match settings.protocol {
             aries_core::ai::AiProtocol::OpenAi => self.openai.list_models(settings).await,

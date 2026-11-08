@@ -47,8 +47,14 @@ tests              # 跨进程 Contract Test 和 E2E Test（当前为空，为�
 - 使用 `tracing` 记录日志，不使用 `println!` 输出服务日志。服务端日志三路输出（见 `backend/server/src/logging.rs` 与 `backend/server/src/log_store.rs`）：控制台开发期 Pretty、生产 JSON；文件始终 JSON 写入 `LOG_DIR`（默认 `./logs`）下的 `aries-server.YYYY-MM-DD`，按天切分，超过 `LOG_RETENTION_DAYS`（默认 14 天）自动清理；同时批量落入 PostgreSQL `server_logs` 表（保留期与文件一致，到期物理 DELETE），Admin「系统 → 运行日志」页可在线查询并按 `request_id` 做链路追踪。HTTP 访问日志由 tower_http TraceLayer 输出；请求内的日志行会带上 `http.method`/`http.path`/`http.query` 上下文字段；非 GET/HEAD 的 JSON/Form 请求体经 `log_request_params` 中间件脱敏后记录（键名含 password/secret/token/api_key/authorization/cookie 的值替换为 `***`，超过 8KB 或 multipart 只记跳过原因）。`LOG_SQL` 仅为 SQL 语句日志的启动初始值（未设置时非 production 默认 true、production 默认 false），运行期可在运行日志页切换，无需重启。慢查询由 `DATABASE_SLOW_QUERY_MS`（毫秒，默认 500，0 关闭）控制，超阈值的 SQL 以 WARN 级、`sqlx::query` target 落 `server_logs`；生产建议保持全量 SQL 日志关闭、只开慢查询。运行日志页另支持隐藏指定 target（如 `sqlx::query`）、锚点前后上下文视图与级别趋势图（`GET /api/admin/logs/stats` 分桶统计）。
 - Async 函数中不得执行长时间同步 I/O。
 - Database Query 使用参数化 SQL，禁止拼接用户输入。
-- 新增公共类型和复杂逻辑必须添加简短的中文注释。
-- 注释解释「为什么」，不要重复代码已经表达的「是什么」。
+- 注释规范（适用于 Rust 与前端 TS/Vue，语言与排版遵循 `docs/README.md` 写作规范）：
+  - 所有 `pub` 项（crate、模块、结构体、枚举、trait、函数、常量）必须有 `///` 文档注释：首行一句话说明职责；入参/出参/错误在非自明时补充 `# Arguments` / `# Returns` / `# Errors` 小节。
+  - 私有函数与复杂逻辑块必须有 `//` 注释说明意图；模式化小函数（getter、`map_sqlx` 类映射）一句话即可，不重复代码已表达的内容。
+  - 注释解释「为什么」（设计意图、约束来源、风险），不重复「是什么」；禁止把注释掉的死代码留在库里。
+  - HTTP handler 的 `///` 写一行职责 + 所需 Permission + 关键行为；请求/响应细节以 utoipa 注解为权威，不在 `///` 中复制。
+  - DTO 字段注释写语义与校验规则（长度、格式、三态语义），不与 `#[schema(description = ...)]` 重复。
+  - 前端导出函数与 Composable 写 JSDoc（`/** ... */`）：一句话职责 + 参数/返回语义；组件头部注释说明职责与关键 Props。
+  - 行为变化时同步更新注释；注释与代码不一致视为缺陷。
 - 函数和变量命名使用 `snake_case`，类型命名使用 `PascalCase`。
 - 错误信息使用 English，面向用户的提示由 API 层统一转换。
 

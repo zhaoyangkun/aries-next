@@ -2,6 +2,7 @@
 // 返回 failed 标记与 img @error 处理器；显式引入 ref 以便测试直接 import 本文件。
 import { ref } from 'vue'
 
+/** 图片加载失败兜底 Composable：返回 failed 标记与 img @error 处理器。 */
 export function useImageError() {
   const failed = ref(false)
   function onImageError() {

@@ -1,6 +1,6 @@
-//! Admin 设置分组管理：appearance / email / integrations 三组的读取与更新。
+//! Admin 设置分组管理：appearance / email / integrations / ai / social 五组的读取与更新。
 //! email / ai 组为部分合并语义：Patch 全部字段可选，省略或显式 null 的字段保持不变，
-//! 只更新提交的字段；appearance / integrations 组为全量覆盖。
+//! 只更新提交的字段；appearance / integrations / social 组为全量覆盖。
 //! Secret 字段（smtp_password / api_key）为 write-only：GET 只回 `*_set: bool`；
 //! PATCH 中省略/null 表示保持不变，空字符串表示清除，非空表示更新。
 
@@ -26,6 +26,7 @@ use crate::state::AppState;
 
 use super::{auth::CurrentUser, error::ApiError, extract::ApiJson};
 
+/// 注册分组设置读写路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new().route(
         "/settings/{group}",
@@ -66,6 +67,7 @@ struct EmailSettingsView {
 }
 
 impl From<EmailSettings> for EmailSettingsView {
+    /// 邮件设置领域对象 → 读取视图（smtp_password 永不回读，只回是否已设置）。
     fn from(settings: EmailSettings) -> Self {
         Self {
             enabled: settings.enabled,
@@ -137,6 +139,7 @@ struct AiSettingsView {
 }
 
 impl From<AiSettings> for AiSettingsView {
+    /// AI 设置领域对象 → 读取视图（api_key 永不回读，只回是否已设置）。
     fn from(settings: AiSettings) -> Self {
         Self {
             enabled: settings.enabled,
@@ -209,13 +212,14 @@ struct EmailSettingsPatch {
     from_name: Option<String>,
 }
 
+/// 把分组 payload 反序列化为指定类型；结构不合法统一映射为 400 `INVALID_SETTING_PAYLOAD`。
 fn parse_payload<T: serde::de::DeserializeOwned>(
     payload: serde_json::Value,
 ) -> Result<T, ApiError> {
     serde_json::from_value(payload).map_err(|_| SettingError::Validation.into())
 }
 
-/// 分组设置的公开视图：email 组屏蔽 secret 明文。
+/// 分组设置的公开视图：email / ai 组在此把 secret 明文替换为 `*_set` 布尔位。
 fn settings_view(record: &SettingGroupRecord) -> Result<serde_json::Value, ApiError> {
     match record.group {
         SettingGroup::Appearance => {
@@ -243,6 +247,7 @@ fn settings_view(record: &SettingGroupRecord) -> Result<serde_json::Value, ApiEr
     }
 }
 
+/// 记录转响应：附上公开视图后的 settings。
 fn to_response(record: SettingGroupRecord) -> Result<SettingGroupResponse, ApiError> {
     Ok(SettingGroupResponse {
         group: record.group.as_str().to_owned(),
@@ -252,6 +257,7 @@ fn to_response(record: SettingGroupRecord) -> Result<SettingGroupResponse, ApiEr
     })
 }
 
+/// 读取分组设置（secret 不回明文）；需要 `settings:manage` 权限。
 #[utoipa::path(
     get,
     path = "/api/admin/settings/{group}",
@@ -279,6 +285,7 @@ async fn get_setting_group(
     Ok(Json(to_response(record)?))
 }
 
+/// 更新分组设置：按组合并语义（全量覆盖或部分合并），乐观锁防并发丢失，写审计。
 #[utoipa::path(
     put,
     path = "/api/admin/settings/{group}",

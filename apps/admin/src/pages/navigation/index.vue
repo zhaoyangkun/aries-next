@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 导航管理页：站点导航项的增删改与排序。 */
 import { computed, onMounted, ref } from 'vue'
 import {
   ArrowDownIcon,

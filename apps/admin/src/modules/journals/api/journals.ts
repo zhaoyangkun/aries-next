@@ -25,11 +25,13 @@ export interface UpsertJournalPayload {
 }
 
 export const journalsApi = {
+  /** 分页查询日志（日记），支持可见性筛选。 */
   async list(params: { page: number, page_size: number, visibility?: JournalVisibility }) {
     const { data } = await api.get<JournalPage>('/api/admin/journals', { params })
     return data
   },
 
+  /** 读取单条日志。 */
   async get(journalId: number) {
     const { data } = await api.get<Journal>(`/api/admin/journals/${journalId}`)
     return data
@@ -41,11 +43,13 @@ export const journalsApi = {
     return data
   },
 
+  /** 更新日志。 */
   async update(journalId: number, payload: UpsertJournalPayload) {
     const { data } = await api.put<Journal>(`/api/admin/journals/${journalId}`, payload)
     return data
   },
 
+  /** 删除日志。 */
   async remove(journalId: number) {
     await api.delete(`/api/admin/journals/${journalId}`)
   },

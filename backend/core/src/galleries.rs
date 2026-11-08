@@ -17,6 +17,7 @@ pub enum GalleryStatus {
 }
 
 impl GalleryStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -34,6 +35,7 @@ impl fmt::Display for GalleryStatus {
 impl FromStr for GalleryStatus {
     type Err = GalleryError;
 
+    /// 解析状态字符串；未知取值返回 `GalleryError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "draft" => Ok(Self::Draft),
@@ -163,6 +165,7 @@ pub struct GalleryItemUpdate {
     pub sort_order: i32,
 }
 
+/// 图库领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum GalleryError {
     #[error("invalid gallery status")]

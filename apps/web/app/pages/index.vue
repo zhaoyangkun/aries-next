@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 首页：Hero 区 + 最新文章分页列表。 */
 import type {
   PublicArticlePage,
   PublicCategory,

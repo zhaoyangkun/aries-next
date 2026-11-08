@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 应用侧边栏容器：整合主导航（NavTeam）、页脚用户菜单（NavFooter）与命令面板入口。 */
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '@/components/ui/sidebar'
 import { navData } from '@/constants/sidebar-data'
 import { useSessionStore } from '@/modules/auth/stores/session'

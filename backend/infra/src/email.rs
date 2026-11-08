@@ -68,6 +68,7 @@ fn map_send_error(error: lettre::transport::smtp::Error) -> EmailError {
 
 #[async_trait]
 impl EmailSender for LettreEmailSender {
+    /// 发送：校验配置 → 重建 Transport（配置热生效）→ 地址解析（非法地址为永久错误）→ 发送；5xx 永久失败不重试，4xx/网络错误归瞬时。
     async fn send(
         &self,
         settings: &EmailSettings,
@@ -133,6 +134,7 @@ pub struct PostgresEmailDeliveryRepository {
 }
 
 impl PostgresEmailDeliveryRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -157,6 +159,7 @@ struct DeliveryRow {
 impl TryFrom<DeliveryRow> for EmailDelivery {
     type Error = EmailDeliveryError;
 
+    /// 查询行 → 领域对象：status 字符串解析为枚举。
     fn try_from(row: DeliveryRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -177,6 +180,7 @@ impl TryFrom<DeliveryRow> for EmailDelivery {
 const DELIVERY_COLUMNS: &str = "id, comment_id, recipient_email, subject, template, \
     status, attempts, max_attempts, last_error, created_at, updated_at";
 
+/// SQLx 错误到 EmailDeliveryError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> EmailDeliveryError {
     tracing::error!(error = %error, "email delivery repository operation failed");
     EmailDeliveryError::StoreUnavailable
@@ -184,6 +188,7 @@ fn map_sqlx(error: sqlx::Error) -> EmailDeliveryError {
 
 #[async_trait]
 impl EmailDeliveryRepository for PostgresEmailDeliveryRepository {
+    /// 登记投递记录（status 取列默认值 pending）。
     async fn create(
         &self,
         delivery: NewEmailDelivery,
@@ -206,6 +211,7 @@ impl EmailDeliveryRepository for PostgresEmailDeliveryRepository {
         row.try_into()
     }
 
+    /// 标记成功：status=sent、attempts+1、清 last_error。
     async fn mark_sent(&self, delivery_id: i64) -> Result<(), EmailDeliveryError> {
         let result = logged_query(
             "UPDATE email_deliveries SET status = 'sent', attempts = attempts + 1, \
@@ -221,6 +227,7 @@ impl EmailDeliveryRepository for PostgresEmailDeliveryRepository {
         Ok(())
     }
 
+    /// 标记失败：status=failed 并记录错误原因（截断 2000 字符防撑爆行）。
     async fn mark_failed(&self, delivery_id: i64, error: &str) -> Result<(), EmailDeliveryError> {
         let result = logged_query(
             "UPDATE email_deliveries SET status = 'failed', last_error = $2, \
@@ -238,6 +245,7 @@ impl EmailDeliveryRepository for PostgresEmailDeliveryRepository {
         Ok(())
     }
 
+    /// 记录一次尝试：attempts+1 后与 max_attempts 比较，超限转 failed，否则保持 pending 等待 Worker 重试。
     async fn record_attempt(
         &self,
         delivery_id: i64,
@@ -260,6 +268,7 @@ impl EmailDeliveryRepository for PostgresEmailDeliveryRepository {
         Ok(())
     }
 
+    /// 管理端分页：可按状态筛选；count + 列表两条语句，created_at DESC, id DESC 稳定排序。
     async fn list(
         &self,
         query: EmailDeliveryListQuery,

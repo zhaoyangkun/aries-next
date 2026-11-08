@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 
+/** 多标签页签项：path 为唯一键（忽略 query），closable 控制是否可关闭。 */
 export interface PageTab {
   /** 以 route.path 为唯一键（忽略 query），同一路径只保留一个标签。 */
   path: string

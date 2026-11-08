@@ -39,9 +39,12 @@ const MAX_IMPORT_FILES: usize = 10;
 const MAX_IMPORT_BYTES: usize = 2 * 1024 * 1024;
 /// 批量删除单次上限：避免一次请求携带过多 ID 拉长事务与探测耗时。
 const MAX_BATCH_DELETE: usize = 100;
+/// 远端重定向次数上限：防止重定向链逃逸 SSRF 校验。
 const MAX_REMOTE_REDIRECTS: u8 = 3;
+/// 远端抓取整体超时。
 const REMOTE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// 注册媒体库路由：列表/详情/更新/删除/批量删除/引用查询/本地上传/远端抓取/Markdown 导入（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/media", get(list_media).post(upload_media))
@@ -87,6 +90,7 @@ struct MediaAssetResponse {
 }
 
 impl MediaAssetResponse {
+    /// 领域资产 → 响应 DTO，附重复上传提示（同 SHA-256 既有资产 id）。
     fn from_asset(asset: MediaAsset, duplicate_of: Option<i64>) -> Self {
         Self {
             id: asset.id,
@@ -201,6 +205,7 @@ struct UploadMediaForm {
         (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 媒体分页列表（仅 active 资产，支持关键词/来源/MIME 过滤）。
 async fn list_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -256,6 +261,7 @@ async fn list_media(
         (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 媒体详情。
 async fn get_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -286,6 +292,7 @@ async fn get_media(
         (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 更新展示性字段（alt/原始文件名）；文件内容与 URL 不可变。
 async fn update_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -347,6 +354,7 @@ async fn update_media(
         (status = 409, description = "资产仍被内容引用（MEDIA_IN_USE）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 软删除媒体：保留行与文件，被引用时返回 409 并携带引用数。
 async fn delete_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -410,6 +418,7 @@ async fn delete_media(
         (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 批量软删除：部分成功语义，逐项归类（成功/被引用/不存在）返回。
 async fn batch_delete_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -475,6 +484,7 @@ async fn batch_delete_media(
         (status = 404, description = "资产不存在或已删除", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 资产的媒体引用关系列表（哪个内容引用了该资产）。
 async fn list_media_usages(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -520,6 +530,7 @@ struct IncomingFile {
         (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 本地上传：MIME/大小/扩展名校验 + 内容 Hash 去重提示，写审计。
 async fn upload_media(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -564,6 +575,7 @@ async fn upload_media(
         (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 远端抓取上传：URL 合法性校验 + SSRF 防护（禁内网/环回/重定向越界）。
 async fn upload_remote(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -597,11 +609,13 @@ async fn store_incoming(
         &file.bytes,
     )
     .map_err(upload_error_to_api)?;
+    // 先过上传校验（扩展名白名单 + Magic Bytes 双重检查），再生成 object_key 写入存储。
     let object_key = generate_object_key(validated.kind.extension());
     let url = state
         .storage
         .put(&object_key, &file.bytes, &validated.mime)
         .await?;
+    // 同 Hash 资产仅作重复提示（duplicate_of），不阻断入库：同名文件可能合法重复上传。
     let duplicate_of = state
         .media
         .find_by_hash(&validated.sha256)
@@ -636,6 +650,7 @@ async fn store_incoming(
     Ok(MediaAssetResponse::from_asset(asset, duplicate_of))
 }
 
+/// 查找活跃资产；不存在或已软删除统一返回 404。
 async fn find_active_asset(state: &AppState, asset_id: i64) -> Result<MediaAsset, ApiError> {
     let asset = state
         .media
@@ -652,6 +667,7 @@ async fn find_active_asset(state: &AppState, asset_id: i64) -> Result<MediaAsset
     Ok(asset)
 }
 
+/// 上传错误到 API 错误的映射（校验失败 400、存储/抓取失败 502 等）。
 fn upload_error_to_api(error: upload::UploadError) -> ApiError {
     let (code, message) = match error {
         upload::UploadError::Empty => ("EMPTY_FILE", "Uploaded file is empty"),
@@ -671,6 +687,7 @@ fn upload_error_to_api(error: upload::UploadError) -> ApiError {
     ApiError::bad_request(code, message)
 }
 
+/// 收集 multipart 表单中的文件（兼容 `file`/`file[]`，1–5 个，单个 ≤5MB）。
 async fn collect_multipart_files(
     mut multipart: Multipart,
     max_files: usize,
@@ -794,6 +811,7 @@ async fn fetch_remote(raw_url: &str) -> Result<IncomingFile, ApiError> {
     }
 }
 
+/// 读取远端响应体：上限 5MB，超出即截断报错（防内存放大）。
 async fn read_limited(mut response: reqwest::Response) -> Result<Bytes, ApiError> {
     let mut buffer = Vec::new();
     // 逐块读取并限制总量：不信任 Content-Length，防止远端声明小体积但持续吐数据。
@@ -860,6 +878,7 @@ async fn ensure_host_allowed(url: &reqwest::Url) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// 主机名字面量禁入判断（如 localhost）：DNS 解析前的第一道拦截。
 fn is_forbidden_host(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;
@@ -872,6 +891,7 @@ fn is_forbidden_host(host: &str) -> bool {
     bare.parse::<IpAddr>().is_ok_and(is_forbidden_ip)
 }
 
+/// IP 禁入判断：内网/环回/链路本地/保留段一律拒绝（SSRF 第二道拦截）。
 fn is_forbidden_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -934,6 +954,7 @@ struct ImportPreview {
 }
 
 impl From<&ImportItem> for ImportPreview {
+    /// 导入项 → 预览 DTO。
     fn from(item: &ImportItem) -> Self {
         Self {
             index: item.index,
@@ -1020,6 +1041,7 @@ struct ImportMarkdownForm {
         (status = 403, description = "无内容管理权限", body = crate::openapi::ErrorResponse),
     )
 )]
+/// Markdown 批量导入：解析 Front Matter、导入文章与关联媒体，结果按文件逐项返回。
 async fn import_markdown(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -1035,6 +1057,7 @@ async fn import_markdown(
                 "Markdown file exceeds the 2MB size limit",
             ));
         }
+        // 逐文件解析 Front Matter 并探测 Slug 冲突；冲突只做标记，由 Commit 阶段按用户选择的策略处理。
         let mut item = parse_import_file(index, &file.original_name, &file.bytes)?;
         item.slug_conflict = state
             .content
@@ -1088,6 +1111,7 @@ async fn import_markdown(
         (status = 404, description = "导入 Job 不存在", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 查询导入 Job 的解析预览（非导入类型或不存在返回 404）。
 async fn get_import(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -1124,6 +1148,7 @@ async fn get_import(
         (status = 409, description = "Job 已处理过（IMPORT_ALREADY_COMMITTED / IMPORT_SLUG_EXHAUSTED）", body = crate::openapi::ErrorResponse),
     )
 )]
+/// 提交导入：仅允许一次（Job 状态机保证）；冲突项按 skip/rename 策略处理，未指定策略一律 skip（绝不静默覆盖已有文章）。
 async fn commit_import(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -1234,6 +1259,7 @@ async fn commit_import(
     }))
 }
 
+/// 查询导入任务的当前状态与逐项结果（供前端轮询）。
 async fn find_import_job(
     state: &AppState,
     job_id: i64,
@@ -1252,6 +1278,7 @@ async fn find_import_job(
     Ok(job)
 }
 
+/// 解析导入任务 payload 中的逐项结果（文件路径 + 成败 + 文章 ID）。
 fn parse_job_items(payload: &serde_json::Value) -> Result<Vec<ImportItem>, ApiError> {
     serde_json::from_value(
         payload
@@ -1367,6 +1394,7 @@ fn split_front_matter(text: &str) -> (Option<&str>, &str) {
     (None, text)
 }
 
+/// 从 YAML 值安全取字符串标量（非字符串类型返回 None）。
 fn yaml_string(value: Option<&serde_yaml::Value>) -> Option<String> {
     match value {
         Some(serde_yaml::Value::String(text)) => Some(text.trim().to_owned()),
@@ -1419,6 +1447,7 @@ async fn find_free_slug(
     ))
 }
 
+/// 按名称解析文章分类：不存在时创建（导入流程专用，名称即展示名）。
 async fn resolve_category(state: &AppState, name: &str) -> Result<Option<i64>, ApiError> {
     // Markdown 导入只解析文章分类。
     let categories = state
@@ -1432,6 +1461,7 @@ async fn resolve_category(state: &AppState, name: &str) -> Result<Option<i64>, A
         .map(|category| category.id))
 }
 
+/// 按名称列表解析标签 ID：逐名查找、缺失创建，返回去重后的 ID 集合。
 async fn resolve_tag_ids(state: &AppState, names: &[String]) -> Result<Vec<i64>, ApiError> {
     let mut existing = state.content.list_tags().await?;
     let mut ids = Vec::new();

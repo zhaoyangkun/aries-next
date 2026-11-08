@@ -1,3 +1,7 @@
+//! Admin 认证端点：Bootstrap、登录/登出、Session 查询、密码重置。
+//! 安全要点：Session Token 只存 SHA-256 Hash；登录限流按账号 + IP 双维度；
+//! 防账号枚举（未知用户也执行一次 Argon2id、忘记密码恒返回 202）。
+
 use std::{convert::Infallible, net::SocketAddr, time::Duration as StdDuration};
 
 use aries_core::auth::{
@@ -24,13 +28,18 @@ use crate::{
 
 use super::{error::ApiError, extract::ApiJson};
 
+/// Session Cookie 名：HttpOnly、Path 限定 `/api/admin`、`SameSite=Lax`。
 const SESSION_COOKIE: &str = "aries_admin_session";
+/// 账号维度登录配额：5 次/15 分钟。
 const LOGIN_LIMIT: usize = 5;
 /// 每 IP 维度的登录配额：独立于账号维度，缓解定向锁定账号与分布式撞库。
 const LOGIN_IP_LIMIT: usize = 30;
+/// 密码重置请求配额：3 次/15 分钟。
 const RESET_LIMIT: usize = 3;
+/// 认证类端点共用的限流窗口。
 const RATE_WINDOW: StdDuration = StdDuration::from_secs(15 * 60);
 
+/// 注册认证相关路由（挂载在 `/api/admin` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/bootstrap/status", get(bootstrap_status))
@@ -77,6 +86,7 @@ struct ClientPeer(Option<SocketAddr>);
 impl<S: Send + Sync> OptionalFromRequestParts<S> for ClientPeer {
     type Rejection = Infallible;
 
+    /// 从请求扩展取 ConnectInfo（oneshot 测试无该扩展时返回 None，login 再回退到 X-Forwarded-For / X-Real-IP）。
     async fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
@@ -104,6 +114,7 @@ struct ResetPasswordRequest {
     password: String,
 }
 
+/// 用户视图 DTO：附带由角色权限矩阵展开的前端权限标识列表。
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct UserResponse {
     /// User ID。
@@ -123,6 +134,7 @@ pub struct UserResponse {
 }
 
 impl From<&User> for UserResponse {
+    /// 角色权限矩阵展开为前端权限标识列表。
     fn from(user: &User) -> Self {
         let permissions = [
             (Permission::ViewDashboard, "dashboard:view"),
@@ -162,6 +174,8 @@ struct MessageResponse {
     message: &'static str,
 }
 
+/// 已认证用户提取器：`FromRequestParts` 从 Session Cookie 解析身份，
+/// 是全部 Admin 端点的认证入口；权限检查由 `CurrentUser::require` 完成。
 pub struct CurrentUser {
     pub session_id: Uuid,
     pub user: User,
@@ -169,6 +183,7 @@ pub struct CurrentUser {
 }
 
 impl CurrentUser {
+    /// 权限守卫：不满足角色矩阵时返回 403 `PERMISSION_DENIED`。
     pub fn require(&self, permission: Permission) -> Result<(), ApiError> {
         if self.user.role.allows(permission) {
             Ok(())
@@ -181,6 +196,8 @@ impl CurrentUser {
     }
 }
 
+/// 认证流程：Cookie → Token Hash 查库 → 过期/禁用校验 → 滑动续期。
+/// 每一步失败都返回通用 401，不区分「无 Cookie」与「Session 失效」。
 impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = ApiError;
 
@@ -211,6 +228,7 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+/// 查询系统初始化状态：未初始化时前端引导进入 Bootstrap 流程。匿名可访问。
 #[utoipa::path(
     get,
     path = "/api/admin/bootstrap/status",
@@ -231,6 +249,7 @@ async fn bootstrap_status(
     }))
 }
 
+/// 创建首个 Owner 并签发 Session：校验 BOOTSTRAP_SECRET，仅限未初始化时调用。
 #[utoipa::path(
     post,
     path = "/api/admin/bootstrap",
@@ -272,6 +291,7 @@ async fn bootstrap(
         ));
     }
 
+    // 字段校验全部通过后才做 CPU 密集的 Argon2id 哈希（哈希在最外层做了一次）。
     let username = request.username.trim().to_ascii_lowercase();
     let email = normalize_email(&request.email)?;
     let display_name = validate_display_name(&request.display_name)?;
@@ -311,6 +331,8 @@ async fn bootstrap(
     issue_session(&state, jar, &headers, user).await
 }
 
+/// 管理员登录：先撤销旧 Session（防 Session Fixation）再签发新 Session；
+/// 未知用户也执行一次 Argon2id 以抹平账号枚举的时间差异。
 #[utoipa::path(
     post,
     path = "/api/admin/auth/login",
@@ -426,6 +448,7 @@ async fn login(
     issue_session(&state, jar, &headers, credentials.user).await
 }
 
+/// 登出：撤销当前 Session、清除 Cookie 并写审计。
 #[utoipa::path(
     post,
     path = "/api/admin/auth/logout",
@@ -460,6 +483,7 @@ async fn logout(
     Ok((remove_session_cookie(jar, &state), StatusCode::NO_CONTENT))
 }
 
+/// 查询当前会话：前端启动时探测登录态的端点。
 #[utoipa::path(
     get,
     path = "/api/admin/auth/session",
@@ -480,6 +504,7 @@ async fn session(current: CurrentUser) -> Json<SessionResponse> {
     })
 }
 
+/// 请求密码重置：无论账号是否存在都返回 202，防账号枚举；Token 只发邮件不落库明文。
 #[utoipa::path(
     post,
     path = "/api/admin/auth/password/forgot",
@@ -541,6 +566,7 @@ async fn forgot_password(
     ))
 }
 
+/// 重置密码：消费一次性 Token，成功后撤销该用户全部 Session。
 #[utoipa::path(
     post,
     path = "/api/admin/auth/password/reset",
@@ -570,6 +596,7 @@ async fn reset_password(
         return Err(ApiError::rate_limited_retry_after(decision.retry_after()));
     }
 
+    // 先算新密码 hash 再消费 Token；Token 消费与改密在仓储层同一事务内完成（成功才生效）。
     let password_hash = hash_password(&state, request.password).await?;
     let user_id = state
         .auth
@@ -592,6 +619,7 @@ async fn reset_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// 签发新 Session：生成 Token、入库 SHA-256 Hash、设置 Cookie（HttpOnly + Path 限定）。
 async fn issue_session(
     state: &AppState,
     jar: CookieJar,
@@ -614,6 +642,7 @@ async fn issue_session(
         })
         .await?;
 
+    // Cookie 安全基线：HttpOnly + SameSite=Lax + Path 限定 /api/admin；Secure 随环境配置。
     let cookie = Cookie::build((SESSION_COOKIE, token))
         .path("/api/admin")
         .http_only(true)
@@ -632,6 +661,7 @@ async fn issue_session(
     ))
 }
 
+/// 撤销 Cookie 中携带的旧 Session（登录前调用，防 Session Fixation）；无 Cookie 时无操作。
 async fn revoke_cookie_session(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
     let Some(token) = jar.get(SESSION_COOKIE).map(|cookie| cookie.value()) else {
         return Ok(());
@@ -642,6 +672,7 @@ async fn revoke_cookie_session(state: &AppState, jar: &CookieJar) -> Result<(), 
     Ok(())
 }
 
+/// 构造删除 Cookie 的响应（max-age = 0，Path 与签发时一致才能覆盖）。
 pub fn remove_session_cookie(jar: CookieJar, state: &AppState) -> CookieJar {
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path("/api/admin")
@@ -653,6 +684,7 @@ pub fn remove_session_cookie(jar: CookieJar, state: &AppState) -> CookieJar {
     jar.remove(cookie)
 }
 
+/// 登录失败审计：记录登录标识（用户名/邮箱）与命中用户（如有）。
 async fn record_login_failure(
     state: &AppState,
     login: &str,
@@ -671,6 +703,7 @@ async fn record_login_failure(
     Ok(())
 }
 
+/// Argon2id Hash（CPU 密集，放 blocking 线程池执行，避免阻塞 async runtime）。
 pub(crate) async fn hash_password(state: &AppState, password: String) -> Result<String, ApiError> {
     let hasher = state.passwords.clone();
     tokio::task::spawn_blocking(move || hasher.hash(&password))
@@ -679,6 +712,7 @@ pub(crate) async fn hash_password(state: &AppState, password: String) -> Result<
         .map_err(Into::into)
 }
 
+/// Argon2id 校验（同 `hash_password`，blocking 线程池执行）。
 pub(crate) async fn verify_password(
     state: &AppState,
     password: String,
@@ -691,6 +725,7 @@ pub(crate) async fn verify_password(
         .map_err(Into::into)
 }
 
+/// 邮箱归一化：Trim + 小写 + 最简格式校验（本地段 + @ + 含点域名）。
 pub(crate) fn normalize_email(email: &str) -> Result<String, ApiError> {
     let email = email.trim().to_ascii_lowercase();
     let (local, domain) = email.split_once('@').unwrap_or_default();
@@ -708,6 +743,7 @@ pub(crate) fn normalize_email(email: &str) -> Result<String, ApiError> {
     Ok(email)
 }
 
+/// 显示名校验：Trim 后 1–60 字符。
 pub(crate) fn validate_display_name(value: &str) -> Result<String, ApiError> {
     let value = value.trim();
     if !(1..=60).contains(&value.chars().count()) {
@@ -719,6 +755,7 @@ pub(crate) fn validate_display_name(value: &str) -> Result<String, ApiError> {
     Ok(value.to_owned())
 }
 
+/// 取 Hash 前 6 字节的十六进制作为限流键：足够区分不同 Token，又不把完整 Hash 写进限流器。
 fn hex_prefix(bytes: &[u8]) -> String {
     bytes
         .iter()

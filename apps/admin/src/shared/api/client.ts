@@ -16,6 +16,7 @@ export const api = axios.create({
   // Axios 把 FormData 序列化成 JSON 字符串，导致媒体上传/Markdown 导入被 Backend 拒绝。
 })
 
+/** 提取 Backend 统一错误结构中的用户可读 message；非 Axios 错误或结构缺失时返回 fallback。 */
 export function getApiError(error: unknown, fallback = '请求失败，请稍后重试') {
   if (axios.isAxiosError<ApiErrorResponse>(error)) {
     return error.response?.data?.error?.message ?? fallback
@@ -23,7 +24,7 @@ export function getApiError(error: unknown, fallback = '请求失败，请稍后
   return fallback
 }
 
-// 读取 Backend 统一错误结构中的业务错误码，用于按 code 分支处理（如版本冲突）。
+/** 读取 Backend 统一错误结构中的业务错误码，用于按 code 分支处理（如版本冲突）。 */
 export function getApiErrorCode(error: unknown) {
   if (axios.isAxiosError<ApiErrorResponse>(error)) {
     return error.response?.data?.error?.code
@@ -31,6 +32,7 @@ export function getApiErrorCode(error: unknown) {
   return undefined
 }
 
+/** 判定是否为 401 响应（Session 失效/被撤销），供全局拦截与表单分支使用。 */
 export function isUnauthorized(error: unknown) {
   return axios.isAxiosError(error) && error.response?.status === 401
 }

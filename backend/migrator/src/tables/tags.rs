@@ -34,6 +34,7 @@ pub struct NewTag {
     pub updated_at: OffsetDateTime,
 }
 
+/// 抽取标签源行。
 pub async fn extract(mysql: &MySqlPool) -> anyhow::Result<Vec<LegacyTag>> {
     sqlx::query_as::<_, LegacyTag>(
         "SELECT CAST(id AS SIGNED) AS id, name, CAST(count AS SIGNED) AS count, \
@@ -111,6 +112,7 @@ pub fn transform(
     })
 }
 
+/// ETL：slug 由名称生成并批内去重（冲突追加 id），软删除归档不迁入。
 pub async fn migrate(ctx: &mut MigrateCtx) -> anyhow::Result<()> {
     let rows = extract(&ctx.mysql).await?;
     let params = CommonParams {

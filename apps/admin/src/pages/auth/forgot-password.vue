@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 忘记密码页：请求发送重置邮件。 */
 import { CheckCircle2Icon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

@@ -1,3 +1,4 @@
+//! Markdown 渲染实现：comrak + ammonia Sanitization，附行内数学记号预处理。
 use std::borrow::Cow;
 
 use aries_core::content::{ContentError, MarkdownRenderer};
@@ -7,6 +8,7 @@ use comrak::{Options, markdown_to_html};
 pub struct ComrakMarkdownRenderer;
 
 impl MarkdownRenderer for ComrakMarkdownRenderer {
+    /// 渲染管线：旧版数学记号归一化 → comrak 渲染 → ammonia Allowlist 清理；放行项的动机见行内注释。
     fn render(&self, source: &str) -> Result<String, ContentError> {
         let mut options = Options::default();
         options.extension.strikethrough = true;
@@ -114,6 +116,7 @@ fn normalize_legacy_display_math(source: &str) -> Cow<'_, str> {
 /// 兼容旧内容中 `$ x_i $`、`$ \phi(x)$` 这类定界符内侧带空白的行内公式。
 /// comrak 会把前一处公式的闭合符与后一处公式的起始符错配，因此需在 Markdown 解析前
 /// 去掉定界符内侧空白。只处理具有明显 TeX 特征的内容，避免把金额等普通文本当成公式。
+// 行内数学预处理：旧站文章常写 `$ x $`（带空格），comrak 不识别，这里先归一化为 $x$；代码围栏与转义字符内的 $ 不动。
 fn normalize_legacy_inline_math(source: &str) -> Cow<'_, str> {
     let mut result = String::with_capacity(source.len());
     let mut in_fence: Option<(char, usize)> = None;
@@ -154,6 +157,7 @@ fn normalize_legacy_inline_math(source: &str) -> Cow<'_, str> {
     }
 }
 
+/// 单行内数学记号 `$...$` 的识别与归一（跳过代码 span 与转义字符）。
 fn normalize_inline_math_line(line: &str) -> Cow<'_, str> {
     let bytes = line.as_bytes();
     let mut result = String::with_capacity(line.len());
@@ -223,6 +227,7 @@ fn normalize_inline_math_line(line: &str) -> Cow<'_, str> {
     Cow::Owned(result)
 }
 
+/// 转义序列（反斜杠 + 字符）的结束下标。
 fn escaped_char_end(line: &str, slash: usize) -> usize {
     match line[slash + 1..].chars().next() {
         Some(character) => slash + 1 + character.len_utf8(),
@@ -230,6 +235,7 @@ fn escaped_char_end(line: &str, slash: usize) -> usize {
     }
 }
 
+/// 从 start 起连续反引号 run 的长度（代码 span 边界识别）。
 fn backtick_run(bytes: &[u8], start: usize) -> usize {
     bytes[start..]
         .iter()
@@ -237,12 +243,15 @@ fn backtick_run(bytes: &[u8], start: usize) -> usize {
         .count()
 }
 
+/// 判断 index 处 `$` 是否为落单美元符（不成对则不视为数学定界符）。
 fn is_single_dollar(bytes: &[u8], index: usize) -> bool {
     let previous_is_dollar = index > 0 && bytes[index - 1] == b'$';
     let next_is_dollar = index + 1 < bytes.len() && bytes[index + 1] == b'$';
     !previous_is_dollar && !next_is_dollar
 }
 
+/// 启发式判断文本片段是否像数学内容（减少误伤普通美元金额）。
+// 启发式判断 $...$ 内容是否像数学（字母/数字/运算符组合），避免把价格「$5」等误判为公式。
 fn looks_like_math(value: &str) -> bool {
     if value.is_empty() || value.contains('$') || value.contains('`') {
         return false;

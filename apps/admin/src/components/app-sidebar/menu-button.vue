@@ -1,4 +1,5 @@
 <script setup lang='ts'>
+/** 侧边栏菜单按钮：激活态高亮、Tooltip 与外链标识。Props: isActive/tooltip/isExternalUrl/menu。 */
 import { ExternalLinkIcon } from '@lucide/vue'
 
 import { SidebarMenuButton } from '@/components/ui/sidebar'

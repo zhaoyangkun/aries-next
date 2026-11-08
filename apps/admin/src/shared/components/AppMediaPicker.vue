@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 媒体选择器弹层：从媒体库挑选或上传图片。Props: open。 */
 import { computed, ref, watch } from 'vue'
 import {
   ChevronLeftIcon,

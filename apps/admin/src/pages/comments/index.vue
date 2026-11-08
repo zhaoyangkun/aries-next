@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 评论管理页：待审/已通过筛选、审核操作与管理员回复。 */
 import { computed, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import {

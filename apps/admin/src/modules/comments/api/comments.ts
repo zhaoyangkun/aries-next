@@ -15,6 +15,7 @@ export type Comment = CommentResponse
 export type CommentPage = CommentPageResponse
 
 export const commentsApi = {
+  /** 分页查询评论，支持状态/目标类型/目标 ID/关键字筛选。 */
   async list(params: {
     page: number
     page_size: number
@@ -27,6 +28,7 @@ export const commentsApi = {
     return data
   },
 
+  /** 读取单条评论详情（Admin 视图含访客 Email，Public API 不返回该字段）。 */
   async get(commentId: number) {
     const { data } = await api.get<Comment>(`/api/admin/comments/${commentId}`)
     return data

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 团队导航（可折叠分组版），折叠状态存 Pinia。Props: navMain。 */
 import { ChevronRightIcon, ExternalLinkIcon } from '@lucide/vue'
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'

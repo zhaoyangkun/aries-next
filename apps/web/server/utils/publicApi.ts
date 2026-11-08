@@ -23,6 +23,7 @@ export type {
   PublicTaxonomyRef,
 }
 
+/** Nitro 服务端内部访问后端 Public API 的 Base URL（私有 runtimeConfig，不经浏览器代理）。 */
 export function publicApiBase(): string {
   return useRuntimeConfig().internalApiBase as string
 }
@@ -37,6 +38,7 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;')
 }
 
+/** 服务端拉取站点公开设置；后端不可用时返回 null，由调用方走兜底。 */
 export async function fetchPublicSite(): Promise<PublicSite | null> {
   try {
     return await $fetch<PublicSite>('/site', { baseURL: publicApiBase() })

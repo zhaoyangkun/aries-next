@@ -3,6 +3,7 @@
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+/** 页面 Slug：小写字母/数字/连字符，1–160 字符，与 Backend slug 约束一致。 */
 export function validatePageSlug(slug: string): string {
   const value = slug.trim()
   if (!value) return '请输入 Slug'
@@ -12,6 +13,7 @@ export function validatePageSlug(slug: string): string {
   return ''
 }
 
+/** 页面标题必填。 */
 export function validatePageTitle(title: string): string {
   if (!title.trim()) return '请输入页面标题'
   return ''

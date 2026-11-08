@@ -1,4 +1,4 @@
-//! 设置分组域：appearance / email / integrations 三组结构化 JSONB 配置。
+//! 设置分组域：appearance / email / integrations / ai / social 五组结构化 JSONB 配置。
 //! Secret 字段（如 smtp_password）为 write-only：infra 只负责存取 payload，
 //! 读取时由 HTTP 层转换为 `*_set: bool`，不回向客户端暴露明文（Phase 06 §3）。
 
@@ -21,6 +21,7 @@ pub enum SettingGroup {
 }
 
 impl SettingGroup {
+    /// 返回分组的小写字符串标识，与数据库 `grp` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Appearance => "appearance",
@@ -41,6 +42,7 @@ impl fmt::Display for SettingGroup {
 impl FromStr for SettingGroup {
     type Err = SettingError;
 
+    /// 解析分组字符串；未知取值返回 `SettingError::InvalidGroup`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "appearance" => Ok(Self::Appearance),
@@ -188,6 +190,7 @@ pub struct SettingGroupUpdate {
     pub updated_by: i64,
 }
 
+/// 设置分组领域错误。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SettingError {
     #[error("invalid setting group")]

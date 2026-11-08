@@ -15,6 +15,7 @@ use crate::state::AppState;
 use super::articles::{PublicArticleListItem, PublicArticlePageResponse};
 use super::{CACHE_AGGREGATE, json_with_cache, reject_out_of_range_page};
 
+/// 注册公开分类与标签路由（挂载在 `/api/public` 下）。
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/categories", get(list_public_categories))
@@ -58,6 +59,7 @@ struct TaxonomyArticlesParams {
     page: u32,
 }
 
+/// 公开分类列表（kind = article，含实时文章数）；匿名可缓存。
 #[utoipa::path(
     get,
     path = "/api/public/categories",
@@ -84,6 +86,7 @@ async fn list_public_categories(State(state): State<AppState>) -> Result<Respons
     Ok(json_with_cache(&body, CACHE_AGGREGATE))
 }
 
+/// 公开标签列表（含实时文章数）；匿名可缓存。
 #[utoipa::path(
     get,
     path = "/api/public/tags",
@@ -109,6 +112,7 @@ async fn list_public_tags(State(state): State<AppState>) -> Result<Response, Api
     Ok(json_with_cache(&body, CACHE_AGGREGATE))
 }
 
+/// 分类下的公开文章分页；分类不存在 404，分页大小取站点设置。
 #[utoipa::path(
     get,
     path = "/api/public/categories/{slug}/articles",
@@ -158,6 +162,7 @@ async fn list_category_articles(
     ))
 }
 
+/// 标签下的公开文章分页；标签不存在 404，分页大小取站点设置。
 #[utoipa::path(
     get,
     path = "/api/public/tags/{slug}/articles",

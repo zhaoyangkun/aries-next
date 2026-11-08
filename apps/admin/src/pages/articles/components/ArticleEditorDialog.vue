@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 文章编辑对话框：元信息表单 + Markdown 编辑器 + 自动保存。Props: open/article。 */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type Vditor from 'vditor'
 import {

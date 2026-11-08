@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 命令面板（Cmd+K）：页面跳转、主题切换等全局命令入口。 */
 import { MenuIcon, SearchIcon } from '@lucide/vue'
 import { useEventListener } from '@vueuse/core'
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 设置首页：默认重定向到站点设置。 */
 import { LoaderCircleIcon } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {

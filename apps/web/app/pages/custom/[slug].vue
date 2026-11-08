@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 自定义页面：按 slug 渲染后台创建的页面。 */
 import type { PublicPageDetail } from '~/composables/usePublicApi'
 
 const route = useRoute()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 错误页展示组件：错误码、副标题与描述文案。Props: code/subtitle/error。 */
 import { Button } from '@/components/ui/button'
 
 defineProps<{

@@ -22,6 +22,7 @@ pub enum CommentTargetType {
 }
 
 impl CommentTargetType {
+    /// 返回目标类型的小写字符串标识，与数据库 `target_type` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Article => "article",
@@ -40,6 +41,7 @@ impl fmt::Display for CommentTargetType {
 impl FromStr for CommentTargetType {
     type Err = CommentError;
 
+    /// 解析目标类型字符串；未知取值返回 `CommentError::InvalidTargetType`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "article" => Ok(Self::Article),
@@ -66,6 +68,7 @@ pub enum CommentStatus {
 }
 
 impl CommentStatus {
+    /// 返回状态的小写字符串标识，与数据库 `status` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -99,6 +102,7 @@ impl fmt::Display for CommentStatus {
 impl FromStr for CommentStatus {
     type Err = CommentError;
 
+    /// 解析状态字符串；未知取值返回 `CommentError::InvalidStatus`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
@@ -126,6 +130,7 @@ pub enum AiRisk {
 }
 
 impl AiRisk {
+    /// 返回风险结论的小写字符串标识，与数据库 `ai_risk` 列取值一致。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Safe => "safe",
@@ -144,6 +149,7 @@ impl fmt::Display for AiRisk {
 impl FromStr for AiRisk {
     type Err = CommentError;
 
+    /// 解析风险结论字符串；未知取值归入 `CommentError::Validation`。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "safe" => Ok(Self::Safe),
@@ -275,6 +281,7 @@ pub struct DashboardStats {
 // Error
 // ============================================================
 
+/// 评论领域错误；访客输入校验错误与审核状态机错误在此区分表达。
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CommentError {
     #[error("invalid comment target type")]

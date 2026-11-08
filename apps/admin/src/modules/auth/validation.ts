@@ -1,7 +1,9 @@
+/** 必填校验：空白返回「请输入{fieldName}」。 */
 export function validateRequired(value: string, fieldName: string) {
   return value.trim() ? '' : `请输入${fieldName}`
 }
 
+/** 用户名格式：3–30 位字母/数字/短横线/下划线。 */
 export function validateUsername(value: string) {
   const username = value.trim()
   if (!username) return '请输入用户名'
@@ -11,6 +13,7 @@ export function validateUsername(value: string) {
   return ''
 }
 
+/** 邮箱格式校验：单一 @、域名含点、总长 ≤254、不含空白（与 Backend 规则对齐）。 */
 export function validateEmail(value: string) {
   const email = value.trim()
   if (!email) return '请输入邮箱'
@@ -28,6 +31,7 @@ export function validateEmail(value: string) {
   return ''
 }
 
+/** 显示名称：必填，按字符计不超过 60。 */
 export function validateDisplayName(value: string) {
   const length = Array.from(value.trim()).length
   if (length === 0) return '请输入显示名称'
@@ -35,6 +39,7 @@ export function validateDisplayName(value: string) {
   return ''
 }
 
+/** 密码强度：10–128 字符且同时包含字母与数字。 */
 export function validatePassword(value: string) {
   const length = Array.from(value).length
   if (length < 10 || length > 128) return '密码长度需要为 10 至 128 个字符'
@@ -44,6 +49,7 @@ export function validatePassword(value: string) {
   return ''
 }
 
+/** 头像 URL：可选；填写时须为 http/https 且不超过 2048 字符。 */
 export function validateAvatarUrl(value: string) {
   const avatarUrl = value.trim()
   if (!avatarUrl) return ''

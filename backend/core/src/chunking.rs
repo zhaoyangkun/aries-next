@@ -47,6 +47,7 @@ pub fn split_markdown(markdown: &str) -> Vec<ContentChunk> {
         }
     };
 
+    // 逐行扫描：遇到标题先把累积的块落盘，标题文本作为后续块的上下文（embedding 检索时保留章节归属）。
     for line in markdown.lines() {
         if let Some(title) = parse_heading(line) {
             flush(&heading, &body, &mut chunks);

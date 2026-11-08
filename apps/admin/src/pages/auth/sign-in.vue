@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 登录页：账号密码登录与初始化状态检测。 */
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'

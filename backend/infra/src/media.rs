@@ -1,3 +1,4 @@
+//! 媒体存储实现：PostgresMediaRepository（引用维护、清理查询）与本地/S3 存储后端。
 use std::{collections::HashSet, str::FromStr};
 
 use crate::like::like_pattern;
@@ -16,6 +17,7 @@ pub struct PostgresMediaRepository {
 }
 
 impl PostgresMediaRepository {
+    /// 新建仓储实例，持有连接池。
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -44,6 +46,7 @@ struct MediaAssetRow {
 impl TryFrom<MediaAssetRow> for MediaAsset {
     type Error = MediaError;
 
+    /// 查询行 → 领域对象：provider/status 字符串解析为枚举。
     fn try_from(row: MediaAssetRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -81,6 +84,7 @@ struct MediaUsageRow {
 impl TryFrom<MediaUsageRow> for MediaUsage {
     type Error = MediaError;
 
+    /// 查询行 → 领域对象：target_type 字符串解析为枚举。
     fn try_from(row: MediaUsageRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: row.id,
@@ -94,6 +98,7 @@ impl TryFrom<MediaUsageRow> for MediaUsage {
 
 #[async_trait]
 impl MediaRepository for PostgresMediaRepository {
+    /// 登记新资产（元信息 + 存储 object_key）。
     async fn create(&self, asset: NewMediaAsset) -> Result<MediaAsset, MediaError> {
         let query = format!(
             "INSERT INTO media_assets (provider, object_key, url, original_name, mime, \
@@ -118,6 +123,7 @@ impl MediaRepository for PostgresMediaRepository {
         row.try_into()
     }
 
+    /// 按 id 查询（含已软删，管理端详情/清理用）。
     async fn find(&self, asset_id: i64) -> Result<Option<MediaAsset>, MediaError> {
         let query = format!("SELECT {ASSET_COLUMNS} FROM media_assets WHERE id = $1");
         let row = logged_query_as::<MediaAssetRow>(&query)
@@ -128,6 +134,7 @@ impl MediaRepository for PostgresMediaRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 管理端分页列表：仅 active；count + 列表两条语句，created_at DESC, id DESC 稳定排序。
     async fn list(&self, query: MediaListQuery) -> Result<MediaPage, MediaError> {
         let page = query.page.max(1);
         let page_size = query.page_size.clamp(1, 100);
@@ -186,6 +193,7 @@ impl MediaRepository for PostgresMediaRepository {
         })
     }
 
+    /// 更新 alt/原始文件名；仅 active 行可更新。
     async fn update(&self, asset_id: i64, update: MediaUpdate) -> Result<MediaAsset, MediaError> {
         let query = format!(
             "UPDATE media_assets SET alt = $2, original_name = $3, updated_at = now() \
@@ -202,6 +210,7 @@ impl MediaRepository for PostgresMediaRepository {
         row.try_into()
     }
 
+    /// 软删除（status + deleted_at）；仅 active 行可删。
     async fn soft_delete(&self, asset_id: i64) -> Result<MediaAsset, MediaError> {
         let query = format!(
             "UPDATE media_assets SET status = 'deleted', deleted_at = now(), updated_at = now() \
@@ -216,6 +225,7 @@ impl MediaRepository for PostgresMediaRepository {
         row.try_into()
     }
 
+    /// 批量软删除：单事务内完成引用探测与删除（同一快照，避免探测后并发写入引用导致误删）；被引用/不存在项归类返回。
     async fn batch_delete(&self, asset_ids: &[i64]) -> Result<MediaBatchDeleteResult, MediaError> {
         let mut result = MediaBatchDeleteResult::default();
         if asset_ids.is_empty() {
@@ -283,6 +293,7 @@ impl MediaRepository for PostgresMediaRepository {
         Ok(result)
     }
 
+    /// 按 SHA-256 查 active 资产（重复上传检测；同 Hash 多条时取最早一条）。
     async fn find_by_hash(&self, sha256: &str) -> Result<Option<MediaAsset>, MediaError> {
         // 同 Hash 可能有多条，任取最早一条作为重复提示来源即可。
         let query = format!(
@@ -297,6 +308,7 @@ impl MediaRepository for PostgresMediaRepository {
         row.map(TryInto::try_into).transpose()
     }
 
+    /// 按 object_key 批量查 active 资产（导入冲突检测）。
     async fn find_by_object_keys(&self, keys: &[String]) -> Result<Vec<MediaAsset>, MediaError> {
         if keys.is_empty() {
             return Ok(Vec::new());
@@ -313,6 +325,7 @@ impl MediaRepository for PostgresMediaRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    /// 资产的全部引用列表。
     async fn usages_of(&self, asset_id: i64) -> Result<Vec<MediaUsage>, MediaError> {
         let rows = logged_query_as::<MediaUsageRow>(
             "SELECT id, asset_id, target_type, target_id, created_at FROM media_usages \
@@ -325,6 +338,7 @@ impl MediaRepository for PostgresMediaRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    /// 全量重建文章的媒体引用（先清 Cover/正文引用再按最终内容写入；同事务）。
     async fn replace_article_usages(
         &self,
         article_id: i64,
@@ -370,6 +384,7 @@ impl MediaRepository for PostgresMediaRepository {
         transaction.commit().await.map_err(map_sqlx)
     }
 
+    /// 引用计数。
     async fn count_usages(&self, asset_id: i64) -> Result<i64, MediaError> {
         logged_query_scalar::<i64>("SELECT count(*) FROM media_usages WHERE asset_id = $1")
             .bind(asset_id)
@@ -378,6 +393,7 @@ impl MediaRepository for PostgresMediaRepository {
             .map_err(map_sqlx)
     }
 
+    /// 待补尺寸的图片来源（metadata_probe Worker 任务队列）。
     async fn list_missing_dimensions(&self, limit: i64) -> Result<Vec<MediaAsset>, MediaError> {
         let query = format!(
             "SELECT {ASSET_COLUMNS} FROM media_assets \
@@ -392,6 +408,7 @@ impl MediaRepository for PostgresMediaRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    /// 回填宽高。
     async fn update_dimensions(
         &self,
         asset_id: i64,
@@ -410,6 +427,7 @@ impl MediaRepository for PostgresMediaRepository {
         Ok(())
     }
 
+    /// 零引用的已删除资产（物理清理候选；删除动作在 purge 内再次复核引用数）。
     async fn list_purgeable(&self, limit: i64) -> Result<Vec<MediaAsset>, MediaError> {
         // 零引用判定与删除分离在两个步骤，Worker 逐个 purge 时会再次校验引用数。
         let query = format!(
@@ -425,6 +443,7 @@ impl MediaRepository for PostgresMediaRepository {
         rows.into_iter().map(TryInto::try_into).collect()
     }
 
+    /// 物理删除：事务内先复核引用数（防与并发引用写入竞争），仅 status = 'deleted' 可删。
     async fn purge(&self, asset_id: i64) -> Result<(), MediaError> {
         // 物理删除前在事务内复核引用数，防止与并发的引用写入竞争。
         let mut transaction = self.pool.begin().await.map_err(map_sqlx)?;
@@ -450,6 +469,7 @@ impl MediaRepository for PostgresMediaRepository {
     }
 }
 
+/// SQLx 错误到 MediaError 的映射（存储故障记日志后归为 StoreUnavailable）。
 fn map_sqlx(error: sqlx::Error) -> MediaError {
     if error
         .as_database_error()

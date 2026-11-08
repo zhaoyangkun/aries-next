@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** Markdown 导入对话框：上传 .md 包、预览冲突并选择策略提交。Props: open。 */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   CircleAlertIcon,

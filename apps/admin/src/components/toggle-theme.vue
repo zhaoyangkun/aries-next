@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 主题切换按钮（tweakcn 主题体系）。 */
 import { MoonIcon, SunIcon, SunMoonIcon } from '@lucide/vue'
 import { useColorMode } from '@vueuse/core'
 

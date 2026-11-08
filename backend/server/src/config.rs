@@ -1,3 +1,4 @@
+//! ServerConfig：环境变量解析与校验（监听地址、数据库、Origin 白名单、日志与邮件开关等）。
 use std::{env, net::SocketAddr};
 
 use anyhow::{Context, bail};
@@ -24,6 +25,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
+    /// 从环境变量装配 Server 配置；BOOTSTRAP_SECRET 必填且 ≥24 字符；ADMIN_ORIGINS 解析为精确 Origin 列表。
     pub fn from_env() -> anyhow::Result<Self> {
         let address = env::var("SERVER_ADDR")
             .unwrap_or_else(|_| "0.0.0.0:8088".to_owned())
@@ -107,6 +109,7 @@ impl ServerConfig {
     }
 }
 
+/// 校验单个 Origin 为 http/https 绝对 URL。
 fn validate_origin(origin: &str) -> anyhow::Result<()> {
     let uri = origin
         .parse::<axum::http::Uri>()
@@ -121,6 +124,7 @@ fn validate_origin(origin: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 解析逗号分隔的 Origin 白名单（逐个校验，非法值直接失败）。
 fn parse_origins(value: &str) -> anyhow::Result<Vec<String>> {
     let mut origins = Vec::new();
     for origin in value
@@ -139,6 +143,7 @@ fn parse_origins(value: &str) -> anyhow::Result<Vec<String>> {
     Ok(origins)
 }
 
+/// 解析布尔型环境变量（true/false/1/0，大小写不敏感）。
 fn parse_bool(name: &str, value: &str) -> anyhow::Result<bool> {
     match value {
         "true" | "1" => Ok(true),
