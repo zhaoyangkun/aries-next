@@ -173,6 +173,10 @@ pub async fn maybe_app_with_ai_and_email(
             rate_limiter: Default::default(),
             log_handle: std::sync::Arc::new(aries_server::logging::LogHandle::noop()),
             log_wake: aries_server::log_store::log_wake_channel(),
+            metrics: std::sync::Arc::new(aries_server::metrics::MetricsCollector::new(
+                test_pool.clone(),
+            )),
+            metrics_history: std::sync::Arc::new(aries_server::metrics::MetricsHistory::new()),
         };
         let app = aries_server::build_app(state.clone())?;
         Ok::<_, anyhow::Error>((app, state))
@@ -601,6 +605,10 @@ pub fn lazy_state(config: aries_server::config::ServerConfig) -> aries_server::s
         rate_limiter: Default::default(),
         log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
         log_wake: aries_server::log_store::log_wake_channel(),
+        metrics: Arc::new(aries_server::metrics::MetricsCollector::new(
+            database.clone(),
+        )),
+        metrics_history: Arc::new(aries_server::metrics::MetricsHistory::new()),
     }
 }
 

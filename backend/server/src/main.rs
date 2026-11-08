@@ -79,10 +79,16 @@ async fn main() -> anyhow::Result<()> {
         rate_limiter: Default::default(),
         log_handle,
         log_wake,
+        metrics: Arc::new(aries_server::metrics::MetricsCollector::new(
+            database.clone(),
+        )),
+        metrics_history: Arc::new(aries_server::metrics::MetricsHistory::new()),
     };
     let app = build_app(state.clone())?;
     // 后台任务 Worker 随服务启动；失败任务按 max_attempts 自动重试。
-    let worker_handle = worker::spawn(state);
+    let worker_handle = worker::spawn(state.clone());
+    // 历史趋势采样：10s 周期入环形缓冲（内存态，停机直接 abort，无排空需求）。
+    let metrics_sampler_handle = aries_server::metrics::spawn_history_sampler(state);
     let listener = tokio::net::TcpListener::bind(config.address).await?;
     info!(address = %config.address, "aries server started");
     // ConnectInfo 向 Handler 提供连接对端地址，用于登录限流的 IP 维度。
@@ -105,8 +111,9 @@ async fn main() -> anyhow::Result<()> {
         tracing::error!("log writer did not finish drain in time; exiting anyway");
     }
     // 2. 后台任务轮询语义是「可直接停」（任务按 max_attempts 重试，无排空需求），
-    //    直接 abort；与日志 writer 的排空等待刻意区分。
+    //    直接 abort；与日志 writer 的排空等待刻意区分。历史采样循环同理。
     worker_handle.abort();
+    metrics_sampler_handle.abort();
     // 3. `_worker`（tracing_appender 的 WorkerGuard）在此之后随 main 返回 drop，
     //    flush 文件日志缓冲区。
 

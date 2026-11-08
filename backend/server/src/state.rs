@@ -21,7 +21,11 @@ use aries_core::{
 use sqlx::PgPool;
 
 use crate::{
-    config::ServerConfig, log_store::LogWakeSender, logging::LogHandle, rate_limit::RateLimiter,
+    config::ServerConfig,
+    log_store::LogWakeSender,
+    logging::LogHandle,
+    metrics::{MetricsCollector, MetricsHistory},
+    rate_limit::RateLimiter,
 };
 
 #[derive(Clone)]
@@ -54,4 +58,8 @@ pub struct AppState {
     /// 日志落库唤醒信号（`log_store::spawn_writer` 每次批量 INSERT 成功后广播）：
     /// SSE tail 连接 `subscribe()` 后按需拉取，空闲时零 DB 轮询。
     pub log_wake: LogWakeSender,
+    /// 系统指标采集器（主机 + 进程自身 + PostgreSQL 快照缓存）。
+    pub metrics: Arc<MetricsCollector>,
+    /// 历史趋势环形缓冲（10s 采样、24h 容量；由 `metrics::spawn_history_sampler` 回填）。
+    pub metrics_history: Arc<MetricsHistory>,
 }

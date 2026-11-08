@@ -260,6 +260,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/system/': RouteRecordInfo<
+      '/system/',
+      '/system',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/tags/': RouteRecordInfo<
       '/tags/',
       '/tags',
@@ -538,6 +545,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/settings/social.vue': {
       routes:
         | '/settings/social'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/system/index.vue': {
+      routes:
+        | '/system/'
       views:
         | never
       pathParamNames:

@@ -137,6 +137,10 @@ use utoipa::{Modify, OpenApi};
         crate::http::logs::get_filter_override,
         crate::http::logs::set_filter_override,
         crate::http::logs::tail_logs,
+        // Admin System
+        crate::http::system::get_metrics,
+        crate::http::system::stream_metrics,
+        crate::http::system::get_metrics_history,
         // Admin Profile
         crate::http::profile::get_profile,
         crate::http::profile::update_profile,

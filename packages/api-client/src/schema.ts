@@ -1473,6 +1473,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/system/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 系统指标快照
+         * @description 采集一次完整系统指标：主机 CPU（全局/每核）、内存、Swap、磁盘各挂载点、网络速率与累计、负载、进程数、uptime，以及 aries-server 进程 RSS / 运行时长和 PostgreSQL 库大小 / 活跃连接数。PostgreSQL 指标带 30 秒缓存，查询失败时该段为 null。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["getSystemMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/system/metrics/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 系统指标历史趋势
+         * @description 读取内存环形缓冲中的历史采样点（10 秒采样、保留 24 小时、服务重启即清空，属可丢弃数据）。窗口默认 1 小时、上限 24 小时；窗口内超过 360 点时按时间均匀聚合为平均值。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["getSystemMetricsHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/system/metrics/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 实时推送系统指标（SSE）
+         * @description 以 5 秒为周期采集并推送完整系统指标快照（形状同 `SystemMetricsResponse`）；`Sse::keep_alive` 每 15 秒补发注释帧，防止反向代理空闲断连。客户端断开即结束采集循环。仅 Owner（`ManageSettings`）可访问。
+         */
+        get: operations["streamSystemMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/tags": {
         parameters: {
             query?: never;
@@ -2477,6 +2537,19 @@ export interface components {
             /** @description `skip`（跳过）或 `rename`（自动改名落库）。 */
             strategy: string;
         };
+        /**
+         * CpuMetrics
+         * @description CPU 使用率（0–100）。
+         */
+        CpuMetrics: {
+            /** @description 每核使用率（顺序与系统枚举一致）。 */
+            per_core: number[];
+            /**
+             * Format: float
+             * @description 全局使用率。
+             */
+            percent: number;
+        };
         CreateArticleRequest: {
             /**
              * @description 文章访问密码（明文，服务端以 Argon2id 哈希后存储，任何响应都不回显）。
@@ -2550,6 +2623,20 @@ export interface components {
             comments: components["schemas"]["CommentStats"];
             recent_failed_jobs: components["schemas"]["FailedJobResponse"][];
             recent_pending_comments: components["schemas"]["CommentResponse"][];
+        };
+        /**
+         * DiskMetrics
+         * @description 磁盘挂载点占用。
+         */
+        DiskMetrics: {
+            file_system: string;
+            /** @description 挂载路径（Windows 为盘符根路径）。 */
+            mount_point: string;
+            name: string;
+            /** Format: int64 */
+            total_bytes: number;
+            /** Format: int64 */
+            used_bytes: number;
         };
         EmailDeliveryPageResponse: {
             items: components["schemas"]["EmailDeliveryResponse"][];
@@ -2742,6 +2829,32 @@ export interface components {
             /** @description 固定为 `ok`。 */
             status: string;
         };
+        /**
+         * HistoryBucket
+         * @description 单个历史数据点（或聚合桶）。
+         */
+        HistoryBucket: {
+            /** @description 桶起点，RFC 3339。 */
+            bucket: string;
+            /**
+             * Format: float
+             * @description 全局 CPU 使用率（0–100；聚合桶为平均值）。
+             */
+            cpu_percent: number;
+            /**
+             * Format: int64
+             * @description 全部挂载点合计已用。
+             */
+            disk_used_bytes: number;
+            /** Format: int64 */
+            memory_total_bytes: number;
+            /** Format: int64 */
+            memory_used_bytes: number;
+            /** Format: int64 */
+            network_rx_bytes_per_sec: number;
+            /** Format: int64 */
+            network_tx_bytes_per_sec: number;
+        };
         ImportJobResponse: {
             items: components["schemas"]["ImportPreview"][];
             /** Format: int64 */
@@ -2860,6 +2973,18 @@ export interface components {
             /** @description 链接地址，仅允许 http/https。 */
             url: string;
         };
+        /**
+         * LoadMetrics
+         * @description 系统负载均值（Windows 恒为 0，无 loadavg 概念）。
+         */
+        LoadMetrics: {
+            /** Format: double */
+            fifteen: number;
+            /** Format: double */
+            five: number;
+            /** Format: double */
+            one: number;
+        };
         LogItem: {
             fields: unknown;
             /** Format: int64 */
@@ -2976,6 +3101,21 @@ export interface components {
             /** @description 引用方类型：`article_cover` / `article_content` / `gallery_item`。 */
             target_type: string;
         };
+        /**
+         * MemoryMetrics
+         * @description 物理内存占用。
+         */
+        MemoryMetrics: {
+            /**
+             * Format: float
+             * @description 使用率（0–100，由服务端算好，前端直接展示）。
+             */
+            percent: number;
+            /** Format: int64 */
+            total_bytes: number;
+            /** Format: int64 */
+            used_bytes: number;
+        };
         MessageResponse: {
             /** @description 人类可读结果信息。 */
             message: string;
@@ -3043,6 +3183,32 @@ export interface components {
             slug: string;
             title: string;
         };
+        /**
+         * NetworkMetrics
+         * @description 全部网卡合计网络 IO。
+         */
+        NetworkMetrics: {
+            /**
+             * Format: int64
+             * @description 接收速率（B/s，相邻采样差值 / 间隔）。
+             */
+            rx_bytes_per_sec: number;
+            /**
+             * Format: int64
+             * @description 累计接收字节数（计数器）。
+             */
+            total_received_bytes: number;
+            /**
+             * Format: int64
+             * @description 累计发送字节数（计数器）。
+             */
+            total_transmitted_bytes: number;
+            /**
+             * Format: int64
+             * @description 发送速率（B/s）。
+             */
+            tx_bytes_per_sec: number;
+        };
         PagePageResponse: {
             items: components["schemas"]["PageResponse"][];
             /** Format: int32 */
@@ -3086,6 +3252,22 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * PgMetrics
+         * @description PostgreSQL 侧运维指标。
+         */
+        PgMetrics: {
+            /**
+             * Format: int64
+             * @description 当前数据库活跃连接数（`pg_stat_activity`）。
+             */
+            active_connections: number;
+            /**
+             * Format: int64
+             * @description 当前数据库磁盘占用（`pg_database_size`）。
+             */
+            database_size_bytes: number;
         };
         PreviewArticleRequest: {
             /** @description Markdown 原文，最长 1,000,000 字符。 */
@@ -3552,6 +3734,22 @@ export interface components {
             /** @description 发送结果：成功固定为 `sent`。 */
             status: string;
         };
+        /**
+         * ServerMetrics
+         * @description aries-server 进程自身指标。
+         */
+        ServerMetrics: {
+            /**
+             * Format: int64
+             * @description 进程常驻内存（RSS）。
+             */
+            rss_bytes: number;
+            /**
+             * Format: int64
+             * @description 进程已运行秒数。
+             */
+            uptime_seconds: number;
+        };
         SessionResponse: {
             /**
              * Format: date-time
@@ -3654,6 +3852,62 @@ export interface components {
             content: string;
             /** @description 文章标题。 */
             title: string;
+        };
+        /**
+         * SwapMetrics
+         * @description Swap 占用（未配置 Swap 时 total 为 0）。
+         */
+        SwapMetrics: {
+            /** Format: int64 */
+            total_bytes: number;
+            /** Format: int64 */
+            used_bytes: number;
+        };
+        /**
+         * SystemMetricsHistoryResponse
+         * @description 历史趋势：内存环形缓冲的采样点序列（10s 采样、保留 24h、重启清空）。
+         */
+        SystemMetricsHistoryResponse: {
+            buckets: components["schemas"]["HistoryBucket"][];
+            /** Format: int32 */
+            hours: number;
+            /**
+             * Format: int64
+             * @description 相邻数据点的名义间隔秒数（聚合后为桶宽）。
+             */
+            interval_seconds: number;
+        };
+        /**
+         * SystemMetricsResponse
+         * @description 系统指标快照：主机 CPU / 内存 / 磁盘 / 网络 / 负载 / 进程数，加上 aries-server 进程自身与 PostgreSQL 侧指标。
+         */
+        SystemMetricsResponse: {
+            cpu: components["schemas"]["CpuMetrics"];
+            /** @description 各磁盘挂载点。 */
+            disks: components["schemas"]["DiskMetrics"][];
+            host_name?: string | null;
+            kernel_version?: string | null;
+            /** @description 系统负载均值（Windows 恒为 0）。 */
+            load: components["schemas"]["LoadMetrics"];
+            memory: components["schemas"]["MemoryMetrics"];
+            network: components["schemas"]["NetworkMetrics"];
+            os_version?: string | null;
+            pg?: null | components["schemas"]["PgMetrics"];
+            /**
+             * Format: int64
+             * @description 系统进程总数。
+             */
+            process_count: number;
+            /** @description aries-server 进程自身指标。 */
+            server: components["schemas"]["ServerMetrics"];
+            swap: components["schemas"]["SwapMetrics"];
+            /** @description 采样时刻，RFC 3339。 */
+            ts: string;
+            /**
+             * Format: int64
+             * @description 主机已运行秒数。
+             */
+            uptime_seconds: number;
         };
         /**
          * TagResponse
@@ -9431,6 +9685,123 @@ export interface operations {
                 };
             };
             /** @description 非 Owner（settings:manage） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSystemMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 系统指标快照 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemMetricsResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSystemMetricsHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 查询窗口（小时）：默认 1，范围 1–24（越界钳位）；采样 10 秒一点，超 360 点时按时间均匀聚合为平均值。 */
+                hours: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 历史采样点序列（时间升序） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemMetricsHistoryResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    streamSystemMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 流（持续响应，客户端断开即结束） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["SystemMetricsResponse"];
+                };
+            };
+            /** @description 未认证 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 无 settings:manage 权限 */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -1,4 +1,5 @@
 import {
+  ActivityIcon,
   FileIcon,
   FileTextIcon,
   FolderTreeIcon,
@@ -87,6 +88,7 @@ export const navData: NavGroup[] = [
       { title: '媒体库', url: '/media', icon: ImageIcon, permission: 'content:manage' },
       { title: '审计日志', url: '/audit-logs', icon: ScrollTextIcon, permission: 'settings:manage' },
       { title: '运行日志', url: '/logs', icon: SquareTerminalIcon, permission: 'settings:manage' },
+      { title: '系统监控', url: '/system', icon: ActivityIcon, permission: 'settings:manage' },
       { title: '设置', items: settingsNavItems, icon: SettingsIcon, permission: 'profile:manage' },
     ],
   },

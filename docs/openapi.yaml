@@ -4854,6 +4854,101 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       security:
       - cookieAuth: []
+  /api/admin/system/metrics:
+    get:
+      tags:
+      - Admin System
+      summary: 系统指标快照
+      description: 采集一次完整系统指标：主机 CPU（全局/每核）、内存、Swap、磁盘各挂载点、网络速率与累计、负载、进程数、uptime，以及 aries-server 进程 RSS / 运行时长和 PostgreSQL 库大小 / 活跃连接数。PostgreSQL 指标带 30 秒缓存，查询失败时该段为 null。仅 Owner（`ManageSettings`）可访问。
+      operationId: getSystemMetrics
+      responses:
+        '200':
+          description: 系统指标快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemMetricsResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无 settings:manage 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
+  /api/admin/system/metrics/history:
+    get:
+      tags:
+      - Admin System
+      summary: 系统指标历史趋势
+      description: 读取内存环形缓冲中的历史采样点（10 秒采样、保留 24 小时、服务重启即清空，属可丢弃数据）。窗口默认 1 小时、上限 24 小时；窗口内超过 360 点时按时间均匀聚合为平均值。仅 Owner（`ManageSettings`）可访问。
+      operationId: getSystemMetricsHistory
+      parameters:
+      - name: hours
+        in: path
+        description: 查询窗口（小时）：默认 1，范围 1–24（越界钳位）；采样 10 秒一点，超 360 点时按时间均匀聚合为平均值。
+        required: true
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+      responses:
+        '200':
+          description: 历史采样点序列（时间升序）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemMetricsHistoryResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无 settings:manage 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
+  /api/admin/system/metrics/stream:
+    get:
+      tags:
+      - Admin System
+      summary: 实时推送系统指标（SSE）
+      description: 以 5 秒为周期采集并推送完整系统指标快照（形状同 `SystemMetricsResponse`）；`Sse::keep_alive` 每 15 秒补发注释帧，防止反向代理空闲断连。客户端断开即结束采集循环。仅 Owner（`ManageSettings`）可访问。
+      operationId: streamSystemMetrics
+      responses:
+        '200':
+          description: SSE 流（持续响应，客户端断开即结束）
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SystemMetricsResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无 settings:manage 权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - cookieAuth: []
   /api/admin/tags:
     get:
       tags:
@@ -6616,6 +6711,24 @@ components:
         strategy:
           type: string
           description: '`skip`（跳过）或 `rename`（自动改名落库）。'
+    CpuMetrics:
+      type: object
+      title: CpuMetrics
+      description: CPU 使用率（0–100）。
+      required:
+      - percent
+      - per_core
+      properties:
+        per_core:
+          type: array
+          items:
+            type: number
+            format: float
+          description: 每核使用率（顺序与系统枚举一致）。
+        percent:
+          type: number
+          format: float
+          description: 全局使用率。
     CreateArticleRequest:
       type: object
       required:
@@ -6757,6 +6870,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommentResponse'
+    DiskMetrics:
+      type: object
+      title: DiskMetrics
+      description: 磁盘挂载点占用。
+      required:
+      - mount_point
+      - name
+      - file_system
+      - total_bytes
+      - used_bytes
+      properties:
+        file_system:
+          type: string
+        mount_point:
+          type: string
+          description: 挂载路径（Windows 为盘符根路径）。
+        name:
+          type: string
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
     EmailDeliveryPageResponse:
       type: object
       required:
@@ -7120,6 +7259,47 @@ components:
         status:
           type: string
           description: 固定为 `ok`。
+    HistoryBucket:
+      type: object
+      title: HistoryBucket
+      description: 单个历史数据点（或聚合桶）。
+      required:
+      - bucket
+      - cpu_percent
+      - memory_used_bytes
+      - memory_total_bytes
+      - disk_used_bytes
+      - network_rx_bytes_per_sec
+      - network_tx_bytes_per_sec
+      properties:
+        bucket:
+          type: string
+          description: 桶起点，RFC 3339。
+        cpu_percent:
+          type: number
+          format: float
+          description: 全局 CPU 使用率（0–100；聚合桶为平均值）。
+        disk_used_bytes:
+          type: integer
+          format: int64
+          description: 全部挂载点合计已用。
+          minimum: 0
+        memory_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        memory_used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        network_rx_bytes_per_sec:
+          type: integer
+          format: int64
+          minimum: 0
+        network_tx_bytes_per_sec:
+          type: integer
+          format: int64
+          minimum: 0
     ImportJobResponse:
       type: object
       required:
@@ -7365,6 +7545,24 @@ components:
         url:
           type: string
           description: 链接地址，仅允许 http/https。
+    LoadMetrics:
+      type: object
+      title: LoadMetrics
+      description: 系统负载均值（Windows 恒为 0，无 loadavg 概念）。
+      required:
+      - one
+      - five
+      - fifteen
+      properties:
+        fifteen:
+          type: number
+          format: double
+        five:
+          type: number
+          format: double
+        one:
+          type: number
+          format: double
     LogItem:
       type: object
       required:
@@ -7611,6 +7809,27 @@ components:
         target_type:
           type: string
           description: 引用方类型：`article_cover` / `article_content` / `gallery_item`。
+    MemoryMetrics:
+      type: object
+      title: MemoryMetrics
+      description: 物理内存占用。
+      required:
+      - used_bytes
+      - total_bytes
+      - percent
+      properties:
+        percent:
+          type: number
+          format: float
+          description: 使用率（0–100，由服务端算好，前端直接展示）。
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
     MessageResponse:
       type: object
       required:
@@ -7749,6 +7968,36 @@ components:
           type: string
         title:
           type: string
+    NetworkMetrics:
+      type: object
+      title: NetworkMetrics
+      description: 全部网卡合计网络 IO。
+      required:
+      - rx_bytes_per_sec
+      - tx_bytes_per_sec
+      - total_received_bytes
+      - total_transmitted_bytes
+      properties:
+        rx_bytes_per_sec:
+          type: integer
+          format: int64
+          description: 接收速率（B/s，相邻采样差值 / 间隔）。
+          minimum: 0
+        total_received_bytes:
+          type: integer
+          format: int64
+          description: 累计接收字节数（计数器）。
+          minimum: 0
+        total_transmitted_bytes:
+          type: integer
+          format: int64
+          description: 累计发送字节数（计数器）。
+          minimum: 0
+        tx_bytes_per_sec:
+          type: integer
+          format: int64
+          description: 发送速率（B/s）。
+          minimum: 0
     PagePageResponse:
       type: object
       required:
@@ -7841,6 +8090,22 @@ components:
         updated_at:
           type: string
           format: date-time
+    PgMetrics:
+      type: object
+      title: PgMetrics
+      description: PostgreSQL 侧运维指标。
+      required:
+      - database_size_bytes
+      - active_connections
+      properties:
+        active_connections:
+          type: integer
+          format: int64
+          description: 当前数据库活跃连接数（`pg_stat_activity`）。
+        database_size_bytes:
+          type: integer
+          format: int64
+          description: 当前数据库磁盘占用（`pg_database_size`）。
     PreviewArticleRequest:
       type: object
       required:
@@ -8698,6 +8963,24 @@ components:
         status:
           type: string
           description: 发送结果：成功固定为 `sent`。
+    ServerMetrics:
+      type: object
+      title: ServerMetrics
+      description: aries-server 进程自身指标。
+      required:
+      - rss_bytes
+      - uptime_seconds
+      properties:
+        rss_bytes:
+          type: integer
+          format: int64
+          description: 进程常驻内存（RSS）。
+          minimum: 0
+        uptime_seconds:
+          type: integer
+          format: int64
+          description: 进程已运行秒数。
+          minimum: 0
     SessionResponse:
       type: object
       required:
@@ -8843,6 +9126,109 @@ components:
         title:
           type: string
           description: 文章标题。
+    SwapMetrics:
+      type: object
+      title: SwapMetrics
+      description: Swap 占用（未配置 Swap 时 total 为 0）。
+      required:
+      - used_bytes
+      - total_bytes
+      properties:
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+    SystemMetricsHistoryResponse:
+      type: object
+      title: SystemMetricsHistoryResponse
+      description: 历史趋势：内存环形缓冲的采样点序列（10s 采样、保留 24h、重启清空）。
+      required:
+      - hours
+      - interval_seconds
+      - buckets
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryBucket'
+        hours:
+          type: integer
+          format: int32
+          minimum: 0
+        interval_seconds:
+          type: integer
+          format: int64
+          description: 相邻数据点的名义间隔秒数（聚合后为桶宽）。
+          minimum: 0
+    SystemMetricsResponse:
+      type: object
+      title: SystemMetricsResponse
+      description: 系统指标快照：主机 CPU / 内存 / 磁盘 / 网络 / 负载 / 进程数，加上 aries-server 进程自身与 PostgreSQL 侧指标。
+      required:
+      - ts
+      - cpu
+      - memory
+      - swap
+      - disks
+      - network
+      - load
+      - process_count
+      - uptime_seconds
+      - server
+      properties:
+        cpu:
+          $ref: '#/components/schemas/CpuMetrics'
+        disks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiskMetrics'
+          description: 各磁盘挂载点。
+        host_name:
+          type:
+          - string
+          - 'null'
+        kernel_version:
+          type:
+          - string
+          - 'null'
+        load:
+          $ref: '#/components/schemas/LoadMetrics'
+          description: 系统负载均值（Windows 恒为 0）。
+        memory:
+          $ref: '#/components/schemas/MemoryMetrics'
+        network:
+          $ref: '#/components/schemas/NetworkMetrics'
+        os_version:
+          type:
+          - string
+          - 'null'
+        pg:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PgMetrics'
+            description: PostgreSQL 侧指标（查询失败时为 null，不影响其他字段）。
+        process_count:
+          type: integer
+          format: int64
+          description: 系统进程总数。
+          minimum: 0
+        server:
+          $ref: '#/components/schemas/ServerMetrics'
+          description: aries-server 进程自身指标。
+        swap:
+          $ref: '#/components/schemas/SwapMetrics'
+        ts:
+          type: string
+          description: 采样时刻，RFC 3339。
+        uptime_seconds:
+          type: integer
+          format: int64
+          description: 主机已运行秒数。
+          minimum: 0
     TagResponse:
       type: object
       title: TagResponse

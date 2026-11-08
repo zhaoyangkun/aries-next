@@ -24,6 +24,7 @@ pub mod profile;
 pub mod public;
 pub mod settings_groups;
 pub mod site_settings;
+pub mod system;
 pub mod taxonomy;
 
 use axum::{
@@ -72,6 +73,7 @@ pub fn admin_router(state: AppState) -> Router<AppState> {
         .merge(ai::router())
         .merge(email::router())
         .merge(logs::router())
+        .merge(system::router())
         .route_layer(middleware::from_fn_with_state(state, enforce_origin))
 }
 

@@ -1046,6 +1046,10 @@ fn test_app(role: Role) -> Router {
         rate_limiter: RateLimiter::default(),
         log_handle: Arc::new(aries_server::logging::LogHandle::noop()),
         log_wake: aries_server::log_store::log_wake_channel(),
+        metrics: Arc::new(aries_server::metrics::MetricsCollector::new(
+            database.clone(),
+        )),
+        metrics_history: Arc::new(aries_server::metrics::MetricsHistory::new()),
     })
     .unwrap()
 }
