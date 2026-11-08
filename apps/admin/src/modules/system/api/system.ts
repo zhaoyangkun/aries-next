@@ -3,8 +3,10 @@ import { api } from '@/shared/api/client'
 export interface CpuMetrics {
   /** 全局使用率（0–100）。 */
   percent: number
-  /** 每核使用率。 */
+  /** 每核使用率（枚举单位为逻辑处理器，8 核 16 线程为 16 项）。 */
   per_core: number[]
+  /** 物理核心数（超线程不计；拿不到为 null）。 */
+  physical_cores: number | null
   /** CPU 型号名（拿不到为 null）。 */
   brand: string | null
   /** 当前频率（各核 MHz 平均值；拿不到为 null）。 */

@@ -82,7 +82,10 @@ pub struct SystemSnapshot {
     /// 全局 CPU 使用率（0–100）。
     pub cpu_percent: f32,
     /// 每核使用率（顺序与系统枚举一致），供前端画核占用格。
+    /// 注意 `cpus()` 枚举的是**逻辑处理器**（含超线程），即 8 核 16 线程为 16 项。
     pub per_core_percent: Vec<f32>,
+    /// 物理核心数（超线程不计；拿不到为 None，回退逻辑核数展示）。
+    pub cpu_physical_cores: Option<usize>,
     /// CPU 型号名（多核相同，取首核；拿不到为 None）。
     pub cpu_brand: Option<String>,
     /// 当前频率（各核 MHz 的平均值，取整；拿不到为 None）。
@@ -195,6 +198,7 @@ impl MetricsCollector {
         let (
             cpu_percent,
             per_core_percent,
+            cpu_physical_cores,
             cpu_brand,
             cpu_frequency_mhz,
             memory,
@@ -215,6 +219,8 @@ impl MetricsCollector {
             let cpu_percent = system.global_cpu_usage();
             let cpus = system.cpus();
             let per_core_percent = cpus.iter().map(|cpu| cpu.usage()).collect();
+            // 物理核数与逻辑核数区分展示（8 核 16 线程的机器 cpus() 为 16）。
+            let cpu_physical_cores = System::physical_core_count().ok();
             // 品牌名多核一致，取首核；频率取各核平均（核间动态调频时更平稳）。
             let cpu_brand = cpus
                 .first()
@@ -229,6 +235,7 @@ impl MetricsCollector {
             (
                 cpu_percent,
                 per_core_percent,
+                cpu_physical_cores,
                 cpu_brand,
                 cpu_frequency_mhz,
                 (
@@ -275,6 +282,7 @@ impl MetricsCollector {
             ts: OffsetDateTime::now_utc(),
             cpu_percent,
             per_core_percent,
+            cpu_physical_cores,
             cpu_brand,
             cpu_frequency_mhz,
             memory_used_bytes: memory.0,

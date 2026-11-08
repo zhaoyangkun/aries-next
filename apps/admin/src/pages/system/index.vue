@@ -138,6 +138,15 @@ function diskPercent(disk: { used_bytes: number, total_bytes: number }) {
   return Math.min(100, (disk.used_bytes / disk.total_bytes) * 100)
 }
 
+// CPU 数量标签：物理核 + 逻辑线程（sysinfo 枚举的是逻辑处理器）。
+const cpuCountLabel = computed(() => {
+  const logical = metrics.value?.cpu.per_core.length
+  if (!logical)
+    return ''
+  const physical = metrics.value?.cpu.physical_cores
+  return physical ? `${physical} 核 · ${logical} 线程` : `${logical} 线程`
+})
+
 // 主频格式化：MHz → GHz（>=1000）或 MHz。
 function formatFrequency(mhz: number | null): string {
   if (mhz == null || mhz <= 0)
@@ -282,7 +291,7 @@ onBeforeUnmount(() => {
                 </p>
               </div>
               <Badge variant="outline" class="h-5 shrink-0 px-1.5 text-xs font-normal tabular-nums">
-                {{ metrics ? `${metrics.cpu.per_core.length} 核 · ${formatFrequency(metrics.cpu.frequency_mhz)}` : '-' }}
+                {{ metrics ? `${cpuCountLabel} · ${formatFrequency(metrics.cpu.frequency_mhz)}` : '-' }}
               </Badge>
             </CardHeader>
             <CardContent class="space-y-3">

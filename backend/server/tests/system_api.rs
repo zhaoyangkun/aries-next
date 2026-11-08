@@ -107,6 +107,17 @@ async fn metrics_snapshot_contains_host_process_and_pg_metrics() -> anyhow::Resu
         // CPU 型号与频率：字段恒在（容器/虚拟机可能为 null，但键必须在）。
         ensure!(body["cpu"].get("brand").is_some());
         ensure!(body["cpu"].get("frequency_mhz").is_some());
+        ensure!(body["cpu"].get("physical_cores").is_some());
+        // 物理核数（若可得）不超逻辑核数。
+        if let (Some(physical), Some(logical)) = (
+            body["cpu"]["physical_cores"].as_u64(),
+            body["cpu"]["per_core"]
+                .as_array()
+                .map(Vec::len)
+                .map(|n| n as u64),
+        ) {
+            ensure!(physical <= logical, "physical cores > logical cpus");
+        }
         // 内存可用量字段恒在且不大于总量。
         let available = body["memory"]["available_bytes"]
             .as_u64()

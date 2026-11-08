@@ -2569,13 +2569,18 @@ export interface components {
              * @description 当前频率（各核 MHz 平均值；拿不到为 null）。
              */
             frequency_mhz?: number | null;
-            /** @description 每核使用率（顺序与系统枚举一致）。 */
+            /** @description 每核使用率（顺序与系统枚举一致；枚举单位为逻辑处理器，8 核 16 线程为 16 项）。 */
             per_core: number[];
             /**
              * Format: float
              * @description 全局使用率。
              */
             percent: number;
+            /**
+             * Format: int32
+             * @description 物理核心数（超线程不计；拿不到为 null）。
+             */
+            physical_cores?: number | null;
         };
         CreateArticleRequest: {
             /**

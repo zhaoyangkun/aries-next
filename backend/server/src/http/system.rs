@@ -78,8 +78,10 @@ struct TempSensor {
 struct CpuMetrics {
     /// 全局使用率。
     percent: f32,
-    /// 每核使用率（顺序与系统枚举一致）。
+    /// 每核使用率（顺序与系统枚举一致；枚举单位为逻辑处理器，8 核 16 线程为 16 项）。
     per_core: Vec<f32>,
+    /// 物理核心数（超线程不计；拿不到为 null）。
+    physical_cores: Option<u32>,
     /// CPU 型号名（拿不到为 null）。
     brand: Option<String>,
     /// 当前频率（各核 MHz 平均值；拿不到为 null）。
@@ -199,6 +201,7 @@ fn snapshot_response(snapshot: SystemSnapshot) -> SystemMetricsResponse {
         cpu: CpuMetrics {
             percent: snapshot.cpu_percent,
             per_core: snapshot.per_core_percent,
+            physical_cores: snapshot.cpu_physical_cores.map(|cores| cores as u32),
             brand: snapshot.cpu_brand,
             frequency_mhz: snapshot.cpu_frequency_mhz,
         },
