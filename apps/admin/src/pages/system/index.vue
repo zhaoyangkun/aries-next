@@ -159,12 +159,12 @@ function tempClass(celsius: number): string {
 // 进程 Top：服务端 15 秒缓存，前端 10 秒轮询跟随（权限/失败静默，不打扰主指标）。
 const processes = ref<ProcessMetrics[]>([])
 const processesLoading = ref(false)
-const processSort = ref<'cpu' | 'memory'>('cpu')
 
 async function loadProcesses() {
   processesLoading.value = true
   try {
-    const top = await systemApi.processes(10, processSort.value)
+    // 固定按 CPU 降序：表格已同时展示 CPU 与内存两列，无需排序切换。
+    const top = await systemApi.processes(10)
     processes.value = top.processes
   }
   catch {
@@ -173,11 +173,6 @@ async function loadProcesses() {
   finally {
     processesLoading.value = false
   }
-}
-
-function switchProcessSort(sort: number | string) {
-  processSort.value = sort === 'memory' ? 'memory' : 'cpu'
-  loadProcesses()
 }
 
 let processesTimer: ReturnType<typeof setInterval> | undefined
@@ -582,15 +577,9 @@ onBeforeUnmount(() => {
           <div class="min-w-0 flex-1">
             <CardTitle class="text-sm font-medium">资源占用 Top 10</CardTitle>
             <p class="truncate text-xs text-muted-foreground">
-              {{ processSort === 'cpu' ? '按 CPU 使用率降序' : '按内存占用降序' }}
+              按 CPU 使用率降序 · 单核口径（100% = 打满一个核）
             </p>
           </div>
-          <Tabs :model-value="processSort" class="ml-auto shrink-0" @update:model-value="switchProcessSort">
-            <TabsList class="h-7 w-full lg:w-auto">
-              <TabsTrigger class="flex-1 px-2 text-xs lg:flex-none" value="cpu">按 CPU</TabsTrigger>
-              <TabsTrigger class="flex-1 px-2 text-xs lg:flex-none" value="memory">按内存</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </CardHeader>
         <CardContent>
           <div v-if="processes.length === 0" class="py-6 text-center text-sm text-muted-foreground">
